@@ -352,6 +352,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 
   <div class="sidebar-section-label">Admin</div>
   <div class="nav-item" onclick="showView('events')"><span class="nav-icon">◉</span>Events</div>
+  <div class="nav-item" onclick="showView('users')"><span class="nav-icon">👤</span>User Management</div>
   <div class="nav-item" onclick="showView('settings')"><span class="nav-icon">⚙</span>Settings & Weights</div>
   <div class="nav-item" onclick="showView('insurance')"><span class="nav-icon">⊞</span>Insurance Report</div>
 
@@ -879,7 +880,6 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
         <div class="settings-tab active" onclick="switchSettingsTab('weights')">Algorithm Weights</div>
         <div class="settings-tab" onclick="switchSettingsTab('teams')">Teams</div>
         <div class="settings-tab" onclick="switchSettingsTab('event')">Event Config</div>
-        <div class="settings-tab" onclick="switchSettingsTab('users')">Users</div>
         <div class="settings-tab" onclick="switchSettingsTab('data')">Data & Export</div>
       </div>
 
@@ -954,25 +954,6 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
         </div>
       </div>
 
-      <div class="settings-panel" id="stab-users">
-        <div class="panel">
-          <div class="panel-head"><div class="panel-title">User Access Management</div></div>
-          <div class="panel-body">
-            <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Admins can create users and assign roles (`admin` or `viewer`).</div>
-            <div class="form-grid-3">
-              <div class="field"><label>Email</label><input type="email" id="um-email" placeholder="user@email.com"></div>
-              <div class="field"><label>Password</label><input type="text" id="um-password" placeholder="temporary password"></div>
-              <div class="field"><label>Role</label>
-                <select id="um-role"><option value="viewer">Viewer</option><option value="admin">Admin</option></select>
-              </div>
-            </div>
-            <div style="margin-top:10px;"><button class="btn primary" onclick="createUserLogin()">Create Login</button></div>
-            <div class="sep" style="margin:14px 0;"></div>
-            <div id="users-list"></div>
-          </div>
-        </div>
-      </div>
-
       <!-- DATA TAB -->
       <div class="settings-panel" id="stab-data">
         <div class="panel">
@@ -1033,6 +1014,31 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
         <span style="font-size:12px;color:var(--muted);" id="events-count-label"></span>
       </div>
       <div id="events-list" style="display:flex;flex-direction:column;gap:12px;"></div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════ USER MANAGEMENT ══ -->
+    <div class="view" id="view-users">
+      <div class="panel">
+        <div class="panel-head"><div class="panel-title">User Access Management</div></div>
+        <div class="panel-body">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Create users and select what areas they can access. Admin has full access.</div>
+          <div class="form-grid-3">
+            <div class="field"><label>Email</label><input type="email" id="um-email" placeholder="user@email.com"></div>
+            <div class="field"><label>Password</label><input type="text" id="um-password" placeholder="temporary password"></div>
+            <div class="field"><label>Role</label>
+              <select id="um-role" onchange="toggleAccessChecksDisabled()"><option value="viewer">Viewer</option><option value="admin">Admin</option></select>
+            </div>
+          </div>
+          <div class="sep" style="margin:10px 0;"></div>
+          <div class="field">
+            <label>Access Areas</label>
+            <div id="um-access-checks" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;"></div>
+          </div>
+          <div style="margin-top:10px;"><button class="btn primary" onclick="createUserLogin()">Create Login</button></div>
+          <div class="sep" style="margin:14px 0;"></div>
+          <div id="users-list"></div>
+        </div>
+      </div>
     </div>
 
   </div><!-- /content -->
@@ -1282,14 +1288,29 @@ let currentUser = JSON.parse(localStorage.getItem('a2rl_current_user') || 'null'
 
 const DEFAULT_ADMIN_EMAIL = 'Rolesjosh417@gmail.com';
 const DEFAULT_ADMIN_PASSWORD = 'Admin@123';
+const ACCESS_AREAS = ['live','schedule','garage','tracktime','session','history','teams','trends','events','settings','insurance','users'];
+const VIEWER_DEFAULT_AREAS = ['live','history','teams','trends'];
 
 function seedAuth() {
   if (!Array.isArray(users) || !users.length) {
-    users = [{ email: DEFAULT_ADMIN_EMAIL, password: DEFAULT_ADMIN_PASSWORD, role: 'admin', active: true }];
+    users = [{ email: DEFAULT_ADMIN_EMAIL, password: DEFAULT_ADMIN_PASSWORD, role: 'admin', active: true, allowedViews: [...ACCESS_AREAS] }];
+    localStorage.setItem('a2rl_users', JSON.stringify(users));
+  } else {
+    users = users.map(u => ({
+      ...u,
+      allowedViews: Array.isArray(u.allowedViews) ? u.allowedViews : (u.role === 'admin' ? [...ACCESS_AREAS] : [...VIEWER_DEFAULT_AREAS]),
+    }));
     localStorage.setItem('a2rl_users', JSON.stringify(users));
   }
 }
 function isAdmin() { return (currentUser?.role || '') === 'admin'; }
+function canAccessView(id) {
+  if (!currentUser) return false;
+  if (isAdmin()) return true;
+  if (id === 'users') return false;
+  const allowed = Array.isArray(currentUser.allowedViews) ? currentUser.allowedViews : [];
+  return allowed.includes(id);
+}
 function requireAdmin(msg) {
   if (isAdmin()) return true;
   alert(msg || 'Viewer mode: this action is locked.');
@@ -1300,6 +1321,11 @@ function refreshAuthUI() {
   if (badge) badge.textContent = currentUser ? `${currentUser.email} · ${currentUser.role.toUpperCase()}` : 'Guest';
   const overlay = document.getElementById('login-overlay');
   if (overlay) overlay.style.display = currentUser ? 'none' : 'flex';
+  document.querySelectorAll('.nav-item[onclick*="showView"]').forEach(n => {
+    const m = (n.getAttribute('onclick') || '').match(/showView\('([^']+)'\)/);
+    if (!m) return;
+    n.style.display = canAccessView(m[1]) ? 'flex' : 'none';
+  });
 }
 function login() {
   const email = (document.getElementById('login-email')?.value || '').trim().toLowerCase();
@@ -1310,7 +1336,7 @@ function login() {
     if (msg) msg.textContent = 'Invalid credentials';
     return;
   }
-  currentUser = { email: u.email, role: u.role || 'viewer' };
+  currentUser = { email: u.email, role: u.role || 'viewer', allowedViews: Array.isArray(u.allowedViews) ? u.allowedViews : (u.role==='admin'?[...ACCESS_AREAS]:[...VIEWER_DEFAULT_AREAS]) };
   localStorage.setItem('a2rl_current_user', JSON.stringify(currentUser));
   if (msg) msg.textContent = '';
   refreshAuthUI();
@@ -1319,6 +1345,30 @@ function logout() {
   currentUser = null;
   localStorage.removeItem('a2rl_current_user');
   refreshAuthUI();
+}
+
+function renderUserAccessChecks() {
+  const wrap = document.getElementById('um-access-checks');
+  if (!wrap) return;
+  wrap.innerHTML = ACCESS_AREAS.filter(v => v !== 'users').map(v =>
+    `<label style="display:flex;align-items:center;gap:6px;padding:4px 6px;border:1px solid var(--border);border-radius:5px;background:var(--card);">
+      <input type="checkbox" value="${v}" data-acc-check checked style="accent-color:var(--accent);">
+      <span style="font-size:11px;text-transform:capitalize;">${v}</span>
+    </label>`
+  ).join('');
+}
+function toggleAccessChecksDisabled() {
+  const role = document.getElementById('um-role')?.value || 'viewer';
+  const checks = document.querySelectorAll('#um-access-checks input[data-acc-check]');
+  checks.forEach(cb => {
+    if (role === 'admin') { cb.checked = true; cb.disabled = true; }
+    else cb.disabled = false;
+  });
+}
+function getSelectedAccessAreas() {
+  const role = document.getElementById('um-role')?.value || 'viewer';
+  if (role === 'admin') return [...ACCESS_AREAS];
+  return Array.from(document.querySelectorAll('#um-access-checks input[data-acc-check]:checked')).map(cb => cb.value);
 }
 
 // Schedule-driven live detection (from active event + schedule + eventStart)
@@ -1701,15 +1751,20 @@ const viewMeta = {
   trends:    ['Risk Trends',            'Season-long analytics and DQI patterns'],
   settings:  ['Settings & Algorithm',   'Weights, teams, thresholds and configuration'],
   insurance: ['Insurance Report',       'Season actuarial data layer'],
+  users:     ['User Management',        'Create users and control area access'],
 };
 
 function showView(id) {
+  if (!canAccessView(id)) {
+    alert('You do not have access to this area.');
+    id = 'live';
+  }
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   const el = document.getElementById('view-'+id);
   if (el) el.classList.add('active');
   const navKeyMap = {live:'live',schedule:'schedule',garage:'garage',tracktime:'track',
-    session:'log',history:'history',teams:'team',trends:'trend',settings:'settings',insurance:'insurance'};
+    session:'log',history:'history',teams:'team',trends:'trend',settings:'settings',insurance:'insurance',users:'user'};
   document.querySelectorAll('.nav-item').forEach(n => {
     const k = navKeyMap[id] || id;
     if (n.textContent.toLowerCase().includes(k)) n.classList.add('active');
@@ -1726,6 +1781,7 @@ function showView(id) {
   if (id === 'tracktime') renderTrackTime();
   if (id === 'garage')    renderGarage();
   if (id === 'settings')  renderSettings();
+  if (id === 'users')     renderUsersManagement();
   if (id === 'live')      { renderLiveTable(); }
   if (id === 'session')   populateTeamDropdowns();
 }
@@ -3405,10 +3461,13 @@ function switchSettingsTab(tab) {
 function renderUsersManagement() {
   const list = document.getElementById('users-list');
   if (!list) return;
+  renderUserAccessChecks();
+  toggleAccessChecksDisabled();
   list.innerHTML = users.map((u, i) => `
     <div style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--border);border-radius:6px;margin-bottom:8px;background:var(--card);">
-      <span style="flex:1;font-size:12px;"><b>${u.email}</b> <span style="color:var(--muted)">(${u.role})</span></span>
+      <span style="flex:1;font-size:12px;"><b>${u.email}</b> <span style="color:var(--muted)">(${u.role})</span><br><span style="font-size:10px;color:var(--muted);">${(u.allowedViews||[]).join(', ')}</span></span>
       <span style="font-size:11px;color:${u.active===false?'var(--red)':'var(--green)'};">${u.active===false?'Disabled':'Active'}</span>
+      <button class="btn sm" onclick="openEditUserPermissions(${i})">Edit Access</button>
       <button class="btn sm" onclick="toggleUserActive(${i})">${u.active===false?'Enable':'Disable'}</button>
       <button class="btn sm danger" onclick="deleteUserLogin(${i})">Delete</button>
     </div>
@@ -3419,9 +3478,11 @@ function createUserLogin() {
   const email = (document.getElementById('um-email')?.value || '').trim();
   const password = (document.getElementById('um-password')?.value || '').trim();
   const role = document.getElementById('um-role')?.value || 'viewer';
+  const allowedViews = getSelectedAccessAreas();
   if (!email || !password) { alert('Email and password required.'); return; }
   if (users.some(u => (u.email || '').toLowerCase() === email.toLowerCase())) { alert('User already exists.'); return; }
-  users.push({ email, password, role, active: true });
+  if (role !== 'admin' && !allowedViews.length) { alert('Select at least one access area.'); return; }
+  users.push({ email, password, role, active: true, allowedViews: role === 'admin' ? [...ACCESS_AREAS] : allowedViews });
   localStorage.setItem('a2rl_users', JSON.stringify(users));
   document.getElementById('um-email').value = '';
   document.getElementById('um-password').value = '';
@@ -3443,6 +3504,64 @@ function toggleUserActive(i) {
   if (!users[i]) return;
   users[i].active = users[i].active === false ? true : false;
   localStorage.setItem('a2rl_users', JSON.stringify(users));
+  renderUsersManagement();
+}
+function openEditUserPermissions(i) {
+  if (!requireAdmin('Only admin can edit users.')) return;
+  const u = users[i];
+  if (!u) return;
+  document.getElementById('edit-user-index').value = String(i);
+  document.getElementById('edit-user-email').value = u.email || '';
+  const roleSel = document.getElementById('edit-user-role');
+  roleSel.value = u.role || 'viewer';
+  const wrap = document.getElementById('edit-user-access-checks');
+  if (wrap) {
+    const selected = new Set(Array.isArray(u.allowedViews) ? u.allowedViews : []);
+    wrap.innerHTML = ACCESS_AREAS.filter(v => v !== 'users').map(v => {
+      const checked = (u.role === 'admin' || selected.has(v)) ? 'checked' : '';
+      return `<label style="display:flex;align-items:center;gap:6px;padding:4px 6px;border:1px solid var(--border);border-radius:5px;background:var(--card);">
+        <input type="checkbox" value="${v}" data-edit-acc-check ${checked} style="accent-color:var(--accent);">
+        <span style="font-size:11px;text-transform:capitalize;">${v}</span>
+      </label>`;
+    }).join('');
+  }
+  toggleEditAccessChecksDisabled();
+  openModal('modal-edit-user');
+}
+function toggleEditAccessChecksDisabled() {
+  const role = document.getElementById('edit-user-role')?.value || 'viewer';
+  const checks = document.querySelectorAll('#edit-user-access-checks input[data-edit-acc-check]');
+  checks.forEach(cb => {
+    if (role === 'admin') { cb.checked = true; cb.disabled = true; }
+    else cb.disabled = false;
+  });
+}
+function saveEditedUserPermissions() {
+  if (!requireAdmin('Only admin can edit users.')) return;
+  const idx = parseInt(document.getElementById('edit-user-index')?.value || '-1');
+  if (!Number.isFinite(idx) || idx < 0 || !users[idx]) return;
+  const role = document.getElementById('edit-user-role')?.value || 'viewer';
+  const isPrimary = (users[idx].email || '').toLowerCase() === DEFAULT_ADMIN_EMAIL.toLowerCase();
+  if (isPrimary && role !== 'admin') {
+    alert('Primary admin must remain admin.');
+    return;
+  }
+  let allowedViews = role === 'admin'
+    ? [...ACCESS_AREAS]
+    : Array.from(document.querySelectorAll('#edit-user-access-checks input[data-edit-acc-check]:checked')).map(cb => cb.value);
+  if (role !== 'admin' && !allowedViews.length) {
+    alert('Select at least one access area.');
+    return;
+  }
+  users[idx].role = role;
+  users[idx].allowedViews = allowedViews;
+  localStorage.setItem('a2rl_users', JSON.stringify(users));
+  if (currentUser && (currentUser.email || '').toLowerCase() === (users[idx].email || '').toLowerCase()) {
+    currentUser = { ...currentUser, role, allowedViews };
+    localStorage.setItem('a2rl_current_user', JSON.stringify(currentUser));
+    refreshAuthUI();
+  }
+  closeModal('modal-edit-user');
   renderUsersManagement();
 }
 
@@ -4878,6 +4997,30 @@ init();
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modal-edit-session')">Cancel</button>
       <button class="btn primary" onclick="saveEditSession()">Recalculate & Save</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="modal-edit-user">
+  <div class="modal" style="width:640px;max-height:85vh;overflow-y:auto;">
+    <button class="modal-close" onclick="closeModal('modal-edit-user')">✕</button>
+    <div class="modal-title">Edit User Access</div>
+    <input type="hidden" id="edit-user-index">
+    <div class="form-grid">
+      <div class="field"><label>Email</label><input type="text" id="edit-user-email" readonly></div>
+      <div class="field"><label>Role</label>
+        <select id="edit-user-role" onchange="toggleEditAccessChecksDisabled()">
+          <option value="viewer">Viewer</option>
+          <option value="admin">Admin</option>
+        </select>
+      </div>
+    </div>
+    <div class="field" style="margin-top:12px;">
+      <label>Access Areas</label>
+      <div id="edit-user-access-checks" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;max-height:280px;overflow-y:auto;padding:8px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:5px;margin-top:4px;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-edit-user')">Cancel</button>
+      <button class="btn primary" onclick="saveEditedUserPermissions()">Save Access</button>
     </div>
   </div>
 </div>

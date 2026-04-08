@@ -502,9 +502,13 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
               <button class="btn sm" onclick="prevSchedDay()">‹</button>
               <select id="sched-day-select" onchange="renderScheduleView()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);padding:4px 8px;border-radius:4px;font-size:12px;font-family:Barlow,sans-serif;"></select>
               <button class="btn sm" onclick="nextSchedDay()">›</button>
+              <button class="btn sm" onclick="undoSchedule()">↶ Undo</button>
+              <button class="btn sm" onclick="redoSchedule()">↷ Redo</button>
+              <button class="btn sm" onclick="downloadScheduleChangeNotes()">📝 Change Notes</button>
               <button class="btn sm" onclick="openAddSlotModal()">+ Add Slot</button>
             </div>
           </div>
+          <div id="sched-day-tabs" style="display:flex;gap:6px;flex-wrap:wrap;padding:8px 12px;border-bottom:1px solid var(--border);"></div>
           <div id="schedule-grid" style="min-width:500px;overflow-x:auto;"></div>
         </div>
 
@@ -1227,6 +1231,9 @@ let liveSession = null;  // {team, type, duration, sessNum, startTime, timerInte
 let sessionQueue = [];
 let activityLog = [];
 let currentSchedDay = 0;
+let scheduleUndo = [];
+let scheduleRedo = [];
+let lastChangeNotesBase = [];
 
 // Schedule-driven live detection (from active event + schedule + eventStart)
 let scheduleLive = { current:null, next:null, lastCalc:0 };
@@ -1370,6 +1377,85 @@ function getSchedWindowsM(dayIdx) {
   const trackOpenM = _toM(d.trackOpen);
   const trackCloseM = _toM(d.trackClose);
   return { dayStartM, dayEndM, trackOpenM, trackCloseM };
+}
+
+function snapshotScheduleState() {
+  return JSON.stringify({ schedule, trackAlloc, schedCfg, currentSchedDay });
+}
+function restoreScheduleState(raw) {
+  try {
+    const v = JSON.parse(raw);
+    if (Array.isArray(v.schedule)) schedule = v.schedule;
+    if (Array.isArray(v.trackAlloc)) trackAlloc = v.trackAlloc;
+    if (v.schedCfg && typeof v.schedCfg === 'object') schedCfg = v.schedCfg;
+    if (Number.isFinite(v.currentSchedDay)) currentSchedDay = v.currentSchedDay;
+    save();
+    renderScheduleView();
+    renderSchedTeamSummary();
+    renderSchedStatsRow();
+  } catch {}
+}
+function pushScheduleHistory() {
+  scheduleUndo.push(snapshotScheduleState());
+  if (scheduleUndo.length > 80) scheduleUndo.shift();
+  scheduleRedo = [];
+}
+function undoSchedule() {
+  if (!scheduleUndo.length) return;
+  scheduleRedo.push(snapshotScheduleState());
+  const prev = scheduleUndo.pop();
+  restoreScheduleState(prev);
+}
+function redoSchedule() {
+  if (!scheduleRedo.length) return;
+  scheduleUndo.push(snapshotScheduleState());
+  const next = scheduleRedo.pop();
+  restoreScheduleState(next);
+}
+
+function downloadScheduleChangeNotes() {
+  const base = Array.isArray(lastChangeNotesBase) && lastChangeNotesBase.length ? lastChangeNotesBase : [];
+  const curr = Array.isArray(schedule) ? schedule : [];
+  const byIdBase = Object.fromEntries(base.map(b => [b.id, b]));
+  const byIdCurr = Object.fromEntries(curr.map(b => [b.id, b]));
+
+  const lines = [];
+  lines.push(`Schedule Change Notes`);
+  lines.push(`Generated: ${new Date().toLocaleString()}`);
+  lines.push(`Event: ${schedCfg.eventName || '—'}`);
+  lines.push('');
+  lines.push('Changes');
+
+  const changed = [];
+  curr.forEach(b => {
+    const p = byIdBase[b.id];
+    if (!p) {
+      changed.push(`+ Added: Day ${b.day+1} ${b.time} ${b.label||((b.teams||[]).join(' + '))} (${b.duration}m)`);
+      return;
+    }
+    if (p.time !== b.time || p.duration !== b.duration || (p.label||'') !== (b.label||'')) {
+      changed.push(`~ Updated: Day ${b.day+1} ${p.time}→${b.time} ${p.duration}m→${b.duration}m ${b.label||''}`);
+    }
+  });
+  base.forEach(b => {
+    if (!byIdCurr[b.id]) changed.push(`- Removed: Day ${b.day+1} ${b.time} ${b.label||((b.teams||[]).join(' + '))} (${b.duration}m)`);
+  });
+  if (!changed.length) lines.push('No differences from baseline.');
+  else changed.forEach(c => lines.push(c));
+
+  lines.push('');
+  lines.push('Current Timetable');
+  const sorted = [...curr].sort((a,b)=>a.day===b.day?_toM(a.time)-_toM(b.time):a.day-b.day);
+  sorted.forEach(b => {
+    const team = (b.teams||[]).join(' + ') || b.label || '—';
+    lines.push(`Day ${b.day+1}  ${b.time}-${_fM(_toM(b.time)+(b.duration||0))}  ${team}  [${b.type}]`);
+  });
+
+  const blob = new Blob([lines.join('\n')], { type:'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `schedule-change-notes-${new Date().toISOString().slice(0,10)}.txt`;
+  a.click();
 }
 
 // ── SAVE ──
@@ -1684,6 +1770,21 @@ function calcAndSubmit() {
     manualOverride:parseFloat(document.getElementById('f-manual').value) || 0,
     ttc: 0, ttcMin: 0, gpsDeviation: 0, lateralAccel: 0,
   };
+
+  // If a schedule block is currently live for this team, link submission to that block/event
+  const activeEv = getActiveEvent();
+  const liveBlk = scheduleLive.current;
+  if (liveBlk && (liveBlk.teams||[]).includes(team)) {
+    s.schedBlockId = liveBlk.id;
+    s.eventId = liveBlk.eventId || activeEv?.id || schedCfg.eventId || null;
+    s.eventName = activeEv?.name || schedCfg.eventName || null;
+    const d = schedCfg.eventStart ? new Date(schedCfg.eventStart + 'T00:00:00') : new Date();
+    d.setDate(d.getDate() + (liveBlk.day || 0));
+    const dateStr = d.toISOString().split('T')[0];
+    s.timestamp = `${dateStr}T${liveBlk.time}:00`;
+    const b = schedule.find(x=>x.id===liveBlk.id);
+    if (b) b.completed = true;
+  }
 
   const { score, breakdown } = calcRisk(s);
   s.riskScore = score;
@@ -2243,6 +2344,7 @@ function wizardBack() {
 }
 
 function generateSchedule() {
+  pushScheduleHistory();
   schedule = [];
   const toM = t => { const [h,m]=t.split(':').map(Number); return h*60+m; };
   const fromM = m => { const h=Math.floor(m/60); const min=m%60; return String(h).padStart(2,'0')+':'+String(min).padStart(2,'0'); };
@@ -2377,6 +2479,7 @@ function onSlotTypeChange() {
 }
 
 function saveSlot() {
+  pushScheduleHistory();
   const time = document.getElementById('slot-time').value;
   const dur = parseInt(document.getElementById('slot-dur').value) || 30;
   const type = document.getElementById('slot-type').value;
@@ -2391,6 +2494,11 @@ function saveSlot() {
     time, type, teams: selectedTeams, duration: dur,
     label: label || selectedTeams.join(' + '), generated: false,
   });
+  const inserted = schedule[schedule.length-1];
+  if (inserted) {
+    const w = getSchedWindowsM(currentSchedDay);
+    _resolveOverlap(inserted,'down',w.trackOpenM,w.trackCloseM);
+  }
   save();
   closeModal('modal-add-slot');
   renderScheduleView();
@@ -2411,12 +2519,25 @@ function syncSchedConfig() {
   }
 }
 
+function renderScheduleDayTabs() {
+  const wrap = document.getElementById('sched-day-tabs');
+  if (!wrap) return;
+  const days = Math.max(1, schedCfg.days || 1);
+  wrap.innerHTML = Array.from({length:days}).map((_,i)=>{
+    const date = schedCfg.eventStart ? (()=>{const d=new Date(schedCfg.eventStart+'T00:00:00');d.setDate(d.getDate()+i);return d.toLocaleDateString(undefined,{day:'2-digit',month:'short'});})() : 'No date';
+    const active = i===currentSchedDay;
+    return `<button class="btn sm" style="border-color:${active?'rgba(0,212,255,0.45)':'var(--border2)'};color:${active?'var(--accent)':'var(--muted)'};background:${active?'rgba(0,212,255,0.08)':'var(--card)'};" onclick="currentSchedDay=${i};const ds=document.getElementById('sched-day-select');if(ds)ds.value=${i};renderScheduleView();">Day ${i+1} · ${date}</button>`;
+  }).join('');
+}
+
 function renderScheduleView() {
+  const prevScroll = document.querySelector('#schedule-grid > div')?.scrollTop || 0;
   syncSchedConfig();
   const ds = document.getElementById('sched-day-select');
   if (ds) currentSchedDay = parseInt(ds.value)||0;
   const lbl = document.getElementById('sched-day-label');
   if (lbl) lbl.textContent = 'Day '+(currentSchedDay+1);
+  renderScheduleDayTabs();
 
   const toM = t=>{const[h,m]=t.split(':').map(Number);return h*60+m;};
   const fM  = m=>String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
@@ -2523,7 +2644,7 @@ function renderScheduleView() {
     body.innerHTML='<div style="display:flex;align-items:center;gap:4px;">'
       +'<span style="font-size:10px;opacity:0.6;">'+ti.icon+'</span>'
       +dots
-      +'<span style="font-weight:700;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+names+'</span>'
+      +'<span style="font-weight:700;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+names+' · '+(block.duration||0)+'m</span>'
       +'</div>'
       +(blockH>42?'<div style="font-size:9px;color:rgba(255,255,255,0.4);margin-top:1px;">'+ti.label+'</div>':'');
     el.appendChild(body);
@@ -2543,6 +2664,8 @@ function renderScheduleView() {
   container.innerHTML='<div style="display:flex;overflow-y:auto;max-height:560px;background:var(--card);border:1px solid var(--border);border-radius:6px;">'+axH+inH+'<div id="sched-canvas" style="flex:1;position:relative;height:'+totalH+'px;">'+bH+'</div></div><div style="margin-top:5px;font-size:10px;color:var(--muted);">Hover: \u270e edit \u2715 delete \u00b7 Drag edges to resize \u00b7 Click body to edit</div>';
   const canvas=document.getElementById('sched-canvas');
   if(canvas) canvas.appendChild(frag);
+  const scrollEl = container.querySelector(':scope > div');
+  if (scrollEl) scrollEl.scrollTop = prevScroll;
 
   renderSchedTeamSummary();
   renderSchedStatsRow();
@@ -2554,12 +2677,14 @@ function quickAddSlot(slot) {
 }
 
 function removeSchedBlock(id) {
+  pushScheduleHistory();
   schedule = schedule.filter(b => b.id !== id);
   save();
   renderScheduleView();
 }
 
 function clearSchedule() {
+  pushScheduleHistory();
   schedule = []; save(); renderScheduleView();
 }
 
@@ -2620,56 +2745,12 @@ function nextSchedDay() {
 
 // ── PUSH SCHEDULE TO SESSIONS (auto-populate Log Session) ──
 function exportScheduleToSessions() {
-  const blocks = schedule.filter(b=>b.type!=='break' && b.teams && b.teams.length>0);
+  const blocks = schedule.filter(b=>b.type!=='break' && b.type!=='reserve' && b.teams && b.teams.length>0);
   if (!blocks.length) { alert('No session blocks to push. Build a schedule first.'); return; }
-
-  let added = 0;
-
-  blocks.forEach(block => {
-    block.teams.forEach(teamName => {
-      // Check if session already logged for this team/time/day
-      const alreadyExists = sessions.find(s =>
-        s.team === teamName && s.schedBlockId === block.id
-      );
-      if (alreadyExists) return;
-
-      let sessDate;
-      if (schedCfg.eventStart) {
-        sessDate = new Date(schedCfg.eventStart + 'T00:00:00');
-        sessDate.setDate(sessDate.getDate() + (block.day || 0));
-      } else {
-        sessDate = new Date();
-        sessDate.setDate(sessDate.getDate() + (block.day || 0));
-      }
-      const dateStr = sessDate.toISOString().split('T')[0];
-
-      // Create a pre-filled session stub (risk = 0 until manually filled)
-      sessions.push({
-        id: String(Date.now())+String(Math.random()).slice(2,8),
-        schedBlockId: block.id,
-        eventId: block.eventId || schedCfg.eventId || null,
-        eventName: schedCfg.eventName || eventCfg.eventName || null,
-        team: teamName,
-        eventType: 'Testing (Track)',
-        sessType: block.type === 'multi' ? 'Multi Car' : block.type === 'open' ? 'Open Pit Lane' : 'Single Car',
-        sessNum: 1,
-        duration: block.duration,
-        timestamp: dateStr + 'T' + block.time + ':00',
-        weather: 'Clear',
-        notes: 'Auto-populated from schedule',
-        startAttempts:0, laps:0, stoppages:0, crashed:'No', damage:0,
-        speed:0, laptime:0, replans:0, multicar: block.type==='multi'?'Yes':'No',
-        overtaking:'No', estops:0, instability:0, sensor:0, manualOverride:0, ttc:0,
-        riskScore: 0, riskBreakdown: {},
-        stub: true, // marks as needing completion
-      });
-      added++;
-    });
-  });
-
+  blocks.forEach(b => { b.published = true; b.completed = false; });
+  lastChangeNotesBase = JSON.parse(JSON.stringify(schedule));
   save();
-  alert('Pushed ' + added + ' session stubs to Session History. Open each session from History to fill in risk data.');
-  renderLiveTable();
+  alert('Schedule published. Sessions will be added to Session History only after risk data is submitted.');
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -4106,6 +4187,7 @@ function openEditSlot(blockId) {
   openModal('modal-edit-slot');
 }
 function saveEditSlot() {
+  pushScheduleHistory();
   const id=document.getElementById('edit-slot-id').value;
   const idx=schedule.findIndex(b=>b.id===id); if(idx<0) return;
   const selTeams=Array.from(document.querySelectorAll('#edit-slot-team-checks input:checked')).map(cb=>cb.value);
@@ -4124,6 +4206,7 @@ function saveEditSlot() {
   save(); closeModal('modal-edit-slot'); renderScheduleView();
 }
 function deleteSlotFromModal() {
+  pushScheduleHistory();
   const id=document.getElementById('edit-slot-id').value;
   schedule=schedule.filter(b=>b.id!==id);
   save(); closeModal('modal-edit-slot'); renderScheduleView();
@@ -4211,6 +4294,7 @@ function onDragEnd(e){
   if(el){el.style.opacity='1';el.style.zIndex='1';}
   const block=schedule.find(b=>b.id===_drag.id);
   if(block){
+    pushScheduleHistory();
     const toM=t=>{const[h,m]=t.split(':').map(Number);return h*60+m;};
     const w = getSchedWindowsM(currentSchedDay);
     _resolveOverlap(block,_drag.mode==='top'?'up':'down',w.trackOpenM,w.trackCloseM);

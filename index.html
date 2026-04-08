@@ -295,6 +295,8 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .on-track-indicator{display:flex;align-items:center;gap:6px;padding:4px 10px;background:rgba(0,232,122,0.1);border:1px solid rgba(0,232,122,0.2);border-radius:20px;font-size:11px;font-weight:600;color:var(--green);}
 
 .sched-cal-block{overflow:hidden;transition:box-shadow 0.15s,opacity 0.15s;border:1px solid rgba(255,255,255,0.08);user-select:none;}
+.sched-info-time{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text);font-weight:700;letter-spacing:0.2px;}
+.sched-info-range{font-family:'JetBrains Mono',monospace;font-size:10px;color:rgba(232,237,245,0.72);}
 .sched-cal-block:hover{box-shadow:0 2px 12px rgba(0,0,0,0.4);}
 .sched-cal-block.sched-single{background:rgba(0,212,255,0.12);}
 .sched-cal-block.sched-multi{background:rgba(168,85,247,0.12);}
@@ -1226,6 +1228,91 @@ let sessionQueue = [];
 let activityLog = [];
 let currentSchedDay = 0;
 
+// Schedule-driven live detection (from active event + schedule + eventStart)
+let scheduleLive = { current:null, next:null, lastCalc:0 };
+function getActiveEvent() {
+  return (typeof events !== 'undefined' ? (events||[]).find(e => e.status === 'active') : null);
+}
+function getEventDayIndex(now=new Date()) {
+  const start = schedCfg.eventStart;
+  if (!start) return 0;
+  const d0 = new Date(start + 'T00:00:00');
+  const n0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diff = Math.floor((n0 - new Date(d0.getFullYear(), d0.getMonth(), d0.getDate())) / 86400000);
+  return Math.max(0, diff);
+}
+function computeScheduleLive(now=new Date()) {
+  const ev = getActiveEvent();
+  if (!ev || !schedCfg.eventStart) return { current:null, next:null };
+  const dayIdx = getEventDayIndex(now);
+  const dayDate = new Date(schedCfg.eventStart + 'T00:00:00');
+  dayDate.setDate(dayDate.getDate() + dayIdx);
+  const dateStr = dayDate.toISOString().split('T')[0];
+
+  const blocks = schedule
+    .filter(b => b.eventId === ev.id && (b.day||0) === dayIdx && b.type !== 'break' && b.type !== 'reserve')
+    .map(b => {
+      const startM = _toM(b.time);
+      const endM = startM + (b.duration||0);
+      return { ...b, startM, endM, dateStr };
+    })
+    .sort((a,b)=>a.startM-b.startM);
+
+  const nowM = now.getHours()*60 + now.getMinutes() + now.getSeconds()/60;
+  const current = blocks.find(b => nowM >= b.startM && nowM < b.endM) || null;
+  const next = blocks.find(b => b.startM > nowM) || null;
+  return { current, next };
+}
+function syncAutoOnTrack() {
+  // Throttle to once/sec
+  const now = new Date();
+  if (now - scheduleLive.lastCalc < 900) return;
+  scheduleLive.lastCalc = +now;
+  const { current, next } = computeScheduleLive(now);
+  scheduleLive.current = current;
+  scheduleLive.next = next;
+
+  // If manual liveSession is running, don't override
+  if (liveSession) return;
+
+  const topbar = document.getElementById('topbar-on-track');
+  const topbarTeam = document.getElementById('topbar-on-track-team');
+  const nameEl = document.getElementById('ot-team-name');
+  const dispEl = document.getElementById('timer-display');
+  const typeEl = document.getElementById('ot-session-type');
+  const ring = document.getElementById('timer-ring');
+  const circumference = 326.7;
+
+  if (!current) {
+    if (topbar) topbar.style.display = 'none';
+    if (nameEl) nameEl.textContent = '— No Active Session —';
+    if (dispEl) dispEl.textContent = '00:00';
+    if (typeEl) typeEl.textContent = next ? `Next: ${(next.teams||[])[0]||'—'} · ${next.time}` : '';
+    if (ring) { ring.style.strokeDashoffset = '326.7'; ring.style.stroke = 'var(--accent)'; }
+    return;
+  }
+
+  const team = (current.teams||[])[0] || current.label || '—';
+  if (topbar) topbar.style.display = 'flex';
+  if (topbarTeam) topbarTeam.textContent = team;
+  if (nameEl) nameEl.textContent = team;
+  if (typeEl) typeEl.textContent = `${current.type} · ${current.duration}min` + (next ? ` · Next: ${(next.teams||[])[0]||'—'} ${next.time}` : '');
+
+  const nowM = now.getHours()*60 + now.getMinutes() + now.getSeconds()/60;
+  const remainingMin = Math.max(0, current.endM - nowM);
+  const remainingSec = Math.round(remainingMin * 60);
+  const mm = Math.floor(remainingSec/60);
+  const ss = remainingSec % 60;
+  if (dispEl) dispEl.textContent = `${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+
+  const pct = current.duration > 0 ? (remainingMin / current.duration) : 0;
+  const dashOffset = circumference * (1 - Math.max(0,Math.min(1,pct)));
+  if (ring) {
+    ring.style.strokeDashoffset = dashOffset;
+    ring.style.stroke = pct > 0.5 ? '#00d4ff' : pct > 0.2 ? '#ffaa00' : '#ff3c3c';
+  }
+}
+
 let liveRisks = {};
 function rebuildLiveRisks() {
   liveRisks = {};
@@ -1249,6 +1336,40 @@ function openModal(id) {
 function closeModal(id) {
   const el = document.getElementById(id);
   if (el) el.style.display = 'none';
+}
+
+// ── Schedule day configuration ─────────────────────────────────────────
+function _toM(t){const [h,m]=String(t||'00:00').split(':').map(Number);return h*60+m;}
+function _fM(m){const h=Math.floor(m/60),mm=m%60;return String(h).padStart(2,'0')+':'+String(mm).padStart(2,'0');}
+function _ensureSchedDayCfg() {
+  if (!schedCfg) return;
+  const days = Math.max(1, schedCfg.days || 1);
+  if (!Array.isArray(schedCfg.dayCfgs)) schedCfg.dayCfgs = [];
+  for (let i = 0; i < days; i++) {
+    if (!schedCfg.dayCfgs[i]) {
+      schedCfg.dayCfgs[i] = { dayStart:'08:00', dayEnd:'20:00', trackOpen:'09:00', trackClose:'18:00' };
+    } else {
+      const d = schedCfg.dayCfgs[i];
+      if (!d.dayStart) d.dayStart = '08:00';
+      if (!d.dayEnd) d.dayEnd = '20:00';
+      if (!d.trackOpen) d.trackOpen = '09:00';
+      if (!d.trackClose) d.trackClose = '18:00';
+    }
+  }
+  // Trim extra
+  schedCfg.dayCfgs = schedCfg.dayCfgs.slice(0, days);
+}
+function getSchedDayCfg(dayIdx) {
+  _ensureSchedDayCfg();
+  return (schedCfg.dayCfgs && schedCfg.dayCfgs[dayIdx]) || { dayStart:'08:00', dayEnd:'20:00', trackOpen:'09:00', trackClose:'18:00' };
+}
+function getSchedWindowsM(dayIdx) {
+  const d = getSchedDayCfg(dayIdx);
+  const dayStartM = _toM(d.dayStart);
+  const dayEndM = _toM(d.dayEnd);
+  const trackOpenM = _toM(d.trackOpen);
+  const trackCloseM = _toM(d.trackClose);
+  return { dayStartM, dayEndM, trackOpenM, trackCloseM };
 }
 
 // ── SAVE ──
@@ -1750,6 +1871,20 @@ let CAT_MULT = JSON.parse(localStorage.getItem('a2rl_cat_mult') || 'null') || { 
 const CAT_LABEL = { rookie: 'ROOKIE', challenger: 'CHAL', pro: 'PRO' };
 const CAT_COLOR = { rookie: 'var(--green)', challenger: 'var(--amber)', pro: 'var(--red)' };
 
+function refreshTeamCategoryOptionLabels() {
+  const sel = document.getElementById('new-team-category');
+  if (!sel) return;
+  const r = Math.round((CAT_MULT.rookie ?? 1.0) * 100);
+  const c = Math.round((CAT_MULT.challenger ?? 0.8) * 100);
+  const p = Math.round((CAT_MULT.pro ?? 0.6) * 100);
+  const optR = sel.querySelector('option[value="rookie"]');
+  const optC = sel.querySelector('option[value="challenger"]');
+  const optP = sel.querySelector('option[value="pro"]');
+  if (optR) optR.textContent = `Rookie — ${r}% allocation`;
+  if (optC) optC.textContent = `Challenger — ${c}% of Rookie`;
+  if (optP) optP.textContent = `Pro — ${p}% of Rookie`;
+}
+
 function renderCategoryMultipliersUI() {
   const r = document.getElementById('cat-mult-rookie');
   const c = document.getElementById('cat-mult-challenger');
@@ -1769,6 +1904,7 @@ function saveCategoryMultipliers() {
     pro: Number.isFinite(p) ? Math.max(0, p) : 0.6,
   };
   localStorage.setItem('a2rl_cat_mult', JSON.stringify(CAT_MULT));
+  refreshTeamCategoryOptionLabels();
   alert('Saved category multipliers. New schedules will use these values.');
 }
 
@@ -1778,9 +1914,10 @@ let wizStep = 0;
 const WIZ_STEPS = ['Track Setup', 'Select Teams', 'Session Rules', 'Review & Generate'];
 
 function startScheduleWizard() {
+  if (!schedCfg.eventId) { alert('Select an Event first (Admin → Events → Set Active).'); return; }
   wiz = {
-    trackOpen: '08:00', trackClose: '18:00',
-    lunchStart: '12:00', lunchEnd: '13:00',
+    dayStart: '08:00', dayEnd: '20:00',
+    trackOpen: '09:00', trackClose: '18:00',
     days: 1, buffer: 15,
     teams: [], // [{name, category, sesstype}]
     sessionDur: 30, sessionsPerDay: 2,
@@ -1836,24 +1973,68 @@ function renderWizStep0(body) {
     <div class="panel"><div class="panel-head"><div class="panel-title">Track & Day Setup</div></div>
     <div class="panel-body">
       <div class="form-grid-4">
-        <div class="field"><label>Track Opens</label><input type="time" id="wiz-open" value="${wiz.trackOpen}"></div>
-        <div class="field"><label>Track Closes</label><input type="time" id="wiz-close" value="${wiz.trackClose}"></div>
+        <div class="field"><label>Day Starts</label><input type="time" id="wiz-day-start" value="${wiz.dayStart}"></div>
+        <div class="field"><label>Day Ends</label><input type="time" id="wiz-day-end" value="${wiz.dayEnd}"></div>
+        <div class="field"><label>Track Opens (alloc window)</label><input type="time" id="wiz-open" value="${wiz.trackOpen}"></div>
+        <div class="field"><label>Track Closes (alloc window)</label><input type="time" id="wiz-close" value="${wiz.trackClose}"></div>
         <div class="field"><label>Number of Days</label><input type="number" id="wiz-days" value="${wiz.days}" min="1" max="10"></div>
         <div class="field"><label>Buffer Between Sessions (min)</label><input type="number" id="wiz-buffer" value="${wiz.buffer}" min="0" max="60"></div>
       </div>
+      <div class="sep" style="margin:16px 0 12px;"></div>
+      <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:8px;">Per-day overrides (optional)</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
+        If blank, a day inherits the defaults above. Use this to adjust Day Start/End and Track Open/Close per day.
+      </div>
+      <div style="overflow-x:auto;border:1px solid var(--border);border-radius:6px;">
+        <table class="data-table" style="min-width:720px;">
+          <thead><tr>
+            <th style="width:70px;">Day</th>
+            <th>Day Start</th><th>Day End</th>
+            <th>Track Open</th><th>Track Close</th>
+            <th style="width:120px;">Date</th>
+          </tr></thead>
+          <tbody>
+            ${Array.from({length:wiz.days||1}).map((_,i)=>{
+              const d=(wiz.dayCfgs||[])[i]||{};
+              const date = (schedCfg.eventStart ? (()=>{const dt=new Date(schedCfg.eventStart+'T00:00:00');dt.setDate(dt.getDate()+i);return dt.toISOString().split('T')[0];})() : '');
+              return `<tr>
+                <td class="mono">Day ${i+1}</td>
+                <td><input type="time" data-daycfg="${i}" data-field="dayStart" value="${d.dayStart||''}" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);padding:4px 8px;border-radius:4px;"></td>
+                <td><input type="time" data-daycfg="${i}" data-field="dayEnd" value="${d.dayEnd||''}" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);padding:4px 8px;border-radius:4px;"></td>
+                <td><input type="time" data-daycfg="${i}" data-field="trackOpen" value="${d.trackOpen||''}" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);padding:4px 8px;border-radius:4px;"></td>
+                <td><input type="time" data-daycfg="${i}" data-field="trackClose" value="${d.trackClose||''}" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);padding:4px 8px;border-radius:4px;"></td>
+                <td class="mono" style="color:var(--muted);">${date||'—'}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
       <div style="margin-top:14px;padding:12px;background:rgba(0,212,255,0.04);border:1px solid rgba(0,212,255,0.12);border-radius:6px;font-size:12px;color:var(--muted);">
-        <span style="color:var(--accent);">ⓘ</span> Track time = close minus open. Add breaks (e.g. lunch) manually as slots after generating.
+        <span style="color:var(--accent);">ⓘ</span> Day window controls the visible timetable. Track window controls where sessions can be scheduled. Add breaks (e.g. lunch) manually as slots.
       </div>
     </div></div>`;
 }
 
 function saveWizStep0() {
+  wiz.dayStart = document.getElementById('wiz-day-start')?.value || '08:00';
+  wiz.dayEnd = document.getElementById('wiz-day-end')?.value || '20:00';
   wiz.trackOpen = document.getElementById('wiz-open').value;
   wiz.trackClose = document.getElementById('wiz-close').value;
   const daysV = parseInt(document.getElementById('wiz-days').value);
   wiz.days = Number.isFinite(daysV) && daysV > 0 ? daysV : 1;
   const bufV = parseInt(document.getElementById('wiz-buffer').value);
   wiz.buffer = Number.isFinite(bufV) && bufV >= 0 ? bufV : 15;
+
+  // Per-day overrides
+  wiz.dayCfgs = Array.from({length:wiz.days}).map(()=>({}));
+  document.querySelectorAll('input[data-daycfg][data-field]').forEach(inp => {
+    const di = parseInt(inp.getAttribute('data-daycfg'));
+    const field = inp.getAttribute('data-field');
+    if (!Number.isFinite(di) || di < 0 || di >= wiz.days) return;
+    const v = (inp.value||'').trim();
+    if (!v) return;
+    wiz.dayCfgs[di][field] = v;
+  });
 }
 
 function renderWizStep1(body) {
@@ -2065,8 +2246,6 @@ function generateSchedule() {
   schedule = [];
   const toM = t => { const [h,m]=t.split(':').map(Number); return h*60+m; };
   const fromM = m => { const h=Math.floor(m/60); const min=m%60; return String(h).padStart(2,'0')+':'+String(min).padStart(2,'0'); };
-  const trackO = toM(wiz.trackOpen);
-  const trackC = toM(wiz.trackClose);
   const dur = wiz.sessionDur;
   const buf = wiz.buffer;
   const alloc = calcAllocation();
@@ -2077,15 +2256,25 @@ function generateSchedule() {
   const singleAlloc = alloc.filter(t => !multiNames.has(t.name));
 
   for (let day = 0; day < wiz.days; day++) {
+    const dc = (wiz.dayCfgs && wiz.dayCfgs[day]) || {};
+    const dayStartM = toM(dc.dayStart || wiz.dayStart || '08:00');
+    const dayEndM = toM(dc.dayEnd || wiz.dayEnd || '20:00');
+    const trackO = toM(dc.trackOpen || wiz.trackOpen || '09:00');
+    const trackC = toM(dc.trackClose || wiz.trackClose || '18:00');
+
+    // Safety clamp: track window must be within day window
+    const trackStart = Math.max(dayStartM, trackO);
+    const trackEnd = Math.min(dayEndM, trackC);
+
     // Window: full day (breaks like lunch are added manually as slots)
     const reserveMins = (wiz.reserveCount||1) * dur;
-    const afternoonEnd = trackC - reserveMins;
+    const afternoonEnd = trackEnd - reserveMins;
     const windows = [
-      { start: trackO, end: afternoonEnd > trackO ? afternoonEnd : trackC },
+      { start: trackStart, end: afternoonEnd > trackStart ? afternoonEnd : trackEnd },
     ].filter(w => w.end > w.start);
 
     // Add reserve block at end
-    if (reserveMins > 0 && afternoonEnd < trackC) {
+    if (reserveMins > 0 && afternoonEnd < trackEnd) {
       schedule.push({
         id: 'reserve-'+day+'-'+Date.now(),
         day, time: fromM(afternoonEnd), type: 'reserve',
@@ -2133,10 +2322,19 @@ function generateSchedule() {
   }
 
   // Sync sched config
-  schedCfg.open = wiz.trackOpen;
-  schedCfg.close = wiz.trackClose;
+  schedCfg.days = wiz.days;
   schedCfg.days = wiz.days;
   schedCfg.buffer = wiz.buffer;
+  _ensureSchedDayCfg();
+  for (let i = 0; i < (schedCfg.days||1); i++) {
+    const dc = (wiz.dayCfgs && wiz.dayCfgs[i]) || {};
+    schedCfg.dayCfgs[i] = {
+      dayStart: dc.dayStart || wiz.dayStart,
+      dayEnd: dc.dayEnd || wiz.dayEnd,
+      trackOpen: dc.trackOpen || wiz.trackOpen,
+      trackClose: dc.trackClose || wiz.trackClose,
+    };
+  }
 
   // Update track allocations
   const allocData = calcAllocation();
@@ -2222,8 +2420,11 @@ function renderScheduleView() {
 
   const toM = t=>{const[h,m]=t.split(':').map(Number);return h*60+m;};
   const fM  = m=>String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
-  const openM  = toM(schedCfg.open||'08:00');
-  const closeM = toM(schedCfg.close||'18:00');
+  const w = getSchedWindowsM(currentSchedDay);
+  const openM  = w.dayStartM;
+  const closeM = w.dayEndM;
+  const trackOpenM = w.trackOpenM;
+  const trackCloseM = w.trackCloseM;
   const PX=2, totalH=(closeM-openM)*PX;
 
   const typeInfo={
@@ -2249,12 +2450,16 @@ function renderScheduleView() {
   // Session info column
   let inH='<div style="width:82px;position:relative;height:'+totalH+'px;flex-shrink:0;border-right:2px solid rgba(255,255,255,0.08);">';
   for(let t=openM;t<=closeM;t+=30) inH+='<div style="position:absolute;top:'+((t-openM)*PX)+'px;left:0;right:0;border-top:1px solid rgba(255,255,255,0.025);pointer-events:none;"></div>';
+  // Show track allocation window
+  inH+='<div style="position:absolute;top:'+((trackOpenM-openM)*PX)+'px;left:0;right:0;height:'+((trackCloseM-trackOpenM)*PX)+'px;background:rgba(0,212,255,0.035);border-top:1px solid rgba(0,212,255,0.16);border-bottom:1px solid rgba(0,212,255,0.16);pointer-events:none;">'
+    +'<div style="position:absolute;top:4px;left:6px;font-size:8px;letter-spacing:1.6px;text-transform:uppercase;color:rgba(0,212,255,0.65);font-weight:700;">TRACK WINDOW</div>'
+    +'</div>';
   dayBlocks.forEach(b=>{
     if(b.type==='reserve') return;
     const bS=toM(b.time), top=(bS-openM)*PX, bH=Math.max(b.duration*PX,24);
     inH+='<div style="position:absolute;top:'+top+'px;left:0;right:0;height:'+bH+'px;padding:2px 5px;border-left:2px solid rgba(255,255,255,0.06);display:flex;flex-direction:column;justify-content:center;">'
-      +'<span style="font-family:JBMono;font-size:9px;color:var(--text);font-weight:600;white-space:nowrap;">'+b.time+'</span>'
-      +'<span style="font-family:JBMono;font-size:9px;color:var(--muted);white-space:nowrap;">\u2013'+fM(bS+b.duration)+' '+b.duration+'m</span>'
+      +'<span class="sched-info-time">'+b.time+'</span>'
+      +'<span class="sched-info-range">\u2013'+fM(bS+b.duration)+' · '+b.duration+'m</span>'
       +'</div>';
   });
   inH+='</div>';
@@ -2262,6 +2467,8 @@ function renderScheduleView() {
   // Blocks canvas
   let bH='<div style="flex:1;position:relative;height:'+totalH+'px;">';
   for(let t=openM;t<=closeM;t+=30) bH+='<div style="position:absolute;top:'+((t-openM)*PX)+'px;left:0;right:0;border-top:1px solid rgba(255,255,255,'+(t%60===0?'0.06':'0.02')+');pointer-events:none;z-index:0;"></div>';
+  // Track window highlight on canvas
+  bH+='<div style="position:absolute;top:'+((trackOpenM-openM)*PX)+'px;left:0;right:0;height:'+((trackCloseM-trackOpenM)*PX)+'px;background:rgba(0,212,255,0.02);border-top:1px solid rgba(0,212,255,0.10);border-bottom:1px solid rgba(0,212,255,0.10);pointer-events:none;z-index:0;"></div>';
 
   const frag = document.createDocumentFragment();
   dayBlocks.forEach(block=>{
@@ -2893,6 +3100,7 @@ function openAddTeamModal() {
   document.getElementById('new-team-category').value = 'rookie';
   document.getElementById('new-team-sesstype').value = 'single';
   document.getElementById('team-modal-title').textContent = 'Add Team';
+  refreshTeamCategoryOptionLabels();
   openModal('modal-add-team');
 }
 function openEditTeam(i) {
@@ -2907,6 +3115,7 @@ function openEditTeam(i) {
   document.getElementById('new-team-garage').value = t.garage || '';
   document.getElementById('new-team-active').value = t.active ? 'yes' : 'no';
   document.getElementById('team-modal-title').textContent = 'Edit Team';
+  refreshTeamCategoryOptionLabels();
   openModal('modal-add-team');
 }
 function saveTeam() {
@@ -3737,12 +3946,11 @@ function renderEventsView() {
         +'</div>'
       +'</div>'
       +'<div class="panel-body">'
-        +'<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;">'
-          +'<div><div class="stat-label">Dates</div><div style="font-size:13px;font-weight:600;">'+(ev.startDate||'—')+'</div><div style="font-size:11px;color:var(--muted);">'+(ev.endDate?'to '+ev.endDate:'')+'</div></div>'
-          +'<div><div class="stat-label">Track Hours</div><div style="font-family:Rajdhani,sans-serif;font-size:22px;font-weight:700;color:var(--accent);">'+(ev.trackHours||0)+'h</div></div>'
+        +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">'
+          +'<div><div class="stat-label">Start Date</div><div style="font-size:13px;font-weight:600;">'+(ev.startDate||'—')+'</div></div>'
+          +'<div><div class="stat-label">Days</div><div style="font-family:Rajdhani,sans-serif;font-size:22px;font-weight:700;color:var(--accent);">'+(ev.days||1)+'</div></div>'
           +'<div><div class="stat-label">Teams</div><div style="font-family:Rajdhani,sans-serif;font-size:22px;font-weight:700;">'+(ev.teams||[]).length+'</div></div>'
           +'<div><div class="stat-label">Sessions</div><div style="font-family:Rajdhani,sans-serif;font-size:22px;font-weight:700;">'+sc.length+'</div></div>'
-          +'<div><div class="stat-label">Track</div><div style="font-size:12px;font-weight:600;">'+(ev.track||'—')+'</div></div>'
         +'</div>'
         +(ev.notes?'<div style="margin-top:10px;font-size:12px;color:var(--muted);padding:8px 10px;background:rgba(255,255,255,0.025);border-radius:5px;border:1px solid var(--border);">'+ev.notes+'</div>':'')
       +'</div>'
@@ -3758,11 +3966,7 @@ function openNewEventModal() {
   document.getElementById('ev-num').value=(events.length+1);
   document.getElementById('ev-track').value='Yas Marina Circuit';
   document.getElementById('ev-start').value='';
-  document.getElementById('ev-end').value='';
-  document.getElementById('ev-track-open').value='08:00';
-  document.getElementById('ev-track-close').value='18:00';
   document.getElementById('ev-days').value=2;
-  document.getElementById('ev-track-hours').value=20;
   document.getElementById('ev-status').value='upcoming';
   document.getElementById('ev-notes').value='';
   const sel=document.getElementById('ev-teams');
@@ -3778,11 +3982,7 @@ function openEditEventModal(i) {
   document.getElementById('ev-num').value=ev.num||1;
   document.getElementById('ev-track').value=ev.track||'Yas Marina Circuit';
   document.getElementById('ev-start').value=ev.startDate||'';
-  document.getElementById('ev-end').value=ev.endDate||'';
-  document.getElementById('ev-track-open').value=ev.trackOpen||'08:00';
-  document.getElementById('ev-track-close').value=ev.trackClose||'18:00';
   document.getElementById('ev-days').value=ev.days||2;
-  document.getElementById('ev-track-hours').value=ev.trackHours||20;
   document.getElementById('ev-status').value=ev.status||'upcoming';
   document.getElementById('ev-notes').value=ev.notes||'';
   const sel=document.getElementById('ev-teams');
@@ -3800,11 +4000,7 @@ function saveEvent() {
     num:parseInt(document.getElementById('ev-num').value)||1,
     track:document.getElementById('ev-track').value,
     startDate:document.getElementById('ev-start').value,
-    endDate:document.getElementById('ev-end').value,
-    trackOpen:document.getElementById('ev-track-open').value,
-    trackClose:document.getElementById('ev-track-close').value,
     days:parseInt(document.getElementById('ev-days').value)||2,
-    trackHours:parseInt(document.getElementById('ev-track-hours').value)||20,
     status:document.getElementById('ev-status').value,
     notes:document.getElementById('ev-notes').value,
     teams:selTeams,
@@ -3818,7 +4014,6 @@ function activateEvent(i) {
   const ev=events[i];
   eventCfg.season=ev.season; eventCfg.eventNum=ev.num; eventCfg.eventName=ev.name;
   schedCfg.eventName=ev.name; schedCfg.track=ev.track;
-  schedCfg.open=ev.trackOpen||'08:00'; schedCfg.close=ev.trackClose||'18:00';
   schedCfg.days=ev.days||2;
   schedCfg.eventId=ev.id;
   schedCfg.eventStart=ev.startDate||null;
@@ -3923,8 +4118,8 @@ function saveEditSlot() {
     teams:selTeams};
   if(newTime!==prevTime||newDur!==prevDur){
     const toM=t=>{const[h,m]=t.split(':').map(Number);return h*60+m;};
-    const openM=toM(schedCfg.open||'08:00'), closeM=toM(schedCfg.close||'18:00');
-    _resolveOverlap(schedule[idx],'down',openM,closeM);
+    const w = getSchedWindowsM(currentSchedDay);
+    _resolveOverlap(schedule[idx],'down',w.trackOpenM,w.trackCloseM);
   }
   save(); closeModal('modal-edit-slot'); renderScheduleView();
 }
@@ -3981,7 +4176,8 @@ function onDragMove(e){
   const block=schedule.find(b=>b.id===_drag.id); if(!block) return;
   const toM=t=>{const[h,m]=t.split(':').map(Number);return h*60+m;};
   const fM=m=>String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
-  const openM=toM(schedCfg.open||'08:00'), closeM=toM(schedCfg.close||'18:00');
+  const w = getSchedWindowsM(currentSchedDay);
+  const openM = w.trackOpenM, closeM = w.trackCloseM;
   const el=document.getElementById('blk-'+_drag.id); if(!el) return;
 
   if(_drag.mode==='bot'){
@@ -4016,8 +4212,8 @@ function onDragEnd(e){
   const block=schedule.find(b=>b.id===_drag.id);
   if(block){
     const toM=t=>{const[h,m]=t.split(':').map(Number);return h*60+m;};
-    const openM=toM(schedCfg.open||'08:00'), closeM=toM(schedCfg.close||'18:00');
-    _resolveOverlap(block,_drag.mode==='top'?'up':'down',openM,closeM);
+    const w = getSchedWindowsM(currentSchedDay);
+    _resolveOverlap(block,_drag.mode==='top'?'up':'down',w.trackOpenM,w.trackCloseM);
     (block.teams||[]).forEach(tn=>{
       const al=trackAlloc.find(a=>a.team===tn);
       if(al) al.hours=+(schedule.filter(b=>(b.teams||[]).includes(tn)).reduce((s,b)=>s+b.duration,0)/60).toFixed(2);
@@ -4094,6 +4290,9 @@ function init(){
   renderLiveTable();
   renderFeed();
   initLiveCharts();
+  // Keep Garage/Live in sync with schedule (if no manual session running)
+  setInterval(syncAutoOnTrack, 1000);
+  syncAutoOnTrack();
 }
 
 init();
@@ -4116,11 +4315,7 @@ init();
         </select>
       </div>
       <div class="field"><label>Start Date</label><input type="date" id="ev-start"></div>
-      <div class="field"><label>End Date</label><input type="date" id="ev-end"></div>
-      <div class="field"><label>Track Open</label><input type="time" id="ev-track-open" value="08:00"></div>
-      <div class="field"><label>Track Close</label><input type="time" id="ev-track-close" value="18:00"></div>
-      <div class="field"><label>Number of Days</label><input type="number" id="ev-days" value="2" min="1" max="10"></div>
-      <div class="field"><label>Total Track Hours</label><input type="number" id="ev-track-hours" value="20" min="1" max="200"></div>
+      <div class="field"><label>Number of Days</label><input type="number" id="ev-days" value="2" min="1" max="30"></div>
       <div class="field"><label>Status</label>
         <select id="ev-status">
           <option value="upcoming">Upcoming</option>

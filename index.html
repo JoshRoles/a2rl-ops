@@ -390,10 +390,16 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 
     <!-- ═══════════════════════════════════════════════ LIVE DASHBOARD ══ -->
     <div class="view active" id="view-live">
-      <div class="panel" style="margin-bottom:12px;padding:10px 14px;border-color:rgba(0,212,255,0.25);background:rgba(0,212,255,0.04);">
-        <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:12px;">
-          <div><span style="color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-size:10px;">Currently On Track</span><br><span id="live-banner-current" style="font-weight:700;color:var(--text);">—</span></div>
-          <div><span style="color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-size:10px;">Next Up</span><br><span id="live-banner-next" style="font-weight:700;color:var(--accent);">—</span></div>
+      <div class="panel" style="margin-bottom:12px;padding:14px 16px;border-color:rgba(0,212,255,0.28);background:rgba(0,212,255,0.06);">
+        <div style="display:flex;gap:24px;align-items:flex-end;flex-wrap:wrap;">
+          <div style="flex:1;min-width:320px;">
+            <span style="color:var(--muted);text-transform:uppercase;letter-spacing:1.4px;font-size:10px;">Currently On Track</span><br>
+            <span id="live-banner-current" style="display:block;font-weight:800;color:var(--text);font-size:34px;line-height:1.15;">—</span>
+          </div>
+          <div style="min-width:220px;">
+            <span style="color:var(--muted);text-transform:uppercase;letter-spacing:1.2px;font-size:10px;">Next Up</span><br>
+            <span id="live-banner-next" style="font-weight:700;color:var(--accent);font-size:18px;line-height:1.2;">—</span>
+          </div>
         </div>
       </div>
       <div class="stat-row">
@@ -746,10 +752,10 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
     <!-- ═══════════════════════════════════════════════ LOG SESSION ══ -->
     <div class="view" id="view-session">
       <div class="panel">
-        <div class="panel-head"><div class="panel-title">Sessions Overview (Published Schedule)</div></div>
+        <div class="panel-head"><div class="panel-title">Sessions Overview (Day Publish to On Track)</div></div>
         <div class="panel-body" style="padding:0;">
           <table class="data-table">
-            <thead><tr><th>Day</th><th>Time</th><th>Team</th><th>Type</th><th>Duration</th><th>Status</th><th>Action</th></tr></thead>
+            <thead><tr><th>Day</th><th>Published Sessions</th><th>Queued</th><th>Completed</th><th>Action</th></tr></thead>
             <tbody id="session-overview-tbody"></tbody>
           </table>
         </div>
@@ -2044,6 +2050,11 @@ function calcAndSubmit(prefix='f') {
   const weather = from('weather')?.value || 'Clear';
   const notes = from('notes')?.value || '';
 
+  if (prefix === 'g' && !selectedBlk) {
+    alert('Select a session capture tab before submitting.');
+    return;
+  }
+
   // Prevent duplicate capture submits for the same scheduled run.
   if (prefix === 'g' && selectedBlk) {
     const alreadyCompleted = !!selectedBlk.completed;
@@ -2076,7 +2087,7 @@ function calcAndSubmit(prefix='f') {
 
   // If a schedule block is currently live for this team, link submission to that block/event
   const activeEv = getActiveEvent();
-  const linkBlk = selectedBlk || scheduleLive.current;
+  const linkBlk = prefix === 'g' ? selectedBlk : (selectedBlk || scheduleLive.current);
   if (linkBlk && (linkBlk.teams||[]).includes(team)) {
     s.schedBlockId = linkBlk.id;
     s.eventId = linkBlk.eventId || activeEv?.id || schedCfg.eventId || null;
@@ -3239,26 +3250,53 @@ function renderPublishedSessionsTable() {
 function renderSessionOverviewTable() {
   const tb = document.getElementById('session-overview-tbody');
   if (!tb) return;
-  const rows = schedule
-    .filter(b => b.published && b.type !== 'break' && b.type !== 'reserve' && (b.teams||[]).length)
-    .sort((a,b)=>((a.day||0)-(b.day||0)) || (_toM(a.time)-_toM(b.time)));
+  const rows = schedule.filter(b => b.published && b.type !== 'break' && b.type !== 'reserve' && (b.teams||[]).length);
   if (!rows.length) {
-    tb.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:14px;">No published sessions yet.</td></tr>';
+    tb.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:14px;">No published sessions yet.</td></tr>';
     return;
   }
-  tb.innerHTML = rows.map(b => {
-    const status = b.completed ? 'Completed' : (b.onTrackQueued ? 'Queued' : 'Published');
-    const canPush = !b.completed && !b.onTrackQueued;
+  const byDay = {};
+  rows.forEach(b => {
+    const d = b.day || 0;
+    if (!byDay[d]) byDay[d] = [];
+    byDay[d].push(b);
+  });
+  const days = Object.keys(byDay).map(Number).sort((a,b)=>a-b);
+  tb.innerHTML = days.map(dayIdx => {
+    const list = byDay[dayIdx];
+    const published = list.length;
+    const queued = list.filter(b=>b.onTrackQueued).length;
+    const completed = list.filter(b=>b.completed).length;
+    const canPush = list.some(b=>!b.completed && !b.onTrackQueued);
     return `<tr>
-      <td>Day ${(b.day||0)+1}</td>
-      <td class="mono">${b.time}</td>
-      <td>${(b.teams||[]).join(' + ')}</td>
-      <td>${b.type}</td>
-      <td class="mono">${b.duration}m</td>
-      <td>${status}</td>
-      <td>${canPush ? `<button class="btn sm primary" onclick="pushBlockToOnTrack('${b.id}')">Push to On Track</button>` : '<span style="color:var(--muted);font-size:11px;">—</span>'}</td>
+      <td>Day ${dayIdx+1}</td>
+      <td class="mono">${published}</td>
+      <td class="mono">${queued}</td>
+      <td class="mono">${completed}</td>
+      <td>${canPush ? `<button class="btn sm primary" onclick="pushDayToOnTrack(${dayIdx})">Push Day to On Track</button>` : '<span style="color:var(--muted);font-size:11px;">All queued/completed</span>'}</td>
     </tr>`;
   }).join('');
+}
+
+function pushDayToOnTrack(dayIdx) {
+  const blocks = schedule
+    .filter(b => (b.day||0)===dayIdx && b.published && !b.completed && !b.onTrackQueued && b.type!=='break' && b.type!=='reserve' && (b.teams||[]).length)
+    .sort((a,b)=>_toM(a.time)-_toM(b.time));
+  if (!blocks.length) return;
+  const typeMap = { single:'Single Car', multi:'Multi Car', open:'Open Pit Lane' };
+  blocks.forEach(b => {
+    sessionQueue.push({
+      team: (b.teams||[])[0] || '',
+      type: typeMap[b.type] || 'Single Car',
+      duration: b.duration || 30,
+      priority: 'High',
+      schedBlockId: b.id,
+    });
+    b.onTrackQueued = true;
+  });
+  save();
+  renderSessionOverviewTable();
+  renderSessionQueue();
 }
 
 function pushBlockToOnTrack(blockId) {
@@ -3447,16 +3485,8 @@ function getSessionOrdinalForBlock(block) {
 
 function getPendingCaptureBlocksForToday() {
   const dayIdx = getTodayScheduleDayIndex();
-  const now = new Date();
-  const nowM = now.getHours()*60 + now.getMinutes() + now.getSeconds()/60;
   return schedule
-    .filter(b => {
-      if (!((b.day||0)===dayIdx && b.published && !b.completed && b.type!=='break' && b.type!=='reserve' && (b.teams||[]).length)) return false;
-      const startM = _toM(b.time);
-      const endM = startM + (b.duration||0);
-      const isLiveNow = nowM >= startM && nowM < endM;
-      return isLiveNow || !!b.runStarted || !!b.onTrackQueued;
-    })
+    .filter(b => (b.day||0)===dayIdx && b.published && !b.completed && b.type!=='break' && b.type!=='reserve' && (b.teams||[]).length)
     .sort((a,b)=>_toM(a.time)-_toM(b.time));
 }
 

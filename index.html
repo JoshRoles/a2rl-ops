@@ -230,6 +230,10 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .modal-title{font-family:'Rajdhani',sans-serif;font-size:17px;font-weight:700;letter-spacing:0.5px;margin-bottom:18px;color:var(--text);}
 .modal-close{position:absolute;top:16px;right:16px;background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:4px 8px;border-radius:4px;}
 .modal-close:hover{color:var(--text);background:var(--card-h);}
+.auth-overlay{position:fixed;inset:0;background:radial-gradient(circle at top,#1a1430 0%,#090a12 45%,#050509 100%);z-index:10000;display:none;align-items:center;justify-content:center;padding:16px;}
+.auth-card{width:min(420px,100%);background:linear-gradient(180deg,#16182a,#0f101a);border:1px solid var(--border2);border-radius:10px;padding:18px;box-shadow:var(--shadow);}
+.auth-title{font-family:'Rajdhani',sans-serif;font-size:24px;font-weight:700;margin-bottom:6px;}
+.auth-sub{font-size:12px;color:var(--muted);margin-bottom:14px;}
 .modal-footer{display:flex;gap:10px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border);}
 
 /* SETTINGS TABS */
@@ -305,6 +309,18 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 </style>
 </head>
 <body>
+<div id="login-overlay" class="auth-overlay">
+  <div class="auth-card">
+    <div class="auth-title">A2RL Ops Login</div>
+    <div class="auth-sub">Sign in with your assigned role account.</div>
+    <div class="field"><label>Email</label><input type="email" id="login-email" placeholder="name@company.com"></div>
+    <div class="field"><label>Password</label><input type="password" id="login-password" placeholder="••••••••"></div>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:12px;">
+      <button class="btn primary" onclick="login()">Sign In</button>
+      <span id="login-msg" style="font-size:11px;color:var(--muted);"></span>
+    </div>
+  </div>
+</div>
 <div class="shell">
 
 <!-- SIDEBAR -->
@@ -360,7 +376,11 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
       <div class="session-badge">
         <span id="topbar-session-info">—</span>
       </div>
+      <div class="session-badge">
+        <span id="auth-user-badge">Guest</span>
+      </div>
       <button class="btn" onclick="exportData()">⤓ Export</button>
+      <button class="btn" onclick="logout()">Logout</button>
     </div>
   </div>
 
@@ -496,7 +516,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
           </div>
         </div>
 
-        <div id="sched-stats-row" style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px;"></div>
+        <div id="sched-stats-row" style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:16px;"></div>
 
         <div class="panel">
           <div class="panel-head">
@@ -859,6 +879,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
         <div class="settings-tab active" onclick="switchSettingsTab('weights')">Algorithm Weights</div>
         <div class="settings-tab" onclick="switchSettingsTab('teams')">Teams</div>
         <div class="settings-tab" onclick="switchSettingsTab('event')">Event Config</div>
+        <div class="settings-tab" onclick="switchSettingsTab('users')">Users</div>
         <div class="settings-tab" onclick="switchSettingsTab('data')">Data & Export</div>
       </div>
 
@@ -929,6 +950,25 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
               <div class="field"><label>Default Session Duration (min)</label><input type="number" id="cfg-sess-dur" value="30" min="5"></div>
             </div>
             <div style="margin-top:16px;"><button class="btn primary" onclick="saveEventConfig()">Save Config</button></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-panel" id="stab-users">
+        <div class="panel">
+          <div class="panel-head"><div class="panel-title">User Access Management</div></div>
+          <div class="panel-body">
+            <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Admins can create users and assign roles (`admin` or `viewer`).</div>
+            <div class="form-grid-3">
+              <div class="field"><label>Email</label><input type="email" id="um-email" placeholder="user@email.com"></div>
+              <div class="field"><label>Password</label><input type="text" id="um-password" placeholder="temporary password"></div>
+              <div class="field"><label>Role</label>
+                <select id="um-role"><option value="viewer">Viewer</option><option value="admin">Admin</option></select>
+              </div>
+            </div>
+            <div style="margin-top:10px;"><button class="btn primary" onclick="createUserLogin()">Create Login</button></div>
+            <div class="sep" style="margin:14px 0;"></div>
+            <div id="users-list"></div>
           </div>
         </div>
       </div>
@@ -1237,6 +1277,49 @@ let currentSchedDay = 0;
 let scheduleUndo = [];
 let scheduleRedo = [];
 let lastChangeNotesBase = [];
+let users = JSON.parse(localStorage.getItem('a2rl_users') || '[]');
+let currentUser = JSON.parse(localStorage.getItem('a2rl_current_user') || 'null');
+
+const DEFAULT_ADMIN_EMAIL = 'Rolesjosh417@gmail.com';
+const DEFAULT_ADMIN_PASSWORD = 'Admin@123';
+
+function seedAuth() {
+  if (!Array.isArray(users) || !users.length) {
+    users = [{ email: DEFAULT_ADMIN_EMAIL, password: DEFAULT_ADMIN_PASSWORD, role: 'admin', active: true }];
+    localStorage.setItem('a2rl_users', JSON.stringify(users));
+  }
+}
+function isAdmin() { return (currentUser?.role || '') === 'admin'; }
+function requireAdmin(msg) {
+  if (isAdmin()) return true;
+  alert(msg || 'Viewer mode: this action is locked.');
+  return false;
+}
+function refreshAuthUI() {
+  const badge = document.getElementById('auth-user-badge');
+  if (badge) badge.textContent = currentUser ? `${currentUser.email} · ${currentUser.role.toUpperCase()}` : 'Guest';
+  const overlay = document.getElementById('login-overlay');
+  if (overlay) overlay.style.display = currentUser ? 'none' : 'flex';
+}
+function login() {
+  const email = (document.getElementById('login-email')?.value || '').trim().toLowerCase();
+  const password = (document.getElementById('login-password')?.value || '').trim();
+  const msg = document.getElementById('login-msg');
+  const u = users.find(x => (x.email || '').toLowerCase() === email && x.password === password && x.active !== false);
+  if (!u) {
+    if (msg) msg.textContent = 'Invalid credentials';
+    return;
+  }
+  currentUser = { email: u.email, role: u.role || 'viewer' };
+  localStorage.setItem('a2rl_current_user', JSON.stringify(currentUser));
+  if (msg) msg.textContent = '';
+  refreshAuthUI();
+}
+function logout() {
+  currentUser = null;
+  localStorage.removeItem('a2rl_current_user');
+  refreshAuthUI();
+}
 
 // Schedule-driven live detection (from active event + schedule + eventStart)
 let scheduleLive = { current:null, next:null, lastCalc:0 };
@@ -2073,8 +2156,12 @@ function startScheduleWizard() {
     dayStart: '08:00', dayEnd: '20:00',
     trackOpen: '09:00', trackClose: '18:00',
     days: 1, buffer: 15,
+    targetDay: currentSchedDay || 0,
+    buildScope: 'day',
     teams: [], // [{name, category, sesstype}]
     sessionDur: 30, sessionsPerDay: 2,
+    lunchDuration: 45, lunchWindowStart: '12:00', lunchWindowEnd: '14:00',
+    includeEndBuffer: true, endBufferMins: 15, selectedOption: 'middle',
     multiCarTeams: [],  // team names that share track (multi-car)
     dayConfigs: [],
   };
@@ -2131,7 +2218,13 @@ function renderWizStep0(body) {
         <div class="field"><label>Day Ends</label><input type="time" id="wiz-day-end" value="${wiz.dayEnd}"></div>
         <div class="field"><label>Track Opens (alloc window)</label><input type="time" id="wiz-open" value="${wiz.trackOpen}"></div>
         <div class="field"><label>Track Closes (alloc window)</label><input type="time" id="wiz-close" value="${wiz.trackClose}"></div>
-        <div class="field"><label>Number of Days</label><input type="number" id="wiz-days" value="${wiz.days}" min="1" max="10"></div>
+        <div class="field"><label>Build Scope</label>
+          <select id="wiz-build-scope">
+            <option value="day" ${(wiz.buildScope||'day')==='day'?'selected':''}>Current Day Only</option>
+            <option value="all" ${(wiz.buildScope||'day')==='all'?'selected':''}>All Event Days</option>
+          </select>
+        </div>
+        <div class="field"><label>Current Tab</label><input type="text" id="wiz-build-day" value="Day ${(wiz.targetDay||0)+1}" readonly></div>
         <div class="field"><label>Buffer Between Sessions (min)</label><input type="number" id="wiz-buffer" value="${wiz.buffer}" min="0" max="60"></div>
       </div>
       <div class="sep" style="margin:16px 0 12px;"></div>
@@ -2164,7 +2257,7 @@ function renderWizStep0(body) {
         </table>
       </div>
       <div style="margin-top:14px;padding:12px;background:rgba(0,212,255,0.04);border:1px solid rgba(0,212,255,0.12);border-radius:6px;font-size:12px;color:var(--muted);">
-        <span style="color:var(--accent);">ⓘ</span> Day window controls the visible timetable. Track window controls where sessions can be scheduled. Add breaks (e.g. lunch) manually as slots.
+        <span style="color:var(--accent);">ⓘ</span> Choose whether to build only the current tab (Day ${(wiz.targetDay||0)+1}) or all event days. Day window controls the visible timetable. Track window controls where sessions can be scheduled.
       </div>
     </div></div>`;
 }
@@ -2174,8 +2267,9 @@ function saveWizStep0() {
   wiz.dayEnd = document.getElementById('wiz-day-end')?.value || '20:00';
   wiz.trackOpen = document.getElementById('wiz-open').value;
   wiz.trackClose = document.getElementById('wiz-close').value;
-  const daysV = parseInt(document.getElementById('wiz-days').value);
-  wiz.days = Number.isFinite(daysV) && daysV > 0 ? daysV : 1;
+  wiz.buildScope = document.getElementById('wiz-build-scope')?.value || 'day';
+  // Build either current day only, or all event days
+  wiz.days = wiz.buildScope === 'all' ? Math.max(1, parseInt(schedCfg.days||1)) : 1;
   const bufV = parseInt(document.getElementById('wiz-buffer').value);
   wiz.buffer = Number.isFinite(bufV) && bufV >= 0 ? bufV : 15;
 
@@ -2271,6 +2365,23 @@ function renderWizStep2(body) {
           <div class="field"><label>Sessions Per Team Per Day</label>
             <input type="number" id="wiz-sess-per-day" value="${wiz.sessionsPerDay}" min="1" max="6"></div>
         </div>
+        <div class="sep" style="margin:12px 0;"></div>
+        <div class="form-grid">
+          <div class="field"><label>Lunch Duration (min)</label>
+            <input type="number" id="wiz-lunch-dur" value="${wiz.lunchDuration||45}" min="0" max="180"></div>
+          <div class="field"><label>Lunch Window Start</label>
+            <input type="time" id="wiz-lunch-start" value="${wiz.lunchWindowStart||'12:00'}"></div>
+          <div class="field"><label>Lunch Window End</label>
+            <input type="time" id="wiz-lunch-end" value="${wiz.lunchWindowEnd||'14:00'}"></div>
+          <div class="field"><label>Include End Buffer?</label>
+            <select id="wiz-end-buffer-on">
+              <option value="yes" ${(wiz.includeEndBuffer ?? true) ? 'selected' : ''}>Yes</option>
+              <option value="no" ${!(wiz.includeEndBuffer ?? true) ? 'selected' : ''}>No</option>
+            </select>
+          </div>
+          <div class="field"><label>End Buffer Duration (min)</label>
+            <input type="number" id="wiz-end-buffer-mins" value="${wiz.endBufferMins||15}" min="0" max="120"></div>
+        </div>
         <div style="margin-top:14px;padding:12px;background:rgba(0,212,255,0.04);border:1px solid rgba(0,212,255,0.12);border-radius:6px;font-size:12px;">
           <div style="color:var(--accent);font-weight:600;margin-bottom:6px;">How allocation works:</div>
           <div style="color:var(--muted);line-height:1.7;">
@@ -2314,6 +2425,13 @@ function wizMultiToggle(cb) {
 function saveWizStep2() {
   wiz.sessionDur = parseInt(document.getElementById('wiz-sess-dur')?.value) || 30;
   wiz.sessionsPerDay = parseInt(document.getElementById('wiz-sess-per-day')?.value) || 2;
+  const ld = parseInt(document.getElementById('wiz-lunch-dur')?.value);
+  wiz.lunchDuration = Number.isFinite(ld) && ld >= 0 ? ld : 45;
+  wiz.lunchWindowStart = document.getElementById('wiz-lunch-start')?.value || '12:00';
+  wiz.lunchWindowEnd = document.getElementById('wiz-lunch-end')?.value || '14:00';
+  wiz.includeEndBuffer = (document.getElementById('wiz-end-buffer-on')?.value || 'yes') === 'yes';
+  const eb = parseInt(document.getElementById('wiz-end-buffer-mins')?.value);
+  wiz.endBufferMins = Number.isFinite(eb) && eb >= 0 ? eb : 15;
   // multiGroups are live-updated via wizAddMultiGroup/wizRemoveGroup/wizAddToGroup/wizRemoveFromGroup
 }
 
@@ -2338,12 +2456,91 @@ function calcAllocation() {
   });
 }
 
+function getWizardSessionQueue(alloc) {
+  const multiGroups = wiz.multiGroups || [];
+  const multiNames = new Set(multiGroups.flat());
+  const singleAlloc = alloc.filter(t => !multiNames.has(t.name));
+  const queue = [];
+  singleAlloc.forEach(t => {
+    for (let s = 0; s < t.numSessions; s++) queue.push({ type:'single', teams:[t.name], dur: wiz.sessionDur });
+  });
+  multiGroups.forEach(group => {
+    const ref = alloc.find(t => t.name === group[0]);
+    const n = ref ? ref.numSessions : (wiz.sessionsPerDay||2);
+    for (let s = 0; s < n; s++) queue.push({ type:'multi', teams:group, dur: wiz.sessionDur });
+  });
+  const byKey = {};
+  queue.forEach(s => { const k=s.teams[0]; if(!byKey[k]) byKey[k]=[]; byKey[k].push(s); });
+  const keys = Object.keys(byKey);
+  const interleaved = [];
+  const maxLen = Math.max(...keys.map(k=>byKey[k].length), 0);
+  for (let i=0; i<maxLen; i++) keys.forEach(k => { if(byKey[k][i]) interleaved.push(byKey[k][i]); });
+  return interleaved;
+}
+
+function buildWizardScheduleOption(lunchAnchor) {
+  const toM = t => { const [h,m]=t.split(':').map(Number); return h*60+m; };
+  const lunchDur = Math.max(0, parseInt(wiz.lunchDuration||0));
+  const endBuffer = (wiz.includeEndBuffer ? Math.max(0, parseInt(wiz.endBufferMins||0)) : 0);
+  const alloc = calcAllocation();
+  const queueTemplate = getWizardSessionQueue(alloc);
+  let fitted = 0;
+  let total = 0;
+  let hadOverflow = false;
+  for (let day = 0; day < wiz.days; day++) {
+    const dc = (wiz.dayCfgs && wiz.dayCfgs[day]) || {};
+    const dayStartM = toM(dc.dayStart || wiz.dayStart || '08:00');
+    const dayEndM = toM(dc.dayEnd || wiz.dayEnd || '20:00');
+    const trackO = toM(dc.trackOpen || wiz.trackOpen || '09:00');
+    const trackC = toM(dc.trackClose || wiz.trackClose || '18:00');
+    const trackStart = Math.max(dayStartM, trackO);
+    const trackEnd = Math.min(dayEndM, trackC);
+    let lunchStart = null;
+    if (lunchDur > 0) {
+      const lwStart = Math.max(trackStart, toM(wiz.lunchWindowStart || '12:00'));
+      const lwEnd = Math.min(trackEnd, toM(wiz.lunchWindowEnd || '14:00'));
+      const candidate = lunchAnchor === 'start' ? lwStart : (lunchAnchor === 'end' ? lwEnd - lunchDur : Math.floor((lwStart + lwEnd - lunchDur)/2));
+      lunchStart = Math.max(trackStart, Math.min(candidate, Math.max(trackStart, trackEnd - lunchDur - endBuffer)));
+      if (lunchStart + lunchDur > trackEnd - endBuffer) lunchStart = null;
+    }
+    const windows = [];
+    if (lunchStart != null) {
+      if (lunchStart > trackStart) windows.push({start:trackStart,end:lunchStart});
+      if (lunchStart + lunchDur < trackEnd - endBuffer) windows.push({start:lunchStart + lunchDur,end:trackEnd - endBuffer});
+    } else {
+      windows.push({start:trackStart,end:trackEnd - endBuffer});
+    }
+    let wi = 0;
+    let cursor = windows[0]?.start ?? trackStart;
+    const q = queueTemplate.map(x=>({ ...x }));
+    total += q.length;
+    q.forEach(slot => {
+      while (wi < windows.length && cursor + slot.dur > windows[wi].end) {
+        wi++;
+        if (wi < windows.length) cursor = windows[wi].start;
+      }
+      if (wi >= windows.length) return;
+      fitted++;
+      cursor += slot.dur + (wiz.buffer||0);
+    });
+    if (fitted < total) hadOverflow = true;
+  }
+  return { id: lunchAnchor, lunchAnchor, lunchDur, endBuffer, fitted, total, overflow: hadOverflow };
+}
+
+function selectWizOption(id) {
+  wiz.selectedOption = id;
+  renderWizardStep();
+}
+
 function renderWizStep3(body) {
   const alloc = calcAllocation();
   const toM = t => { const [h,m]=t.split(':').map(Number); return h*60+m; };
   const dayMins = (toM(wiz.trackClose) - toM(wiz.trackOpen));
   const totalSchedMins = alloc.reduce((a,t)=>a+t.allocMins,0) * wiz.days;
   const totalAvail = dayMins * wiz.days;
+  const opts = ['start','middle','end'].map(buildWizardScheduleOption);
+  if (!wiz.selectedOption) wiz.selectedOption = opts[0].id;
 
   body.innerHTML = `
     <div class="grid-2">
@@ -2354,6 +2551,8 @@ function renderWizStep3(body) {
           <div class="breakdown-item"><span class="breakdown-key">Track Time / Day</span><span class="mono">${Math.floor(dayMins/60)}h ${dayMins%60}m</span></div>
           <div class="breakdown-item"><span class="breakdown-key">Session Duration</span><span class="mono">${wiz.sessionDur} min</span></div>
           <div class="breakdown-item"><span class="breakdown-key">Buffer Between</span><span class="mono">${wiz.buffer} min</span></div>
+          <div class="breakdown-item"><span class="breakdown-key">Lunch Window</span><span class="mono">${wiz.lunchWindowStart||'12:00'}-${wiz.lunchWindowEnd||'14:00'} (${wiz.lunchDuration||0}m)</span></div>
+          <div class="breakdown-item"><span class="breakdown-key">End Buffer</span><span class="mono">${wiz.includeEndBuffer ? (wiz.endBufferMins||0)+' min' : 'Off'}</span></div>
           <div class="breakdown-item"><span class="breakdown-key">Teams</span><span class="mono">${wiz.teams.length}</span></div>
           <div class="breakdown-item"><span class="breakdown-key">Total Track Load</span>
             <span class="mono" style="color:${totalSchedMins>totalAvail?C.red:C.green}">${(totalSchedMins/60).toFixed(1)}h / ${(totalAvail/60).toFixed(1)}h avail</span></div>
@@ -2380,6 +2579,23 @@ function renderWizStep3(body) {
         </table>
       </div></div>
     </div>`;
+  body.innerHTML += `
+    <div class="panel" style="margin-top:14px;"><div class="panel-head"><div class="panel-title">Step 4: Schedule Options</div></div>
+    <div class="panel-body">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Choose a generated option. Platform calculates these from teams, category allocations, lunch window, and available track time.</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;">
+        ${opts.map(o => {
+          const active = wiz.selectedOption === o.id;
+          const lbl = o.id === 'start' ? 'Lunch Early' : (o.id === 'end' ? 'Lunch Late' : 'Lunch Midday');
+          return `<div onclick="selectWizOption('${o.id}')" style="cursor:pointer;padding:10px;border-radius:6px;border:1px solid ${active?'rgba(0,212,255,0.35)':'var(--border)'};background:${active?'rgba(0,212,255,0.08)':'var(--card)'};">
+            <div style="font-size:12px;font-weight:700;color:var(--text);">${lbl}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:6px;">Sessions fitted: <span class="mono" style="color:${o.overflow?'var(--amber)':'var(--green)'}">${o.fitted}/${o.total}</span></div>
+            <div style="font-size:11px;color:var(--muted);">Lunch: ${o.lunchDur}m · End buffer: ${o.endBuffer}m</div>
+            <div style="font-size:11px;color:${o.overflow?'var(--amber)':'var(--green)'};margin-top:6px;">${o.overflow?'Needs manual adjustment':'Fits in track window'}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div></div>`;
 }
 
 function wizNext() {
@@ -2398,12 +2614,16 @@ function wizardBack() {
 
 function generateSchedule() {
   pushScheduleHistory();
-  schedule = [];
+  const targetStartDay = wiz.buildScope === 'all' ? 0 : Math.max(0, parseInt(wiz.targetDay||0));
+  const targetDays = Math.max(1, parseInt(wiz.days||1));
+  const targetSet = new Set(Array.from({length:targetDays}).map((_,i)=>targetStartDay+i));
+  schedule = schedule.filter(b => !targetSet.has(b.day));
   const toM = t => { const [h,m]=t.split(':').map(Number); return h*60+m; };
   const fromM = m => { const h=Math.floor(m/60); const min=m%60; return String(h).padStart(2,'0')+':'+String(min).padStart(2,'0'); };
   const dur = wiz.sessionDur;
   const buf = wiz.buffer;
   const alloc = calcAllocation();
+  const optionId = wiz.selectedOption || 'middle';
 
   // Multi-car groups from wizard; singles = everyone not in a group
   const multiGroups = wiz.multiGroups || [];
@@ -2411,6 +2631,7 @@ function generateSchedule() {
   const singleAlloc = alloc.filter(t => !multiNames.has(t.name));
 
   for (let day = 0; day < wiz.days; day++) {
+    const actualDay = targetStartDay + day;
     const dc = (wiz.dayCfgs && wiz.dayCfgs[day]) || {};
     const dayStartM = toM(dc.dayStart || wiz.dayStart || '08:00');
     const dayEndM = toM(dc.dayEnd || wiz.dayEnd || '20:00');
@@ -2421,19 +2642,33 @@ function generateSchedule() {
     const trackStart = Math.max(dayStartM, trackO);
     const trackEnd = Math.min(dayEndM, trackC);
 
-    // Window: full day (breaks like lunch are added manually as slots)
-    const reserveMins = (wiz.reserveCount||1) * dur;
-    const afternoonEnd = trackEnd - reserveMins;
-    const windows = [
-      { start: trackStart, end: afternoonEnd > trackStart ? afternoonEnd : trackEnd },
-    ].filter(w => w.end > w.start);
-
-    // Add reserve block at end
-    if (reserveMins > 0 && afternoonEnd < trackEnd) {
+    const reserveMins = wiz.includeEndBuffer ? Math.max(0, parseInt(wiz.endBufferMins||0)) : 0;
+    const lunchMins = Math.max(0, parseInt(wiz.lunchDuration||0));
+    const lwStart = Math.max(trackStart, toM(wiz.lunchWindowStart || '12:00'));
+    const lwEnd = Math.min(trackEnd, toM(wiz.lunchWindowEnd || '14:00'));
+    let lunchStart = null;
+    if (lunchMins > 0 && lwEnd - lwStart >= lunchMins) {
+      const candidate = optionId === 'start' ? lwStart : (optionId === 'end' ? lwEnd - lunchMins : Math.floor((lwStart + lwEnd - lunchMins)/2));
+      lunchStart = Math.max(trackStart, Math.min(candidate, Math.max(trackStart, trackEnd - lunchMins - reserveMins)));
+      if (lunchStart + lunchMins > trackEnd - reserveMins) lunchStart = null;
+    }
+    const windows = [];
+    if (lunchStart != null) {
+      if (lunchStart > trackStart) windows.push({ start: trackStart, end: lunchStart });
+      if (lunchStart + lunchMins < trackEnd - reserveMins) windows.push({ start: lunchStart + lunchMins, end: trackEnd - reserveMins });
       schedule.push({
-        id: 'reserve-'+day+'-'+Date.now(),
-        day, time: fromM(afternoonEnd), type: 'reserve',
-        teams: [], duration: reserveMins, label: '⊕ Reserve (click to assign)', generated: true,
+        id: 'lunch-'+actualDay+'-'+Date.now(),
+        day: actualDay, time: fromM(lunchStart), type: 'break',
+        teams: [], duration: lunchMins, label: 'Lunch Break', generated: true,
+      });
+    } else {
+      windows.push({ start: trackStart, end: trackEnd - reserveMins });
+    }
+    if (reserveMins > 0 && trackEnd - reserveMins < trackEnd) {
+      schedule.push({
+        id: 'reserve-'+actualDay+'-'+Date.now(),
+        day: actualDay, time: fromM(trackEnd - reserveMins), type: 'reserve',
+        teams: [], duration: reserveMins, label: 'End Buffer', generated: true,
       });
     }
 
@@ -2465,9 +2700,9 @@ function generateSchedule() {
       if (wi >= windows.length) return;
       schedule.push({
         id: Date.now().toString(36)+Math.random().toString(36).slice(2,6),
-        day,
+        day: actualDay,
         eventId: schedCfg.eventId || null,
-        eventDay: day,
+        eventDay: actualDay,
         time: fromM(cursor), type: slot.type,
         teams: slot.teams, duration: slot.dur,
         label: slot.teams.join(' + '), generated: true,
@@ -2477,13 +2712,14 @@ function generateSchedule() {
   }
 
   // Sync sched config
-  schedCfg.days = wiz.days;
-  schedCfg.days = wiz.days;
+  const keepDays = Math.max(schedCfg.days||1, targetStartDay + targetDays);
+  schedCfg.days = keepDays;
   schedCfg.buffer = wiz.buffer;
   _ensureSchedDayCfg();
-  for (let i = 0; i < (schedCfg.days||1); i++) {
+  for (let i = 0; i < targetDays; i++) {
+    const realDay = targetStartDay + i;
     const dc = (wiz.dayCfgs && wiz.dayCfgs[i]) || {};
-    schedCfg.dayCfgs[i] = {
+    schedCfg.dayCfgs[realDay] = {
       dayStart: dc.dayStart || wiz.dayStart,
       dayEnd: dc.dayEnd || wiz.dayEnd,
       trackOpen: dc.trackOpen || wiz.trackOpen,
@@ -2507,7 +2743,10 @@ function generateSchedule() {
   renderScheduleView();
   renderSchedTeamSummary();
   renderSchedStatsRow();
-  alert('Schedule generated! ' + schedule.filter(b=>b.type!=='break').length + ' sessions across ' + wiz.days + ' day(s).');
+  const builtCount = schedule.filter(b=>targetSet.has(b.day) && b.type!=='break' && b.type!=='reserve').length;
+  alert(wiz.buildScope === 'all'
+    ? ('Schedule generated for all days! ' + builtCount + ' sessions created.')
+    : ('Schedule generated for Day ' + (targetStartDay+1) + '! ' + builtCount + ' sessions created.'));
 }
 
 // ── ADD SLOT MODAL (manual) ──
@@ -2751,21 +2990,26 @@ function clearSchedule() {
 function renderSchedStatsRow() {
   const row = document.getElementById('sched-stats-row');
   if (!row) return;
-  const blocks = schedule.filter(b=>b.type!=='break');
+  const dayBlocks = schedule.filter(b=>b.day===currentSchedDay && b.type!=='break');
+  const blocks = dayBlocks.filter(b=>b.type!=='reserve');
   const single = blocks.filter(b=>b.type==='single').length;
   const multi = blocks.filter(b=>b.type==='multi').length;
   const open = blocks.filter(b=>b.type==='open').length;
   const totalMins = blocks.reduce((a,b)=>a+b.duration,0);
-  const days = Math.max(...schedule.map(b=>b.day+1), 1);
+  const w = getSchedWindowsM(currentSchedDay);
+  const availMins = Math.max(0, (w.trackCloseM||0) - (w.trackOpenM||0));
+  const utilPct = availMins > 0 ? Math.min((totalMins/availMins)*100, 100) : 0;
   row.innerHTML = [
+    ['Selected Day', `Day ${currentSchedDay+1}`, C.text],
     ['Total Sessions', blocks.length, C.text],
     ['Single Car', single, C.accent],
     ['Multi Car', multi, C.purple],
     ['Open Pit', open, C.green],
-    ['Total Track Time', (totalMins/60).toFixed(1)+'h', C.amber],
+    ['Track Time (Avail / Utilized)', `${(availMins/60).toFixed(1)}h / ${(totalMins/60).toFixed(1)}h`, C.amber],
   ].map(([label,val,col])=>`<div class="stat-card" style="--accent-line:${col}">
     <div class="stat-label">${label}</div>
-    <div class="stat-val" style="font-size:24px;color:${col}">${val}</div>
+    <div class="stat-val" style="font-size:${label==='Track Time (Avail / Utilized)'?'18px':'24px'};color:${col}">${val}</div>
+    ${label==='Track Time (Avail / Utilized)'?`<div class="stat-delta" style="color:${utilPct>95?C.red:(utilPct>80?C.amber:C.green)}">${utilPct.toFixed(0)}% utilized</div>`:''}
   </div>`).join('');
 }
 
@@ -2774,24 +3018,25 @@ function renderSchedTeamSummary() {
   if (!tbody) return;
   const activeTeams = teams.filter(t=>t.active);
   tbody.innerHTML = activeTeams.map(t => {
-    const tBlocks = schedule.filter(b => (b.teams||[]).includes(t.name));
+    const tBlocks = schedule.filter(b => b.day===currentSchedDay && (b.teams||[]).includes(t.name));
     const schedMins = tBlocks.reduce((a,b)=>a+b.duration, 0);
     const alloc = trackAlloc.find(a=>a.team===t.name);
-    const allocH = alloc ? alloc.hours : 0;
-    const usedH = alloc ? (alloc.used||0) : 0;
-    const remainH = allocH - usedH;
+    const hasAlloc = !!alloc && Number.isFinite(alloc.hours) && alloc.hours > 0;
+    const allocH = hasAlloc ? alloc.hours : 0;
+    const usedH = hasAlloc ? (alloc.used||0) : 0;
+    const remainH = hasAlloc ? (allocH - usedH) : null;
     const cat = t.category || 'rookie';
-    const pct = allocH > 0 ? Math.min((schedMins/60)/allocH*100, 100) : 0;
+    const pct = hasAlloc ? Math.min((schedMins/60)/allocH*100, 100) : null;
     const tier = pct > 95 ? 'badge-crit' : pct > 70 ? 'badge-med' : 'badge-low';
     return `<tr>
       <td><span class="team-dot" style="background:${t.color}"></span><b>${t.name}</b></td>
       <td><span style="font-size:10px;font-weight:700;color:${CAT_COLOR[cat]}">${CAT_LABEL[cat]}</span></td>
-      <td class="mono">${allocH.toFixed(1)}h</td>
+      <td class="mono">${hasAlloc ? (allocH.toFixed(1)+'h') : '<span style="color:var(--muted)">—</span>'}</td>
       <td class="mono">${(schedMins/60).toFixed(1)}h <span style="color:var(--muted);font-size:10px;">(${tBlocks.length} sess)</span></td>
       <td class="mono">${tBlocks.length}</td>
-      <td class="mono" style="color:var(--green)">${usedH.toFixed(1)}h</td>
-      <td class="mono" style="color:${remainH<0?C.red:C.green}">${remainH.toFixed(1)}h</td>
-      <td><span class="badge ${tier}">${pct.toFixed(0)}% filled</span></td>
+      <td class="mono" style="color:var(--green)">${hasAlloc ? (usedH.toFixed(1)+'h') : '<span style="color:var(--muted)">—</span>'}</td>
+      <td class="mono" style="color:${hasAlloc?(remainH<0?C.red:C.green):'var(--muted)'}">${hasAlloc ? (remainH.toFixed(1)+'h') : 'No allocation'}</td>
+      <td>${hasAlloc ? (`<span class="badge ${tier}">${pct.toFixed(0)}% filled</span>`) : '<span class="badge badge-blue">Not allocated</span>'}</td>
     </tr>`;
   }).join('');
 }
@@ -3146,6 +3391,7 @@ function renderSettings() {
   renderWeightsUI();
   renderTeamsManagement();
   renderCategoryMultipliersUI();
+  renderUsersManagement();
   document.getElementById('data-count').textContent = sessions.length;
 }
 
@@ -3154,6 +3400,50 @@ function switchSettingsTab(tab) {
   document.querySelectorAll('.settings-panel').forEach(p => p.classList.remove('active'));
   document.querySelector(`.settings-tab[onclick*="${tab}"]`).classList.add('active');
   document.getElementById(`stab-${tab}`).classList.add('active');
+}
+
+function renderUsersManagement() {
+  const list = document.getElementById('users-list');
+  if (!list) return;
+  list.innerHTML = users.map((u, i) => `
+    <div style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--border);border-radius:6px;margin-bottom:8px;background:var(--card);">
+      <span style="flex:1;font-size:12px;"><b>${u.email}</b> <span style="color:var(--muted)">(${u.role})</span></span>
+      <span style="font-size:11px;color:${u.active===false?'var(--red)':'var(--green)'};">${u.active===false?'Disabled':'Active'}</span>
+      <button class="btn sm" onclick="toggleUserActive(${i})">${u.active===false?'Enable':'Disable'}</button>
+      <button class="btn sm danger" onclick="deleteUserLogin(${i})">Delete</button>
+    </div>
+  `).join('');
+}
+function createUserLogin() {
+  if (!requireAdmin('Only admin can create users.')) return;
+  const email = (document.getElementById('um-email')?.value || '').trim();
+  const password = (document.getElementById('um-password')?.value || '').trim();
+  const role = document.getElementById('um-role')?.value || 'viewer';
+  if (!email || !password) { alert('Email and password required.'); return; }
+  if (users.some(u => (u.email || '').toLowerCase() === email.toLowerCase())) { alert('User already exists.'); return; }
+  users.push({ email, password, role, active: true });
+  localStorage.setItem('a2rl_users', JSON.stringify(users));
+  document.getElementById('um-email').value = '';
+  document.getElementById('um-password').value = '';
+  renderUsersManagement();
+}
+function deleteUserLogin(i) {
+  if (!requireAdmin('Only admin can delete users.')) return;
+  if (!users[i]) return;
+  if ((users[i].email || '').toLowerCase() === DEFAULT_ADMIN_EMAIL.toLowerCase()) {
+    alert('Primary admin cannot be deleted.');
+    return;
+  }
+  users.splice(i, 1);
+  localStorage.setItem('a2rl_users', JSON.stringify(users));
+  renderUsersManagement();
+}
+function toggleUserActive(i) {
+  if (!requireAdmin('Only admin can edit users.')) return;
+  if (!users[i]) return;
+  users[i].active = users[i].active === false ? true : false;
+  localStorage.setItem('a2rl_users', JSON.stringify(users));
+  renderUsersManagement();
 }
 
 function renderWeightsUI() {
@@ -4104,8 +4394,7 @@ function openNewEventModal() {
   document.getElementById('ev-days').value=2;
   document.getElementById('ev-status').value='upcoming';
   document.getElementById('ev-notes').value='';
-  const sel=document.getElementById('ev-teams');
-  sel.innerHTML=teams.map(t=>'<option value="'+t.name+'">'+t.name+'</option>').join('');
+  renderEventTeamChecks([]);
   openModal('modal-new-event');
 }
 function openEditEventModal(i) {
@@ -4120,15 +4409,14 @@ function openEditEventModal(i) {
   document.getElementById('ev-days').value=ev.days||2;
   document.getElementById('ev-status').value=ev.status||'upcoming';
   document.getElementById('ev-notes').value=ev.notes||'';
-  const sel=document.getElementById('ev-teams');
-  sel.innerHTML=teams.map(t=>'<option value="'+t.name+'"'+(  (ev.teams||[]).includes(t.name)?' selected':'')+'>'+t.name+'</option>').join('');
+  renderEventTeamChecks(ev.teams||[]);
   openModal('modal-new-event');
 }
 function saveEvent() {
   const name=document.getElementById('ev-name').value.trim();
   if (!name) { alert('Event name required'); return; }
   const editId=document.getElementById('edit-event-id').value;
-  const selTeams=Array.from(document.getElementById('ev-teams').selectedOptions).map(o=>o.value);
+  const selTeams=Array.from(document.querySelectorAll('#ev-team-checks input:checked')).map(cb=>cb.value);
   const evData={
     id: editId||Date.now().toString(),
     name, season:parseInt(document.getElementById('ev-season').value)||3,
@@ -4143,6 +4431,19 @@ function saveEvent() {
   if (editId) { const idx=events.findIndex(e=>e.id===editId); if(idx>=0) events[idx]=evData; }
   else events.push(evData);
   saveEvents(); closeModal('modal-new-event'); renderEventsView();
+}
+function renderEventTeamChecks(selectedTeams) {
+  const box = document.getElementById('ev-team-checks');
+  if (!box) return;
+  const set = new Set(selectedTeams||[]);
+  box.innerHTML = teams.map(t => {
+    const checked = set.has(t.name) ? 'checked' : '';
+    return `<label style="display:flex;align-items:center;gap:7px;padding:4px 6px;cursor:pointer;">
+      <input type="checkbox" value="${t.name}" ${checked} style="accent-color:var(--accent);">
+      <span class="team-dot" style="background:${t.color};"></span>
+      <span style="font-size:12px;">${t.name}</span>
+    </label>`;
+  }).join('');
 }
 function activateEvent(i) {
   events.forEach((e,j)=>{ e.status = j===i?'active':(e.status==='active'?'upcoming':e.status); });
@@ -4371,7 +4672,8 @@ function _resolveOverlap(movedBlock, direction, openM, closeM) {
   if(direction==='down'||direction==='both'){
     let cursor=mE;
     others.filter(b=>toM(b.time)>=mS).forEach(b=>{
-      if(toM(b.time)<cursor) b.time=fM(cursor);
+      // Keep schedule contiguous after edited block: remove gaps and overlaps
+      if (toM(b.time)!==cursor) b.time=fM(cursor);
       cursor=toM(b.time)+b.duration;
       const el=document.getElementById('blk-'+b.id);
       if(el) el.style.top=((toM(b.time)-openM)*PX_PER_MIN)+'px';
@@ -4422,7 +4724,32 @@ showView = function(id){
   if(id==='live'||id==='tracktime') renderLiveAllocChart();
 };
 
+function applyRoleGuards() {
+  const guarded = [
+    'startScheduleWizard','generateSchedule','saveSlot','saveEditSlot','deleteSlotFromModal','removeSchedBlock','clearSchedule','exportScheduleToSessions',
+    'openGarageModal','saveGarageAllocation','autoAllocateGarages','openStartSessionModal','startActiveSession','endActiveSession','addFeedNote',
+    'openQueueModal','addToQueue','removeFromQueue','dequeueSession',
+    'calcAndSubmit','resetForm','openAllocModal','saveAllocation','deleteAlloc','autoDistributeTime',
+    'openNewEventModal','openEditEventModal','saveEvent','activateEvent','deleteEvent',
+    'openAddTeamModal','openEditTeam','saveTeam','deleteTeam',
+    'saveEventConfig','saveCategoryMultipliers','resetWeights','saveThresholds','importData','clearAllData'
+  ];
+  guarded.forEach(name => {
+    const orig = window[name];
+    if (typeof orig !== 'function' || orig.__guarded) return;
+    const wrapped = function(...args) {
+      if (!requireAdmin('Viewer mode: this action is locked.')) return;
+      return orig.apply(this, args);
+    };
+    wrapped.__guarded = true;
+    window[name] = wrapped;
+  });
+}
+
 function init(){
+  seedAuth();
+  applyRoleGuards();
+  refreshAuthUI();
   rebuildLiveRisks();
   syncTrackUsedFromSessions();
   updateTopbarSessionInfo();
@@ -4463,8 +4790,7 @@ init();
         </select>
       </div>
       <div class="field"><label>Participating Teams</label>
-        <select id="ev-teams" multiple style="min-height:90px;"></select>
-        <div style="font-size:10px;color:var(--muted);margin-top:3px;">Ctrl+click to select multiple</div>
+        <div id="ev-team-checks" style="display:grid;grid-template-columns:1fr 1fr;gap:4px;max-height:120px;overflow-y:auto;padding:8px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:5px;margin-top:4px;"></div>
       </div>
     </div>
     <div class="field" style="margin-top:12px;"><label>Notes</label>

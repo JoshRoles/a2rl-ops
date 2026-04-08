@@ -343,7 +343,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
   <div class="nav-item" onclick="showView('schedule')"><span class="nav-icon">📅</span>Track Schedule</div>
   <div class="nav-item" onclick="showView('tracktime')"><span class="nav-icon">⏱</span>Track Time Allocation</div>
 
-  <div class="sidebar-section-label">Risk Intelligence</div>
+  <div class="sidebar-section-label">Pitlane</div>
   <div class="nav-item" onclick="showView('session')"><span class="nav-icon">＋</span>Sessions</div>
   <div class="nav-item" onclick="showView('garage')"><span class="nav-icon">▶</span>On Track</div>
   <div class="nav-item" onclick="showView('garagealloc')"><span class="nav-icon">🏎</span>Garage</div>
@@ -586,7 +586,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 
     <!-- ═══════════════════════════════════════════════ ON TRACK ══ -->
     <div class="view" id="view-garage">
-      <div class="grid-73">
+      <div class="grid-2">
         <div style="display:none;">
           <div class="panel">
             <div class="panel-head">
@@ -602,9 +602,8 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
           </div>
         </div>
         <div>
-          <div class="on-track-card" style="margin-bottom:14px;">
+          <div class="on-track-card">
             <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Currently On Track</div>
-            <div id="garage-capture-tabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;justify-content:center;"></div>
             <div class="countdown-team" id="ot-team-name">— No Active Session —</div>
             <div class="countdown-ring">
               <svg width="120" height="120" viewBox="0 0 120 120">
@@ -624,23 +623,12 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
               <button class="btn sm" onclick="addFeedNote()">+ Note</button>
             </div>
           </div>
-
-          <div class="panel">
-            <div class="panel-head"><div class="panel-title">Session Queue</div></div>
-            <div class="panel-body" style="padding:8px 14px;">
-              <div id="session-queue" style="display:flex;flex-direction:column;gap:6px;"></div>
-              <button class="btn sm" style="margin-top:10px;width:100%;" onclick="openQueueModal()">+ Add to Queue</button>
-            </div>
-          </div>
-          <div class="panel" style="margin-top:14px;">
-            <div class="panel-head"><div class="panel-title">Today's Published On-Track Plan</div></div>
-            <div class="panel-body" style="padding:8px 14px;">
-              <div id="garage-published-today" style="display:flex;flex-direction:column;gap:6px;"></div>
-            </div>
-          </div>
-          <div class="panel" style="margin-top:14px;" id="garage-capture-panel">
-            <div class="panel-head"><div class="panel-title">Session Capture (Garage)</div></div>
+        </div>
+        <div>
+          <div class="panel" id="garage-capture-panel">
+            <div class="panel-head"><div class="panel-title">Session Capture (On Track)</div></div>
             <div class="panel-body">
+              <div id="garage-capture-tabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;"></div>
               <div style="font-size:11px;color:var(--muted);margin-bottom:8px;" id="garage-capture-hint">Capture risk data for current scheduled session.</div>
               <div class="form-grid-4">
                 <div class="field"><label>Team</label><select id="g-team"></select></div>
@@ -664,6 +652,20 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
                 <button class="btn primary" onclick="calcAndSubmit('g')">Submit Capture</button>
                 <button class="btn" onclick="resetGarageCapture()">Reset</button>
               </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><div class="panel-title">Session Queue</div></div>
+            <div class="panel-body" style="padding:8px 14px;">
+              <div id="session-queue" style="display:flex;flex-direction:column;gap:6px;"></div>
+              <button class="btn sm" style="margin-top:10px;width:100%;" onclick="openQueueModal()">+ Add to Queue</button>
+            </div>
+          </div>
+          <div class="panel" style="margin-top:14px;">
+            <div class="panel-head"><div class="panel-title">Today's Published On-Track Plan</div></div>
+            <div class="panel-body" style="padding:8px 14px;">
+              <div id="garage-published-today" style="display:flex;flex-direction:column;gap:6px;"></div>
             </div>
           </div>
         </div>
@@ -743,7 +745,16 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 
     <!-- ═══════════════════════════════════════════════ LOG SESSION ══ -->
     <div class="view" id="view-session">
-      <div style="max-width:860px;">
+      <div class="panel">
+        <div class="panel-head"><div class="panel-title">Sessions Overview (Published Schedule)</div></div>
+        <div class="panel-body" style="padding:0;">
+          <table class="data-table">
+            <thead><tr><th>Day</th><th>Time</th><th>Team</th><th>Type</th><th>Duration</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody id="session-overview-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div style="max-width:860px;display:none;" id="legacy-manual-form">
         <div class="alert-info" style="margin-bottom:16px;">
           ⓘ Fields marked with <span style="color:var(--accent)">*</span> are required. Metrics grayed out (TTC, Time to Collision) will be populated via ROS integration in future releases.
         </div>
@@ -845,6 +856,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
     <!-- ═══════════════════════════════════════════════ SESSION HISTORY ══ -->
     <div class="view" id="view-history">
       <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
+        <button class="btn sm primary" onclick="openManualSessionModal()">+ Create Manual Session</button>
         <select id="hist-filter-team" onchange="renderHistory()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);padding:6px 10px;border-radius:4px;font-size:12px;font-family:'Barlow',sans-serif;"></select>
         <select id="hist-filter-type" onchange="renderHistory()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);padding:6px 10px;border-radius:4px;font-size:12px;font-family:'Barlow',sans-serif;">
           <option value="">All Event Types</option>
@@ -1864,7 +1876,7 @@ function showView(id) {
   if (id === 'settings')  renderSettings();
   if (id === 'users')     renderUsersManagement();
   if (id === 'live')      { renderLiveTable(); }
-  if (id === 'session')   populateTeamDropdowns();
+  if (id === 'session')   { populateTeamDropdowns(); renderSessionOverviewTable(); }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -2151,6 +2163,51 @@ function resetForm() {
   document.getElementById('f-notes').value = '';
   document.getElementById('score-result').classList.remove('visible');
   setDefaultFormDate();
+}
+
+function openManualSessionModal() {
+  populateTeamDropdowns();
+  const sel = document.getElementById('ms-team');
+  if (sel) sel.innerHTML = teams.filter(t=>t.active).map(t=>`<option>${t.name}</option>`).join('');
+  const now = new Date();
+  const d = document.getElementById('ms-date'); if (d) d.value = now.toISOString().split('T')[0];
+  const t = document.getElementById('ms-time'); if (t) t.value = now.toTimeString().slice(0,5);
+  openModal('modal-manual-session');
+}
+
+function submitManualSession() {
+  const s = {
+    team: document.getElementById('ms-team')?.value || '',
+    eventType: document.getElementById('ms-event')?.value || 'Testing (Track)',
+    sessType: document.getElementById('ms-sess-type')?.value || 'Single Car',
+    sessNum: parseInt(document.getElementById('ms-session')?.value) || 1,
+    duration: parseInt(document.getElementById('ms-duration')?.value) || 30,
+    weather: document.getElementById('ms-weather')?.value || 'Clear',
+    notes: document.getElementById('ms-notes')?.value || '',
+    timestamp: new Date(`${document.getElementById('ms-date')?.value || ''}T${document.getElementById('ms-time')?.value || ''}`).toISOString(),
+    startAttempts: parseInt(document.getElementById('ms-attempts')?.value) || 0,
+    laps: parseInt(document.getElementById('ms-laps')?.value) || 0,
+    stoppages: parseInt(document.getElementById('ms-stoppages')?.value) || 0,
+    crashed: document.getElementById('ms-crashed')?.value || 'No',
+    damage: parseFloat(document.getElementById('ms-damage')?.value) || 0,
+    speed: parseFloat(document.getElementById('ms-speed')?.value) || 0,
+    replans: parseInt(document.getElementById('ms-replans')?.value) || 0,
+    estops: parseInt(document.getElementById('ms-estops')?.value) || 0,
+    instability: parseFloat(document.getElementById('ms-instab')?.value) || 0,
+    sensor: parseFloat(document.getElementById('ms-sensor')?.value) || 0,
+    manualOverride: parseFloat(document.getElementById('ms-manual')?.value) || 0,
+    ttc:0, ttcMin:0, gpsDeviation:0, lateralAccel:0,
+  };
+  const { score, breakdown } = calcRisk(s);
+  s.riskScore = score; s.riskBreakdown = breakdown; s.id = String(Date.now());
+  sessions.push(s);
+  liveRisks[s.team] = score;
+  syncTrackUsedFromSessions();
+  save();
+  closeModal('modal-manual-session');
+  renderHistory();
+  renderLiveTable();
+  renderFeed();
 }
 
 function addFeedEvent(team, msg, color) {
@@ -3171,6 +3228,31 @@ function renderPublishedSessionsTable() {
       <td>Day ${(b.day||0)+1}</td>
       <td class="mono">${b.time}</td>
       <td>${team}</td>
+      <td>${b.type}</td>
+      <td class="mono">${b.duration}m</td>
+      <td>${status}</td>
+      <td>${canPush ? `<button class="btn sm primary" onclick="pushBlockToOnTrack('${b.id}')">Push to On Track</button>` : '<span style="color:var(--muted);font-size:11px;">—</span>'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderSessionOverviewTable() {
+  const tb = document.getElementById('session-overview-tbody');
+  if (!tb) return;
+  const rows = schedule
+    .filter(b => b.published && b.type !== 'break' && b.type !== 'reserve' && (b.teams||[]).length)
+    .sort((a,b)=>((a.day||0)-(b.day||0)) || (_toM(a.time)-_toM(b.time)));
+  if (!rows.length) {
+    tb.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:14px;">No published sessions yet.</td></tr>';
+    return;
+  }
+  tb.innerHTML = rows.map(b => {
+    const status = b.completed ? 'Completed' : (b.onTrackQueued ? 'Queued' : 'Published');
+    const canPush = !b.completed && !b.onTrackQueued;
+    return `<tr>
+      <td>Day ${(b.day||0)+1}</td>
+      <td class="mono">${b.time}</td>
+      <td>${(b.teams||[]).join(' + ')}</td>
       <td>${b.type}</td>
       <td class="mono">${b.duration}m</td>
       <td>${status}</td>
@@ -5268,6 +5350,7 @@ function applyRoleGuards() {
     'openGarageModal','saveGarageAllocation','autoAllocateGarages','openStartSessionModal','startActiveSession','endActiveSession','addFeedNote',
     'openQueueModal','addToQueue','removeFromQueue','dequeueSession',
     'calcAndSubmit','resetForm','openAllocModal','saveAllocation','deleteAlloc','autoDistributeTime',
+    'openManualSessionModal','submitManualSession',
     'openNewEventModal','openEditEventModal','saveEvent','activateEvent','deleteEvent',
     'openAddTeamModal','openEditTeam','saveTeam','deleteTeam',
     'saveEventConfig','saveCategoryMultipliers','resetWeights','saveThresholds','importData','clearAllData'
@@ -5440,6 +5523,38 @@ init();
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modal-edit-user')">Cancel</button>
       <button class="btn primary" onclick="saveEditedUserPermissions()">Save Access</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="modal-manual-session">
+  <div class="modal" style="width:760px;max-height:86vh;overflow-y:auto;">
+    <button class="modal-close" onclick="closeModal('modal-manual-session')">✕</button>
+    <div class="modal-title">Create Manual Session</div>
+    <div class="form-grid-4">
+      <div class="field"><label>Team</label><select id="ms-team"></select></div>
+      <div class="field"><label>Event Type</label><select id="ms-event"><option>Track Competition</option><option>Testing (Track)</option><option>Testing (VDA)</option><option>Simulator Race</option><option>Simulator Testing</option></select></div>
+      <div class="field"><label>Session Type</label><select id="ms-sess-type"><option>Single Car</option><option>Multi Car</option><option>Open Pit Lane</option></select></div>
+      <div class="field"><label>Session #</label><input type="number" id="ms-session" value="1" min="1"></div>
+      <div class="field"><label>Date</label><input type="date" id="ms-date"></div>
+      <div class="field"><label>Time</label><input type="time" id="ms-time"></div>
+      <div class="field"><label>Duration (min)</label><input type="number" id="ms-duration" value="30" min="1"></div>
+      <div class="field"><label>Weather</label><select id="ms-weather"><option>Clear</option><option>Cloudy</option><option>Light Wind</option><option>Strong Wind</option><option>Rain</option></select></div>
+      <div class="field"><label>Start Attempts</label><input type="number" id="ms-attempts" value="0" min="0"></div>
+      <div class="field"><label>Laps</label><input type="number" id="ms-laps" value="0" min="0"></div>
+      <div class="field"><label>SW Stoppages</label><input type="number" id="ms-stoppages" value="0" min="0"></div>
+      <div class="field"><label>E-Stops</label><input type="number" id="ms-estops" value="0" min="0"></div>
+      <div class="field"><label>Crashed?</label><select id="ms-crashed"><option value="No">No</option><option value="Yes">Yes</option></select></div>
+      <div class="field"><label>Damage ($)</label><input type="number" id="ms-damage" value="0" min="0"></div>
+      <div class="field"><label>Top Speed (km/h)</label><input type="number" id="ms-speed" value="0" min="0"></div>
+      <div class="field"><label>Planner Replans</label><input type="number" id="ms-replans" value="0" min="0"></div>
+      <div class="field"><label>Instability (0-10)</label><input type="number" id="ms-instab" value="0" min="0" max="10"></div>
+      <div class="field"><label>Sensor (0-1)</label><input type="number" id="ms-sensor" value="0" min="0" max="1" step="0.01"></div>
+      <div class="field"><label>Manual Override (0-10)</label><input type="number" id="ms-manual" value="0" min="0" max="10"></div>
+    </div>
+    <div class="field" style="margin-top:10px;"><label>Notes</label><textarea id="ms-notes"></textarea></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-manual-session')">Cancel</button>
+      <button class="btn primary" onclick="submitManualSession()">Save Manual Session</button>
     </div>
   </div>
 </div>

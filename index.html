@@ -357,7 +357,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
         <span id="topbar-on-track-team">—</span> ON TRACK
       </div>
       <div class="session-badge">
-        <span id="topbar-session-info">SESSION 4 · EVENT 1</span>
+        <span id="topbar-session-info">—</span>
       </div>
       <button class="btn" onclick="exportData()">⤓ Export</button>
     </div>
@@ -370,13 +370,13 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
       <div class="stat-row">
         <div class="stat-card" style="--accent-line:var(--amber)">
           <div class="stat-label">Fleet Avg Risk</div>
-          <div class="stat-val" id="stat-avg">34.2<span>/100</span></div>
-          <div class="stat-delta delta-up">▲ +2.1 this session</div>
+          <div class="stat-val" id="stat-avg">0.0<span>/100</span></div>
+          <div class="stat-delta" style="color:var(--muted)">no sessions yet</div>
         </div>
         <div class="stat-card" style="--accent-line:var(--red)">
           <div class="stat-label">Highest Risk</div>
-          <div class="stat-val" id="stat-highest" style="font-size:20px;padding-top:5px;color:var(--red)">TII · 87.3</div>
-          <div class="stat-delta delta-up"><span class="badge badge-crit">CRITICAL</span></div>
+          <div class="stat-val" id="stat-highest" style="font-size:20px;padding-top:5px;color:var(--muted)">—</div>
+          <div class="stat-delta" style="color:var(--muted)">no sessions yet</div>
         </div>
         <div class="stat-card" style="--accent-line:var(--green)">
           <div class="stat-label">Active Teams</div>
@@ -888,6 +888,22 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
           <button class="btn primary" onclick="openAddTeamModal()">+ Add Team</button>
           <span style="font-size:12px;color:var(--muted);" id="teams-count-label"></span>
         </div>
+        <div class="panel" style="margin-bottom:14px;">
+          <div class="panel-head"><div class="panel-title">Category Multipliers (schedule allocation)</div></div>
+          <div class="panel-body">
+            <div class="form-grid-4">
+              <div class="field"><label>Rookie</label><input type="number" id="cat-mult-rookie" step="0.05" min="0"></div>
+              <div class="field"><label>Challenger</label><input type="number" id="cat-mult-challenger" step="0.05" min="0"></div>
+              <div class="field"><label>Pro</label><input type="number" id="cat-mult-pro" step="0.05" min="0"></div>
+              <div class="field" style="display:flex;align-items:flex-end;">
+                <button class="btn primary" style="width:100%;" onclick="saveCategoryMultipliers()">Save</button>
+              </div>
+            </div>
+            <div style="margin-top:10px;font-size:11px;color:var(--muted);">
+              These values control how much track time each category receives relative to Rookie (1.0).
+            </div>
+          </div>
+        </div>
         <div class="teams-grid" id="teams-management-grid"></div>
       </div>
 
@@ -897,7 +913,6 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
           <div class="panel-head"><div class="panel-title">Current Event Settings</div></div>
           <div class="panel-body">
             <div class="form-grid">
-              <div class="field" style="grid-column:span 2"><label>Event Name</label><input type="text" id="cfg-event-name-field" value="A2RL Season 3 — Event 1"></div>
               <div class="field" style="grid-column:span 2"><label>Event Name</label><input type="text" id="cfg-event-name-field" placeholder="e.g. A2RL Season 3 — Event 2"></div>
               <div class="field"><label>Season Number</label><input type="number" id="cfg-season" value="3" min="1"></div>
               <div class="field"><label>Event Number</label><input type="number" id="cfg-event-num" value="1" min="1"></div>
@@ -1194,7 +1209,7 @@ let trackAlloc  = JSON.parse(localStorage.getItem('a2rl_trackalloc')|| '[]'); //
 let garages     = JSON.parse(localStorage.getItem('a2rl_garages')  || '{}');  // {bayNum: teamName}
 let thresholds  = JSON.parse(localStorage.getItem('a2rl_thresh')   || JSON.stringify({low:30,med:55,high:75,maxDamage:100000}));
 let eventCfg    = JSON.parse(localStorage.getItem('a2rl_event_cfg')|| JSON.stringify({season:3,eventNum:1,org:'A2RL',defaultDur:30}));
-let schedCfg    = JSON.parse(localStorage.getItem('a2rl_sched_cfg')|| JSON.stringify({eventName:'A2RL Season 3 — Event 1',track:'Yas Marina Circuit',open:'08:00',close:'18:00',lunchStart:'12:00',lunchEnd:'13:00',days:2,buffer:15}));
+let schedCfg    = JSON.parse(localStorage.getItem('a2rl_sched_cfg')|| JSON.stringify({eventId:null,eventName:'A2RL Season 3 — Event 1',track:'Yas Marina Circuit',open:'08:00',close:'18:00',days:2,buffer:15,eventStart:null}));
 
 
 // CSS color constants (avoids single-quote issues in template literals)
@@ -1225,6 +1240,16 @@ function rebuildLiveRisks() {
   });
 }
 rebuildLiveRisks();
+
+// ── Modal helpers ──────────────────────────────────────────────────────
+function openModal(id) {
+  const el = document.getElementById(id);
+  if (el) el.style.display = 'flex';
+}
+function closeModal(id) {
+  const el = document.getElementById(id);
+  if (el) el.style.display = 'none';
+}
 
 // ── SAVE ──
 function save() {
@@ -1369,13 +1394,25 @@ function renderLiveTable() {
     score: liveRisks[t.name] || 0,
     ttc: 0, estops: 0
   })).sort((a,b) => a.score - b.score);
+  const hasRealRisk = sessions.some(s => (s.riskScore || 0) > 0 && !s.stub);
 
   let rank = 1;
   document.getElementById('team-tbody').innerHTML = sorted.map(({team,score}) => {
     const c = riskColor(score);
     const tier = riskTier(score);
-    const trend = Math.random() > 0.5 ? '▲' : '▼';
-    const trendCol = trend === '▲' ? 'var(--red)' : 'var(--green)';
+    // Trend is computed from last two real sessions for this team
+    const real = sessions
+      .filter(s => s.team === team.name && (s.riskScore || 0) > 0 && !s.stub)
+      .sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
+    let trend = '—', trendCol = 'var(--muted)', trendVal = '';
+    if (real.length >= 2) {
+      const a = real[real.length-2].riskScore || 0;
+      const b = real[real.length-1].riskScore || 0;
+      const d = +(b - a).toFixed(1);
+      if (d > 0) { trend = '▲'; trendCol = 'var(--red)'; trendVal = ' ' + d.toFixed(1); }
+      else if (d < 0) { trend = '▼'; trendCol = 'var(--green)'; trendVal = ' ' + Math.abs(d).toFixed(1); }
+      else { trend = '—'; trendCol = 'var(--muted)'; trendVal = ' 0.0'; }
+    }
     return `<tr>
       <td style="color:var(--muted);font-size:11px;">${rank++}</td>
       <td><span class="team-dot" style="background:${team.color}"></span><span class="team-name" style="font-weight:600">${team.name}</span></td>
@@ -1387,30 +1424,42 @@ function renderLiveTable() {
       </td>
       <td class="mono" style="color:var(--muted)">—</td>
       <td class="mono" style="color:var(--muted)">—</td>
-      <td style="color:${trendCol};font-size:12px;">${trend} ${(Math.random()*3).toFixed(1)}</td>
+      <td style="color:${trendCol};font-size:12px;">${trend}${trendVal}</td>
       <td><span class="badge ${tier.cls}">${tier.label}</span></td>
     </tr>`;
   }).join('');
 
   // Update stat cards
-  const avg = sorted.reduce((a,b) => a+b.score, 0) / (sorted.length||1);
+  const avg = hasRealRisk ? (sorted.reduce((a,b) => a+b.score, 0) / (sorted.length||1)) : 0;
   document.getElementById('stat-avg').innerHTML = avg.toFixed(1)+'<span>/100</span>';
   document.getElementById('gauge-val').textContent = Math.round(avg);
   const arcEl = document.getElementById('gauge-arc');
   arcEl.setAttribute('stroke-dasharray', `${263*(avg/100)} 377`);
   arcEl.setAttribute('stroke', avg < thresholds.low ? '#00e87a' : avg < thresholds.med ? '#ffaa00' : '#ff3c3c');
 
-  const highest = sorted[sorted.length-1];
-  if (highest) {
+  const highest = hasRealRisk ? sorted[sorted.length-1] : null;
+  if (highest && highest.score > 0) {
     document.getElementById('stat-highest').textContent = `${highest.team.name} · ${highest.score.toFixed(1)}`;
     const tier = riskTier(highest.score);
     document.getElementById('stat-highest').nextElementSibling.innerHTML = `<span class="badge ${tier.cls}">${tier.label}</span>`;
+  } else {
+    document.getElementById('stat-highest').textContent = '—';
+    document.getElementById('stat-highest').nextElementSibling.innerHTML = `<span style="color:var(--muted)">no sessions yet</span>`;
   }
   document.getElementById('stat-active-teams').textContent = activeTeams.length;
 
   const today = new Date().toDateString();
   const todaySessions = sessions.filter(s => new Date(s.timestamp).toDateString() === today);
   document.getElementById('stat-sessions-today').textContent = todaySessions.length;
+}
+
+function updateTopbarSessionInfo() {
+  const el = document.getElementById('topbar-session-info');
+  if (!el) return;
+  const activeEv = (typeof events !== 'undefined' ? (events || []).find(e => e.status === 'active') : null);
+  const evNum = activeEv?.num ?? eventCfg?.eventNum ?? 1;
+  const realSess = sessions.filter(s => !s.stub).length;
+  el.textContent = `EVENT ${evNum} · SESSIONS ${realSess}`;
 }
 
 function renderFeed() {
@@ -1697,9 +1746,31 @@ function renderTeamView() {
 // ═══════════════════════════════════════════════════════════════════════
 
 // Category multipliers: how much track time relative to rookie (1.0)
-const CAT_MULT = { rookie: 1.0, challenger: 0.8, pro: 0.6 };
+let CAT_MULT = JSON.parse(localStorage.getItem('a2rl_cat_mult') || 'null') || { rookie: 1.0, challenger: 0.8, pro: 0.6 };
 const CAT_LABEL = { rookie: 'ROOKIE', challenger: 'CHAL', pro: 'PRO' };
 const CAT_COLOR = { rookie: 'var(--green)', challenger: 'var(--amber)', pro: 'var(--red)' };
+
+function renderCategoryMultipliersUI() {
+  const r = document.getElementById('cat-mult-rookie');
+  const c = document.getElementById('cat-mult-challenger');
+  const p = document.getElementById('cat-mult-pro');
+  if (!r || !c || !p) return;
+  r.value = CAT_MULT.rookie ?? 1.0;
+  c.value = CAT_MULT.challenger ?? 0.8;
+  p.value = CAT_MULT.pro ?? 0.6;
+}
+function saveCategoryMultipliers() {
+  const r = parseFloat(document.getElementById('cat-mult-rookie')?.value);
+  const c = parseFloat(document.getElementById('cat-mult-challenger')?.value);
+  const p = parseFloat(document.getElementById('cat-mult-pro')?.value);
+  CAT_MULT = {
+    rookie: Number.isFinite(r) ? Math.max(0, r) : 1.0,
+    challenger: Number.isFinite(c) ? Math.max(0, c) : 0.8,
+    pro: Number.isFinite(p) ? Math.max(0, p) : 0.6,
+  };
+  localStorage.setItem('a2rl_cat_mult', JSON.stringify(CAT_MULT));
+  alert('Saved category multipliers. New schedules will use these values.');
+}
 
 // Wizard state
 let wiz = {};
@@ -1767,13 +1838,11 @@ function renderWizStep0(body) {
       <div class="form-grid-4">
         <div class="field"><label>Track Opens</label><input type="time" id="wiz-open" value="${wiz.trackOpen}"></div>
         <div class="field"><label>Track Closes</label><input type="time" id="wiz-close" value="${wiz.trackClose}"></div>
-        <div class="field"><label>Lunch Start</label><input type="time" id="wiz-lunch-start" value="${wiz.lunchStart}"></div>
-        <div class="field"><label>Lunch End</label><input type="time" id="wiz-lunch-end" value="${wiz.lunchEnd}"></div>
         <div class="field"><label>Number of Days</label><input type="number" id="wiz-days" value="${wiz.days}" min="1" max="10"></div>
         <div class="field"><label>Buffer Between Sessions (min)</label><input type="number" id="wiz-buffer" value="${wiz.buffer}" min="0" max="60"></div>
       </div>
       <div style="margin-top:14px;padding:12px;background:rgba(0,212,255,0.04);border:1px solid rgba(0,212,255,0.12);border-radius:6px;font-size:12px;color:var(--muted);">
-        <span style="color:var(--accent);">ⓘ</span> Track time = close minus open, minus lunch break. The algorithm will fit sessions with buffer gaps automatically.
+        <span style="color:var(--accent);">ⓘ</span> Track time = close minus open. Add breaks (e.g. lunch) manually as slots after generating.
       </div>
     </div></div>`;
 }
@@ -1781,10 +1850,10 @@ function renderWizStep0(body) {
 function saveWizStep0() {
   wiz.trackOpen = document.getElementById('wiz-open').value;
   wiz.trackClose = document.getElementById('wiz-close').value;
-  wiz.lunchStart = document.getElementById('wiz-lunch-start').value;
-  wiz.lunchEnd = document.getElementById('wiz-lunch-end').value;
-  wiz.days = parseInt(document.getElementById('wiz-days').value) || 1;
-  wiz.buffer = parseInt(document.getElementById('wiz-buffer').value) || 15;
+  const daysV = parseInt(document.getElementById('wiz-days').value);
+  wiz.days = Number.isFinite(daysV) && daysV > 0 ? daysV : 1;
+  const bufV = parseInt(document.getElementById('wiz-buffer').value);
+  wiz.buffer = Number.isFinite(bufV) && bufV >= 0 ? bufV : 15;
 }
 
 function renderWizStep1(body) {
@@ -1916,7 +1985,7 @@ function saveWizStep2() {
 function calcAllocation() {
   // Returns array of {name, category, sesstype, isMulti, allocMins, sessionsPerDay}
   const toM = t => { const [h,m]=t.split(':').map(Number); return h*60+m; };
-  const dayMins = (toM(wiz.trackClose) - toM(wiz.trackOpen)) - (toM(wiz.lunchEnd) - toM(wiz.lunchStart));
+  const dayMins = (toM(wiz.trackClose) - toM(wiz.trackOpen));
   const rookieBase = wiz.sessionsPerDay * wiz.sessionDur;
 
   const multiNames2 = new Set((wiz.multiGroups||[]).flat());
@@ -1937,7 +2006,7 @@ function calcAllocation() {
 function renderWizStep3(body) {
   const alloc = calcAllocation();
   const toM = t => { const [h,m]=t.split(':').map(Number); return h*60+m; };
-  const dayMins = (toM(wiz.trackClose) - toM(wiz.trackOpen)) - (toM(wiz.lunchEnd) - toM(wiz.lunchStart));
+  const dayMins = (toM(wiz.trackClose) - toM(wiz.trackOpen));
   const totalSchedMins = alloc.reduce((a,t)=>a+t.allocMins,0) * wiz.days;
   const totalAvail = dayMins * wiz.days;
 
@@ -1996,8 +2065,6 @@ function generateSchedule() {
   schedule = [];
   const toM = t => { const [h,m]=t.split(':').map(Number); return h*60+m; };
   const fromM = m => { const h=Math.floor(m/60); const min=m%60; return String(h).padStart(2,'0')+':'+String(min).padStart(2,'0'); };
-  const lunchS = toM(wiz.lunchStart);
-  const lunchE = toM(wiz.lunchEnd);
   const trackO = toM(wiz.trackOpen);
   const trackC = toM(wiz.trackClose);
   const dur = wiz.sessionDur;
@@ -2010,20 +2077,12 @@ function generateSchedule() {
   const singleAlloc = alloc.filter(t => !multiNames.has(t.name));
 
   for (let day = 0; day < wiz.days; day++) {
-    // Windows: morning (open→lunch) and afternoon (lunch→close-reserve)
+    // Window: full day (breaks like lunch are added manually as slots)
     const reserveMins = (wiz.reserveCount||1) * dur;
     const afternoonEnd = trackC - reserveMins;
     const windows = [
-      { start: trackO, end: lunchS },
-      { start: lunchE, end: afternoonEnd > lunchE ? afternoonEnd : trackC },
+      { start: trackO, end: afternoonEnd > trackO ? afternoonEnd : trackC },
     ].filter(w => w.end > w.start);
-
-    // Add lunch break block
-    schedule.push({
-      id: 'lunch-'+day+'-'+Date.now(),
-      day, time: wiz.lunchStart, type: 'break',
-      teams: [], duration: lunchE - lunchS, label: 'Lunch Break', generated: true,
-    });
 
     // Add reserve block at end
     if (reserveMins > 0 && afternoonEnd < trackC) {
@@ -2062,7 +2121,10 @@ function generateSchedule() {
       if (wi >= windows.length) return;
       schedule.push({
         id: Date.now().toString(36)+Math.random().toString(36).slice(2,6),
-        day, time: fromM(cursor), type: slot.type,
+        day,
+        eventId: schedCfg.eventId || null,
+        eventDay: day,
+        time: fromM(cursor), type: slot.type,
         teams: slot.teams, duration: slot.dur,
         label: slot.teams.join(' + '), generated: true,
       });
@@ -2073,8 +2135,6 @@ function generateSchedule() {
   // Sync sched config
   schedCfg.open = wiz.trackOpen;
   schedCfg.close = wiz.trackClose;
-  schedCfg.lunchStart = wiz.lunchStart;
-  schedCfg.lunchEnd = wiz.lunchEnd;
   schedCfg.days = wiz.days;
   schedCfg.buffer = wiz.buffer;
 
@@ -2127,7 +2187,10 @@ function saveSlot() {
 
   schedule.push({
     id: Date.now().toString(),
-    day: currentSchedDay, time, type, teams: selectedTeams, duration: dur,
+    day: currentSchedDay,
+    eventId: schedCfg.eventId || null,
+    eventDay: currentSchedDay,
+    time, type, teams: selectedTeams, duration: dur,
     label: label || selectedTeams.join(' + '), generated: false,
   });
   save();
@@ -2161,8 +2224,6 @@ function renderScheduleView() {
   const fM  = m=>String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
   const openM  = toM(schedCfg.open||'08:00');
   const closeM = toM(schedCfg.close||'18:00');
-  const lSM    = toM(schedCfg.lunchStart||'12:00');
-  const lEM    = toM(schedCfg.lunchEnd||'13:00');
   const PX=2, totalH=(closeM-openM)*PX;
 
   const typeInfo={
@@ -2188,9 +2249,8 @@ function renderScheduleView() {
   // Session info column
   let inH='<div style="width:82px;position:relative;height:'+totalH+'px;flex-shrink:0;border-right:2px solid rgba(255,255,255,0.08);">';
   for(let t=openM;t<=closeM;t+=30) inH+='<div style="position:absolute;top:'+((t-openM)*PX)+'px;left:0;right:0;border-top:1px solid rgba(255,255,255,0.025);pointer-events:none;"></div>';
-  inH+='<div style="position:absolute;top:'+((lSM-openM)*PX)+'px;left:0;right:0;height:'+((lEM-lSM)*PX)+'px;background:rgba(255,170,0,0.06);display:flex;align-items:center;padding:0 5px;pointer-events:none;"><span style="font-size:8px;color:rgba(255,170,0,0.6);">LUNCH</span></div>';
   dayBlocks.forEach(b=>{
-    if(b.type==='break'||b.type==='reserve') return;
+    if(b.type==='reserve') return;
     const bS=toM(b.time), top=(bS-openM)*PX, bH=Math.max(b.duration*PX,24);
     inH+='<div style="position:absolute;top:'+top+'px;left:0;right:0;height:'+bH+'px;padding:2px 5px;border-left:2px solid rgba(255,255,255,0.06);display:flex;flex-direction:column;justify-content:center;">'
       +'<span style="font-family:JBMono;font-size:9px;color:var(--text);font-weight:600;white-space:nowrap;">'+b.time+'</span>'
@@ -2202,7 +2262,6 @@ function renderScheduleView() {
   // Blocks canvas
   let bH='<div style="flex:1;position:relative;height:'+totalH+'px;">';
   for(let t=openM;t<=closeM;t+=30) bH+='<div style="position:absolute;top:'+((t-openM)*PX)+'px;left:0;right:0;border-top:1px solid rgba(255,255,255,'+(t%60===0?'0.06':'0.02')+');pointer-events:none;z-index:0;"></div>';
-  bH+='<div style="position:absolute;top:'+((lSM-openM)*PX)+'px;left:0;right:0;height:'+((lEM-lSM)*PX)+'px;background:rgba(255,170,0,0.03);border-top:1px solid rgba(255,170,0,0.12);border-bottom:1px solid rgba(255,170,0,0.12);pointer-events:none;z-index:0;"></div>';
 
   const frag = document.createDocumentFragment();
   dayBlocks.forEach(block=>{
@@ -2358,7 +2417,6 @@ function exportScheduleToSessions() {
   if (!blocks.length) { alert('No session blocks to push. Build a schedule first.'); return; }
 
   let added = 0;
-  const today = new Date().toISOString().split('T')[0];
 
   blocks.forEach(block => {
     block.teams.forEach(teamName => {
@@ -2368,14 +2426,22 @@ function exportScheduleToSessions() {
       );
       if (alreadyExists) return;
 
-      const sessDate = new Date();
-      sessDate.setDate(sessDate.getDate() + block.day);
+      let sessDate;
+      if (schedCfg.eventStart) {
+        sessDate = new Date(schedCfg.eventStart + 'T00:00:00');
+        sessDate.setDate(sessDate.getDate() + (block.day || 0));
+      } else {
+        sessDate = new Date();
+        sessDate.setDate(sessDate.getDate() + (block.day || 0));
+      }
       const dateStr = sessDate.toISOString().split('T')[0];
 
       // Create a pre-filled session stub (risk = 0 until manually filled)
       sessions.push({
         id: String(Date.now())+String(Math.random()).slice(2,8),
         schedBlockId: block.id,
+        eventId: block.eventId || schedCfg.eventId || null,
+        eventName: schedCfg.eventName || eventCfg.eventName || null,
         team: teamName,
         eventType: 'Testing (Track)',
         sessType: block.type === 'multi' ? 'Multi Car' : block.type === 'open' ? 'Open Pit Lane' : 'Single Car',
@@ -2737,6 +2803,7 @@ function autoDistributeTime() {
 function renderSettings() {
   renderWeightsUI();
   renderTeamsManagement();
+  renderCategoryMultipliersUI();
   document.getElementById('data-count').textContent = sessions.length;
 }
 
@@ -2883,7 +2950,7 @@ function saveEventConfig() {
   eventCfg.org = document.getElementById('cfg-org').value;
   eventCfg.defaultDur = parseInt(document.getElementById('cfg-sess-dur').value);
   save();
-  const evLabel = eventCfg.eventName||('Event '+eventCfg.eventNum); document.getElementById('topbar-session-info').textContent = evLabel.length>32?evLabel.slice(0,30)+'…':evLabel;
+  updateTopbarSessionInfo();
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -2967,54 +3034,91 @@ function mkChart(id, cfg) {
 }
 
 function initLiveCharts() {
+  // Live dashboard charts should be empty until real sessions exist
+  const real = sessions.filter(s => (s.riskScore || 0) > 0 && !s.stub)
+    .sort((a,b)=>new Date(a.timestamp)-new Date(b.timestamp));
+  const active = teams.filter(t=>t.active);
+
+  // Risk history: per-team series from real sessions
+  const labels = real.map((s,i)=>'#'+(i+1));
+  const byTeam = {};
+  active.forEach(t => { byTeam[t.name] = []; });
+  real.forEach(s => {
+    active.forEach(t => {
+      const prev = byTeam[t.name].length ? byTeam[t.name][byTeam[t.name].length-1] : null;
+      if (s.team === t.name) byTeam[t.name].push(s.riskScore);
+      else byTeam[t.name].push(prev);
+    });
+  });
   mkChart('chart-history', {
     type:'line',
     data:{
-      labels:['Sess 1','Sess 2','Sess 3','Sess 4'],
-      datasets: teams.filter(t=>t.active).slice(0,4).map(t => ({
-        label:t.name, data:[Math.random()*40+10,Math.random()*40+10,Math.random()*40+10,liveRisks[t.name]||20],
-        borderColor:t.color, backgroundColor:t.color+'15', tension:0.4, fill:true, pointRadius:4
+      labels,
+      datasets: active.slice(0,6).map(t => ({
+        label:t.name,
+        data: byTeam[t.name],
+        spanGaps:true,
+        borderColor:t.color,
+        backgroundColor:t.color+'12',
+        tension:0.35,
+        fill:false,
+        pointRadius:0
       }))
     },
-    options:{...chartCfg, responsive:true, maintainAspectRatio:false}
+    options:{...chartCfg, responsive:true, maintainAspectRatio:false, plugins:{legend:{display:true}}}
   });
+
+  // DQI: aggregate totals from real sessions (fleet)
+  const totals = real.reduce((a,s)=>({
+    estops: a.estops + (s.estops||0),
+    instability: a.instability + (s.instability||0),
+    stoppages: a.stoppages + (s.stoppages||0),
+    replans: a.replans + (s.replans||0),
+    damage: a.damage + (s.damage||0),
+  }), {estops:0,instability:0,stoppages:0,replans:0,damage:0});
   mkChart('chart-dqi', {
     type:'bar',
     data:{
       labels:['E-Stops','Instab','SW Stops','Replans','Damage'],
-      datasets: teams.filter(t=>t.active).slice(0,4).map(t => ({
-        label:t.name, data:[Math.random()*5,Math.random()*7,Math.random()*3,Math.random()*8,Math.random()*3],
-        backgroundColor:t.color+'bb', borderRadius:3
-      }))
+      datasets:[{
+        label:'Fleet totals (real sessions)',
+        data:[totals.estops, totals.instability, totals.stoppages, totals.replans, totals.damage],
+        backgroundColor:'rgba(0,212,255,0.35)',
+        borderColor:'rgba(0,212,255,0.9)',
+        borderWidth:1,
+        borderRadius:3
+      }]
     },
-    options:{...chartCfg, responsive:true, maintainAspectRatio:false}
+    options:{...chartCfg, responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}}
   });
 }
 
 function renderTeamCharts(stats, activeTeams) {
   setTimeout(() => {
+    const real = sessions.filter(s => (s.riskScore || 0) > 0 && !s.stub);
+    const types = ['Track Competition','Testing (Track)','Testing (VDA)','Simulator Race','Simulator Testing'];
+    const byType = types.map(t => {
+      const ts = real.filter(s => (s.eventType||'') === t);
+      const avg = ts.length ? ts.reduce((a,s)=>a+(s.riskScore||0),0)/ts.length : null;
+      const peak = ts.length ? Math.max(...ts.map(s=>s.riskScore||0)) : null;
+      return { avg, peak };
+    });
     mkChart('chart-bytype', {
       type:'bar',
       data:{
-        labels:['Track Comp','Testing (Track)','Testing (VDA)','Sim Race','Sim Testing'],
+        labels: types.map(t => t.replace('Simulator ','Sim ')),
         datasets:[
-          {label:'Avg Risk',data:[42,31,24,19,15],backgroundColor:'rgba(0,212,255,0.6)',borderRadius:4},
-          {label:'Peak Risk',data:[87,72,58,41,32],backgroundColor:'rgba(255,60,60,0.4)',borderRadius:4},
+          {label:'Avg Risk',data:byType.map(x=>x.avg),backgroundColor:'rgba(0,212,255,0.45)',borderRadius:4},
+          {label:'Peak Risk',data:byType.map(x=>x.peak),backgroundColor:'rgba(255,60,60,0.25)',borderRadius:4},
         ]
       },
       options:{...chartCfg, responsive:true, maintainAspectRatio:false}
     });
+    // Keep season chart empty until multiple events are logged (no demo data)
     mkChart('chart-season', {
       type:'line',
-      data:{
-        labels:['E1','E2','E3','E4'],
-        datasets: activeTeams.slice(0,6).map(t => ({
-          label:t.name,
-          data: [Math.random()*40+10,Math.random()*40+10,Math.random()*40+10,stats[t.name]?.avg||20],
-          borderColor:t.color, tension:0.4, pointRadius:3, fill:false
-        }))
-      },
-      options:{...chartCfg, responsive:true, maintainAspectRatio:false}
+      data:{ labels: [], datasets: [] },
+      options:{...chartCfg, responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}}
     });
   }, 80);
 }
@@ -3587,6 +3691,7 @@ function importData() {
 function clearAllData() {
   sessions=[]; save(); renderHistory();
   const el = document.getElementById('data-count'); if(el) el.textContent='0';
+  updateTopbarSessionInfo();
 }
 function exportInsurance() {
   alert('Insurance PDF export — in production this generates a full actuarial report from session data and ROS archives.');
@@ -3715,8 +3820,9 @@ function activateEvent(i) {
   schedCfg.eventName=ev.name; schedCfg.track=ev.track;
   schedCfg.open=ev.trackOpen||'08:00'; schedCfg.close=ev.trackClose||'18:00';
   schedCfg.days=ev.days||2;
-  const label=ev.name||'Event '+ev.num;
-  document.getElementById('topbar-session-info').textContent=label.length>32?label.slice(0,30)+'…':label;
+  schedCfg.eventId=ev.id;
+  schedCfg.eventStart=ev.startDate||null;
+  updateTopbarSessionInfo();
   save(); saveEvents(); renderEventsView();
 }
 function deleteEvent(i) {
@@ -3924,8 +4030,7 @@ function onDragEnd(e){
 function _resolveOverlap(movedBlock, direction, openM, closeM) {
   const toM=t=>{const[h,m]=t.split(':').map(Number);return h*60+m;};
   const fM=m=>String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
-  const lunchS=toM(schedCfg.lunchStart||'12:00'), lunchE=toM(schedCfg.lunchEnd||'13:00');
-  const others=schedule.filter(b=>b.day===currentSchedDay&&b.id!==movedBlock.id&&b.type!=='break'&&b.type!=='reserve')
+  const others=schedule.filter(b=>b.day===currentSchedDay&&b.id!==movedBlock.id&&b.type!=='reserve')
     .sort((a,b)=>toM(a.time)-toM(b.time));
   const mS=toM(movedBlock.time), mE=mS+movedBlock.duration;
 
@@ -3933,8 +4038,6 @@ function _resolveOverlap(movedBlock, direction, openM, closeM) {
     let cursor=mE;
     others.filter(b=>toM(b.time)>=mS).forEach(b=>{
       if(toM(b.time)<cursor) b.time=fM(cursor);
-      const bS=toM(b.time), bE=bS+b.duration;
-      if(bS<lunchE&&bE>lunchS) b.time=fM(lunchE); // skip over lunch
       cursor=toM(b.time)+b.duration;
       const el=document.getElementById('blk-'+b.id);
       if(el) el.style.top=((toM(b.time)-openM)*PX_PER_MIN)+'px';
@@ -3950,18 +4053,6 @@ function _resolveOverlap(movedBlock, direction, openM, closeM) {
         if(el) el.style.top=((ns-openM)*PX_PER_MIN)+'px';
       }
     });
-  }
-  // Move lunch if moved block overlaps it
-  const bS=toM(movedBlock.time), bE=bS+movedBlock.duration;
-  if(bS<lunchE&&bE>lunchS){
-    const ld=lunchE-lunchS;
-    const canBefore=bS-ld>=openM, canAfter=bE+ld<=closeM;
-    const lostBefore=canBefore?others.filter(b=>{const s2=toM(b.time),e2=s2+b.duration;return s2<bS&&e2>bS-ld;}).reduce((t,b)=>t+Math.min(toM(b.time)+b.duration,bS)-Math.max(toM(b.time),bS-ld),0):Infinity;
-    const lostAfter=canAfter?others.filter(b=>{const s2=toM(b.time),e2=s2+b.duration;return s2<bE+ld&&e2>bE;}).reduce((t,b)=>t+Math.min(toM(b.time)+b.duration,bE+ld)-Math.max(toM(b.time),bE),0):Infinity;
-    const newLS=lostBefore<=lostAfter&&canBefore?bS-ld:canAfter?bE:Math.max(openM,closeM-ld-30);
-    schedCfg.lunchStart=fM(newLS); schedCfg.lunchEnd=fM(newLS+ld);
-    const lb=schedule.find(b=>b.day===currentSchedDay&&b.type==='break'&&(b.label||'').toLowerCase().includes('lunch'));
-    if(lb){lb.time=fM(newLS);lb.duration=ld;}
   }
 }
 
@@ -3989,12 +4080,21 @@ clearAllData = function(){
   _origClearAll(); rebuildLiveRisks(); renderLiveTable(); renderFeed(); initLiveCharts();
 };
 
-// ── showView hooks ────────────────────────────────────────────────────
+// ── showView hooks (final) ─────────────────────────────────────────────
 const _sv_base = showView;
 showView = function(id){
   _sv_base(id);
+  if(id==='events') renderEventsView();
   if(id==='live'||id==='tracktime') renderLiveAllocChart();
 };
+
+function init(){
+  rebuildLiveRisks();
+  updateTopbarSessionInfo();
+  renderLiveTable();
+  renderFeed();
+  initLiveCharts();
+}
 
 init();
 </script>
@@ -4121,65 +4221,4 @@ init();
     </div>
   </div>
 </div>
-
-
-<!-- EDIT SLOT MODAL -->
-<div class="modal-overlay" id="modal-edit-slot">
-  <div class="modal" style="width:500px;">
-    <button class="modal-close" onclick="closeModal('modal-edit-slot')">✕</button>
-    <div class="modal-title">Edit Schedule Slot</div>
-    <input type="hidden" id="edit-slot-id">
-    <div class="form-grid">
-      <div class="field"><label>Time</label><input type="time" id="edit-slot-time"></div>
-      <div class="field"><label>Duration (min)</label><input type="number" id="edit-slot-dur" min="5"></div>
-      <div class="field"><label>Session Type</label>
-        <select id="edit-slot-type"><option value="single">Single Car</option><option value="multi">Multi Car</option><option value="open">Open Pit Lane</option><option value="break">Break</option><option value="reserve">Reserve</option></select>
-      </div>
-      <div class="field"><label>Label</label><input type="text" id="edit-slot-label"></div>
-    </div>
-    <div class="field" style="margin-top:12px;"><label>Teams</label>
-      <div id="edit-slot-team-checks" style="display:grid;grid-template-columns:1fr 1fr;gap:4px;max-height:160px;overflow-y:auto;padding:8px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:5px;margin-top:4px;"></div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn danger" onclick="deleteSlotFromModal()">Delete</button>
-      <button class="btn" onclick="closeModal('modal-edit-slot')">Cancel</button>
-      <button class="btn primary" onclick="saveEditSlot()">Save</button>
-    </div>
-  </div>
-</div>
-
-<!-- EDIT SESSION MODAL -->
-<div class="modal-overlay" id="modal-edit-session">
-  <div class="modal" style="width:640px;max-height:85vh;overflow-y:auto;">
-    <button class="modal-close" onclick="closeModal('modal-edit-session')">✕</button>
-    <div class="modal-title">Edit Session</div>
-    <input type="hidden" id="edit-sess-id">
-    <div class="form-grid-4">
-      <div class="field"><label>Team</label><select id="es-team"></select></div>
-      <div class="field"><label>Event Type</label><select id="es-event-type"><option>Track Competition</option><option>Testing (Track)</option><option>Testing (VDA)</option><option>Simulator Race</option><option>Simulator Testing</option></select></div>
-      <div class="field"><label>Session Type</label><select id="es-sess-type"><option>Single Car</option><option>Multi Car</option><option>Open Pit Lane</option></select></div>
-      <div class="field"><label>Session #</label><input type="number" id="es-sess-num" min="1"></div>
-      <div class="field"><label>Date</label><input type="date" id="es-date"></div>
-      <div class="field"><label>Time</label><input type="time" id="es-time"></div>
-      <div class="field"><label>Duration (min)</label><input type="number" id="es-duration" min="1"></div>
-      <div class="field"><label>Laps</label><input type="number" id="es-laps" min="0"></div>
-      <div class="field"><label>Top Speed</label><input type="number" id="es-speed" min="0"></div>
-      <div class="field"><label>E-Stops</label><input type="number" id="es-estops" min="0"></div>
-      <div class="field"><label>Crashed?</label><select id="es-crashed"><option>No</option><option>Yes</option></select></div>
-      <div class="field"><label>Damage ($)</label><input type="number" id="es-damage" min="0"></div>
-      <div class="field"><label>Instability (0-10)</label><input type="number" id="es-instab" min="0" max="10" step="0.1"></div>
-      <div class="field"><label>SW Stoppages</label><input type="number" id="es-stoppages" min="0"></div>
-      <div class="field"><label>Start Attempts</label><input type="number" id="es-attempts" min="0"></div>
-      <div class="field"><label>Sensor (0-1)</label><input type="number" id="es-sensor" min="0" max="1" step="0.01"></div>
-      <div class="field"><label>Manual Override</label><input type="number" id="es-manual" min="0" max="10"></div>
-    </div>
-    <div class="field" style="margin-top:12px;"><label>Notes</label><textarea id="es-notes" style="min-height:60px;resize:vertical;"></textarea></div>
-    <div style="margin-top:8px;padding:8px 10px;background:rgba(0,212,255,0.04);border:1px solid rgba(0,212,255,0.12);border-radius:5px;font-size:11px;color:var(--muted);">Risk score will be <b style="color:var(--accent);">recalculated</b> on save.</div>
-    <div class="modal-footer">
-      <button class="btn" onclick="closeModal('modal-edit-session')">Cancel</button>
-      <button class="btn primary" onclick="saveEditSession()">Recalculate & Save</button>
-    </div>
-  </div>
-</div>
-
 </html>

@@ -1321,6 +1321,8 @@ function refreshAuthUI() {
   if (badge) badge.textContent = currentUser ? `${currentUser.email} · ${currentUser.role.toUpperCase()}` : 'Guest';
   const overlay = document.getElementById('login-overlay');
   if (overlay) overlay.style.display = currentUser ? 'none' : 'flex';
+  const usersView = document.getElementById('view-users');
+  if (usersView) usersView.style.display = isAdmin() ? '' : 'none';
   document.querySelectorAll('.nav-item[onclick*="showView"]').forEach(n => {
     const m = (n.getAttribute('onclick') || '').match(/showView\('([^']+)'\)/);
     if (!m) return;

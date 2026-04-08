@@ -3451,6 +3451,7 @@ function renderSettings() {
   renderCategoryMultipliersUI();
   renderUsersManagement();
   document.getElementById('data-count').textContent = sessions.length;
+  applySettingsReadOnly();
 }
 
 function switchSettingsTab(tab) {
@@ -3458,6 +3459,22 @@ function switchSettingsTab(tab) {
   document.querySelectorAll('.settings-panel').forEach(p => p.classList.remove('active'));
   document.querySelector(`.settings-tab[onclick*="${tab}"]`).classList.add('active');
   document.getElementById(`stab-${tab}`).classList.add('active');
+  applySettingsReadOnly();
+}
+
+function applySettingsReadOnly() {
+  const root = document.getElementById('view-settings');
+  if (!root) return;
+  const ro = !isAdmin();
+  root.querySelectorAll('input, select, textarea, button').forEach(el => {
+    // Keep tab navigation usable for viewers
+    if (el.classList.contains('settings-tab')) return;
+    el.disabled = ro;
+  });
+  root.querySelectorAll('.settings-tab').forEach(tab => {
+    tab.style.pointerEvents = 'auto';
+    tab.style.opacity = '1';
+  });
 }
 
 function renderUsersManagement() {

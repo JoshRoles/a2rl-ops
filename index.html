@@ -604,6 +604,35 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
               <div id="garage-published-today" style="display:flex;flex-direction:column;gap:6px;"></div>
             </div>
           </div>
+          <div class="panel" style="margin-top:14px;">
+            <div class="panel-head"><div class="panel-title">Session Capture (Garage)</div></div>
+            <div class="panel-body">
+              <div style="font-size:11px;color:var(--muted);margin-bottom:8px;" id="garage-capture-hint">Capture risk data for current scheduled session.</div>
+              <div class="form-grid-4">
+                <div class="field"><label>Team</label><select id="g-team"></select></div>
+                <div class="field"><label>Session Type</label><select id="g-sess-type"><option>Single Car</option><option>Multi Car</option><option>Open Pit Lane</option></select></div>
+                <div class="field"><label>Session #</label><input type="number" id="g-session" value="1" min="1"></div>
+                <div class="field"><label>Duration (min)</label><input type="number" id="g-duration" value="30" min="1"></div>
+                <div class="field"><label>Start Attempts</label><input type="number" id="g-attempts" value="0" min="0"></div>
+                <div class="field"><label>Laps</label><input type="number" id="g-laps" value="0" min="0"></div>
+                <div class="field"><label>SW Stoppages</label><input type="number" id="g-stoppages" value="0" min="0"></div>
+                <div class="field"><label>E-Stops</label><input type="number" id="g-estops" value="0" min="0"></div>
+                <div class="field"><label>Crashed?</label><select id="g-crashed"><option value="No">No</option><option value="Yes">Yes</option></select></div>
+                <div class="field"><label>Damage ($)</label><input type="number" id="g-damage" value="0" min="0"></div>
+                <div class="field"><label>Top Speed (km/h)</label><input type="number" id="g-speed" value="0" min="0"></div>
+                <div class="field"><label>Planner Replans</label><input type="number" id="g-replans" value="0" min="0"></div>
+                <div class="field"><label>Instability (0-10)</label><input type="number" id="g-instab" value="0" min="0" max="10"></div>
+                <div class="field"><label>Sensor (0-1)</label><input type="number" id="g-sensor" value="0" min="0" max="1" step="0.01"></div>
+                <div class="field"><label>Manual Override (0-10)</label><input type="number" id="g-manual" value="0" min="0" max="10"></div>
+                <div class="field"><label>Weather</label><select id="g-weather"><option>Clear</option><option>Cloudy</option><option>Light Wind</option><option>Strong Wind</option><option>Rain</option></select></div>
+              </div>
+              <div class="field" style="margin-top:8px;"><label>Notes</label><textarea id="g-notes" placeholder="Capture notes from the run..."></textarea></div>
+              <div style="margin-top:10px;display:flex;gap:8px;">
+                <button class="btn primary" onclick="calcAndSubmit('g')">Submit Capture</button>
+                <button class="btn" onclick="resetGarageCapture()">Reset</button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1913,7 +1942,7 @@ function renderFeed() {
 // SESSION FORM & SUBMIT
 // ═══════════════════════════════════════════════════════════════════════
 function populateTeamDropdowns() {
-  const selects = ['f-team','ot-team-select','sched-build-team','alloc-team-select','queue-team-select'];
+  const selects = ['f-team','g-team','ot-team-select','sched-build-team','alloc-team-select','queue-team-select'];
   selects.forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
@@ -1943,34 +1972,35 @@ function setDefaultFormDate() {
   if (timeEl) timeEl.value = now.toTimeString().slice(0,5);
 }
 
-function calcAndSubmit() {
-  const team = document.getElementById('f-team').value;
-  const eventType = document.getElementById('f-event').value;
-  const sessType = document.getElementById('f-sess-type').value;
-  const sessNum = parseInt(document.getElementById('f-session').value) || 1;
-  const dateVal = document.getElementById('f-date').value;
-  const timeVal = document.getElementById('f-time').value;
-  const duration = parseInt(document.getElementById('f-duration').value) || 30;
-  const weather = document.getElementById('f-weather').value;
-  const notes = document.getElementById('f-notes').value;
+function calcAndSubmit(prefix='f') {
+  const from = key => document.getElementById(`${prefix}-${key}`);
+  const team = from('team')?.value || '';
+  const eventType = prefix === 'g' ? 'Testing (Track)' : (from('event')?.value || 'Testing (Track)');
+  const sessType = from('sess-type')?.value || 'Single Car';
+  const sessNum = parseInt(from('session')?.value) || 1;
+  const dateVal = prefix === 'g' ? (document.getElementById('f-date')?.value || new Date().toISOString().split('T')[0]) : (from('date')?.value || new Date().toISOString().split('T')[0]);
+  const timeVal = prefix === 'g' ? (document.getElementById('f-time')?.value || new Date().toTimeString().slice(0,5)) : (from('time')?.value || new Date().toTimeString().slice(0,5));
+  const duration = parseInt(from('duration')?.value) || 30;
+  const weather = from('weather')?.value || 'Clear';
+  const notes = from('notes')?.value || '';
 
   const s = {
     team, eventType, sessType, sessNum, duration, weather, notes,
     timestamp: new Date(`${dateVal}T${timeVal}`).toISOString(),
-    startAttempts: parseInt(document.getElementById('f-attempts').value) || 0,
-    laps:          parseInt(document.getElementById('f-laps').value) || 0,
-    stoppages:     parseInt(document.getElementById('f-stoppages').value) || 0,
-    crashed:       document.getElementById('f-crashed').value,
-    damage:        parseFloat(document.getElementById('f-damage').value) || 0,
-    speed:         parseFloat(document.getElementById('f-speed').value) || 0,
-    laptime:       parseFloat(document.getElementById('f-laptime').value) || 0,
-    replans:       parseInt(document.getElementById('f-replans').value) || 0,
-    multicar:      document.getElementById('f-multicar').value,
-    overtaking:    document.getElementById('f-overtaking').value,
-    estops:        parseInt(document.getElementById('f-estops').value) || 0,
-    instability:   parseFloat(document.getElementById('f-instab').value) || 0,
-    sensor:        parseFloat(document.getElementById('f-sensor').value) || 0,
-    manualOverride:parseFloat(document.getElementById('f-manual').value) || 0,
+    startAttempts: parseInt(from('attempts')?.value) || 0,
+    laps:          parseInt(from('laps')?.value) || 0,
+    stoppages:     parseInt(from('stoppages')?.value) || 0,
+    crashed:       from('crashed')?.value || 'No',
+    damage:        parseFloat(from('damage')?.value) || 0,
+    speed:         parseFloat(from('speed')?.value) || 0,
+    laptime:       parseFloat(from('laptime')?.value) || 0,
+    replans:       parseInt(from('replans')?.value) || 0,
+    multicar:      from('multicar')?.value || 'No',
+    overtaking:    from('overtaking')?.value || 'No',
+    estops:        parseInt(from('estops')?.value) || 0,
+    instability:   parseFloat(from('instab')?.value) || 0,
+    sensor:        parseFloat(from('sensor')?.value) || 0,
+    manualOverride:parseFloat(from('manual')?.value) || 0,
     ttc: 0, ttcMin: 0, gpsDeviation: 0, lateralAccel: 0,
   };
 
@@ -2020,6 +2050,19 @@ function calcAndSubmit() {
   // Update live
   renderLiveTable();
   addFeedEvent(team, `Session logged — Risk ${score} (${tier.label})`, col);
+  renderGarage();
+}
+
+function resetGarageCapture() {
+  ['session','duration','attempts','laps','stoppages','estops','damage','speed','replans','instab','sensor','manual'].forEach(k => {
+    const el = document.getElementById('g-'+k);
+    if (!el) return;
+    el.value = (k === 'session') ? 1 : (k === 'duration' ? 30 : 0);
+  });
+  const st = document.getElementById('g-sess-type'); if (st) st.value = 'Single Car';
+  const cr = document.getElementById('g-crashed'); if (cr) cr.value = 'No';
+  const wx = document.getElementById('g-weather'); if (wx) wx.value = 'Clear';
+  const nt = document.getElementById('g-notes'); if (nt) nt.value = '';
 }
 
 function resetForm() {
@@ -3149,9 +3192,28 @@ function renderGarage() {
     }
   }
   grid.innerHTML = html;
+  syncGarageCaptureFromLive();
   renderSessionQueue();
   renderPublishedTodayPlan();
   renderActivityLog();
+}
+
+function syncGarageCaptureFromLive() {
+  const hint = document.getElementById('garage-capture-hint');
+  const liveBlk = scheduleLive?.current || null;
+  const teamSel = document.getElementById('g-team');
+  if (!teamSel) return;
+  if (liveBlk && (liveBlk.teams||[]).length) {
+    const lead = (liveBlk.teams||[])[0];
+    teamSel.value = lead;
+    const st = document.getElementById('g-sess-type');
+    if (st) st.value = liveBlk.type === 'multi' ? 'Multi Car' : (liveBlk.type === 'open' ? 'Open Pit Lane' : 'Single Car');
+    const dur = document.getElementById('g-duration');
+    if (dur) dur.value = liveBlk.duration || 30;
+    if (hint) hint.textContent = `Live scheduled block detected: ${liveBlk.time} · ${(liveBlk.teams||[]).join(' + ')}`;
+  } else if (hint) {
+    hint.textContent = 'No live scheduled block detected. You can still submit manual capture.';
+  }
 }
 
 function getTodayScheduleDayIndex() {

@@ -1594,6 +1594,18 @@ function syncAutoOnTrack() {
     ring.style.strokeDashoffset = dashOffset;
     ring.style.stroke = pct > 0.5 ? '#00d4ff' : pct > 0.2 ? '#ffaa00' : '#ff3c3c';
   }
+
+  // Keep On Track capture/tabs in sync live without page refresh.
+  if (document.getElementById('garage-capture-tabs')) {
+    syncGarageCaptureFromLive();
+    renderGarageCaptureTabs();
+    if (garageCaptureActiveBlockId) {
+      const b = schedule.find(x => x.id === garageCaptureActiveBlockId);
+      if (b) loadGarageCaptureFromBlock(b);
+    }
+    renderPublishedTodayPlan();
+    renderActivityLog();
+  }
 }
 
 let liveRisks = {};
@@ -3268,14 +3280,43 @@ function renderSessionOverviewTable() {
     const queued = list.filter(b=>b.onTrackQueued).length;
     const completed = list.filter(b=>b.completed).length;
     const canPush = list.some(b=>!b.completed && !b.onTrackQueued);
+    const detailId = `sess-day-detail-${dayIdx}`;
+    const detailRows = list
+      .sort((a,b)=>_toM(a.time)-_toM(b.time))
+      .map(b => {
+        const st = b.completed ? 'Completed' : (b.onTrackQueued ? 'Queued' : 'Published');
+        return `<tr>
+          <td class="mono">${b.time}</td>
+          <td>${(b.teams||[]).join(' + ')}</td>
+          <td>${b.type}</td>
+          <td class="mono">${b.duration}m</td>
+          <td>${st}</td>
+        </tr>`;
+      }).join('');
     return `<tr>
-      <td>Day ${dayIdx+1}</td>
+      <td><button class="btn sm" onclick="toggleSessionDayDetail('${detailId}')">Day ${dayIdx+1} ▾</button></td>
       <td class="mono">${published}</td>
       <td class="mono">${queued}</td>
       <td class="mono">${completed}</td>
       <td>${canPush ? `<button class="btn sm primary" onclick="pushDayToOnTrack(${dayIdx})">Push Day to On Track</button>` : '<span style="color:var(--muted);font-size:11px;">All queued/completed</span>'}</td>
+    </tr>
+    <tr id="${detailId}" style="display:none;">
+      <td colspan="5" style="padding:0;">
+        <div style="padding:10px 12px;background:rgba(255,255,255,0.02);">
+          <table class="data-table" style="margin:0;">
+            <thead><tr><th>Time</th><th>Team</th><th>Type</th><th>Duration</th><th>Status</th></tr></thead>
+            <tbody>${detailRows}</tbody>
+          </table>
+        </div>
+      </td>
     </tr>`;
   }).join('');
+}
+
+function toggleSessionDayDetail(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.style.display = el.style.display === 'none' ? '' : 'none';
 }
 
 function pushDayToOnTrack(dayIdx) {

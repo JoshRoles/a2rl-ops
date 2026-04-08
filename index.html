@@ -341,7 +341,8 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
   <div class="sidebar-section-label">Operations</div>
   <div class="nav-item active" onclick="showView('live')"><span class="nav-icon">⬡</span>Live Dashboard</div>
   <div class="nav-item" onclick="showView('schedule')"><span class="nav-icon">📅</span>Track Schedule</div>
-  <div class="nav-item" onclick="showView('garage')"><span class="nav-icon">🏎</span>Garage & On Track</div>
+  <div class="nav-item" onclick="showView('garagealloc')"><span class="nav-icon">🏎</span>Garage</div>
+  <div class="nav-item" onclick="showView('garage')"><span class="nav-icon">▶</span>On Track</div>
   <div class="nav-item" onclick="showView('tracktime')"><span class="nav-icon">⏱</span>Track Time Allocation</div>
 
   <div class="sidebar-section-label">Risk Intelligence</div>
@@ -551,10 +552,26 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
       </div>
     </div>
 
-    <!-- ═══════════════════════════════════════════════ GARAGE & ON TRACK ══ -->
+    <!-- ═══════════════════════════════════════════════ GARAGE ══ -->
+    <div class="view" id="view-garagealloc">
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title">🏎 Garage Allocation</div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn sm primary" onclick="openGarageModal()">Edit Allocation</button>
+            <button class="btn sm" onclick="autoAllocateGarages()">Auto-Assign</button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="garage-grid" id="garage-grid-alloc"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════ ON TRACK ══ -->
     <div class="view" id="view-garage">
       <div class="grid-73">
-        <div>
+        <div style="display:none;">
           <div class="panel">
             <div class="panel-head">
               <div class="panel-title">🏎 Garage Allocation</div>
@@ -604,15 +621,15 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
               <div id="garage-published-today" style="display:flex;flex-direction:column;gap:6px;"></div>
             </div>
           </div>
-          <div class="panel" style="margin-top:14px;">
+          <div class="panel" style="margin-top:14px;" id="garage-capture-panel">
             <div class="panel-head"><div class="panel-title">Session Capture (Garage)</div></div>
             <div class="panel-body">
+              <div id="garage-capture-tabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;"></div>
               <div style="font-size:11px;color:var(--muted);margin-bottom:8px;" id="garage-capture-hint">Capture risk data for current scheduled session.</div>
               <div class="form-grid-4">
                 <div class="field"><label>Team</label><select id="g-team"></select></div>
                 <div class="field"><label>Session Type</label><select id="g-sess-type"><option>Single Car</option><option>Multi Car</option><option>Open Pit Lane</option></select></div>
                 <div class="field"><label>Session #</label><input type="number" id="g-session" value="1" min="1"></div>
-                <div class="field"><label>Duration (min)</label><input type="number" id="g-duration" value="30" min="1"></div>
                 <div class="field"><label>Start Attempts</label><input type="number" id="g-attempts" value="0" min="0"></div>
                 <div class="field"><label>Laps</label><input type="number" id="g-laps" value="0" min="0"></div>
                 <div class="field"><label>SW Stoppages</label><input type="number" id="g-stoppages" value="0" min="0"></div>
@@ -1318,12 +1335,14 @@ let currentSchedDay = 0;
 let scheduleUndo = [];
 let scheduleRedo = [];
 let lastChangeNotesBase = [];
+let captureDrafts = JSON.parse(localStorage.getItem('a2rl_capture_drafts') || '{}');
+let garageCaptureActiveBlockId = null;
 let users = JSON.parse(localStorage.getItem('a2rl_users') || '[]');
 let currentUser = JSON.parse(localStorage.getItem('a2rl_current_user') || 'null');
 
 const DEFAULT_ADMIN_EMAIL = 'Rolesjosh417@gmail.com';
 const DEFAULT_ADMIN_PASSWORD = 'Admin@123';
-const ACCESS_AREAS = ['live','schedule','garage','tracktime','session','history','teams','trends','events','settings','insurance','users'];
+const ACCESS_AREAS = ['live','schedule','garagealloc','garage','tracktime','session','history','teams','trends','events','settings','insurance','users'];
 const VIEWER_DEFAULT_AREAS = ['live','history','teams','trends'];
 
 function seedAuth() {
@@ -1695,6 +1714,7 @@ function save() {
   localStorage.setItem('a2rl_thresh',   JSON.stringify(thresholds));
   localStorage.setItem('a2rl_event_cfg',JSON.stringify(eventCfg));
   localStorage.setItem('a2rl_sched_cfg',JSON.stringify(schedCfg));
+  localStorage.setItem('a2rl_capture_drafts', JSON.stringify(captureDrafts));
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1780,7 +1800,8 @@ function riskTier(s) {
 const viewMeta = {
   live:      ['Live Dashboard',         'Real-time risk monitoring · Active session'],
   schedule:  ['Track Schedule',         'Plan and manage all on-track sessions'],
-  garage:    ['Garage & On Track',      'Garage allocation · Live session timer · Activity log'],
+  garagealloc:['Garage',                'Garage bay allocation and team placement'],
+  garage:    ['On Track',               'Live session timer · Queue · Published runs · Capture'],
   tracktime: ['Track Time Allocation',  'Fair allocation and monitoring of track hours'],
   session:   ['Log Session',            'Manual entry · ROS bridge override pending'],
   history:   ['Session History',        'Full session log with filters and delete'],
@@ -1800,7 +1821,7 @@ function showView(id) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   const el = document.getElementById('view-'+id);
   if (el) el.classList.add('active');
-  const navKeyMap = {live:'live',schedule:'schedule',garage:'garage',tracktime:'track',
+  const navKeyMap = {live:'live',schedule:'schedule',garagealloc:'garage',garage:'on track',tracktime:'track',
     session:'log',history:'history',teams:'team',trends:'trend',settings:'settings',insurance:'insurance',users:'user'};
   document.querySelectorAll('.nav-item').forEach(n => {
     const k = navKeyMap[id] || id;
@@ -1816,7 +1837,7 @@ function showView(id) {
   if (id === 'insurance') renderInsurance();
   if (id === 'schedule')  { document.getElementById('sched-wizard').style.display='none'; document.getElementById('sched-built-view').style.display='block'; syncSchedConfig(); renderScheduleView(); renderSchedTeamSummary(); renderSchedStatsRow(); }
   if (id === 'tracktime') renderTrackTime();
-  if (id === 'garage')    renderGarage();
+  if (id === 'garage' || id === 'garagealloc')    renderGarage();
   if (id === 'settings')  renderSettings();
   if (id === 'users')     renderUsersManagement();
   if (id === 'live')      { renderLiveTable(); }
@@ -1974,13 +1995,17 @@ function setDefaultFormDate() {
 
 function calcAndSubmit(prefix='f') {
   const from = key => document.getElementById(`${prefix}-${key}`);
+  const selectedBlk = prefix === 'g' ? schedule.find(b => b.id === garageCaptureActiveBlockId) : null;
+  const liveBlk = scheduleLive.current;
   const team = from('team')?.value || '';
   const eventType = prefix === 'g' ? 'Testing (Track)' : (from('event')?.value || 'Testing (Track)');
   const sessType = from('sess-type')?.value || 'Single Car';
-  const sessNum = parseInt(from('session')?.value) || 1;
+  const sessNum = prefix === 'g' && selectedBlk ? getSessionOrdinalForBlock(selectedBlk) : (parseInt(from('session')?.value) || 1);
   const dateVal = prefix === 'g' ? (document.getElementById('f-date')?.value || new Date().toISOString().split('T')[0]) : (from('date')?.value || new Date().toISOString().split('T')[0]);
   const timeVal = prefix === 'g' ? (document.getElementById('f-time')?.value || new Date().toTimeString().slice(0,5)) : (from('time')?.value || new Date().toTimeString().slice(0,5));
-  const duration = parseInt(from('duration')?.value) || 30;
+  const duration = prefix === 'g'
+    ? ((selectedBlk && (selectedBlk.teams||[]).includes(team)) ? (selectedBlk.duration || 30) : ((liveBlk && (liveBlk.teams||[]).includes(team)) ? (liveBlk.duration || 30) : 30))
+    : (parseInt(from('duration')?.value) || 30);
   const weather = from('weather')?.value || 'Clear';
   const notes = from('notes')?.value || '';
 
@@ -2006,16 +2031,16 @@ function calcAndSubmit(prefix='f') {
 
   // If a schedule block is currently live for this team, link submission to that block/event
   const activeEv = getActiveEvent();
-  const liveBlk = scheduleLive.current;
-  if (liveBlk && (liveBlk.teams||[]).includes(team)) {
-    s.schedBlockId = liveBlk.id;
-    s.eventId = liveBlk.eventId || activeEv?.id || schedCfg.eventId || null;
+  const linkBlk = selectedBlk || scheduleLive.current;
+  if (linkBlk && (linkBlk.teams||[]).includes(team)) {
+    s.schedBlockId = linkBlk.id;
+    s.eventId = linkBlk.eventId || activeEv?.id || schedCfg.eventId || null;
     s.eventName = activeEv?.name || schedCfg.eventName || null;
     const d = schedCfg.eventStart ? new Date(schedCfg.eventStart + 'T00:00:00') : new Date();
-    d.setDate(d.getDate() + (liveBlk.day || 0));
+    d.setDate(d.getDate() + (linkBlk.day || 0));
     const dateStr = d.toISOString().split('T')[0];
-    s.timestamp = `${dateStr}T${liveBlk.time}:00`;
-    const b = schedule.find(x=>x.id===liveBlk.id);
+    s.timestamp = `${dateStr}T${linkBlk.time}:00`;
+    const b = schedule.find(x=>x.id===linkBlk.id);
     if (b) b.completed = true;
   }
 
@@ -2050,19 +2075,36 @@ function calcAndSubmit(prefix='f') {
   // Update live
   renderLiveTable();
   addFeedEvent(team, `Session logged — Risk ${score} (${tier.label})`, col);
+  if (prefix === 'g' && selectedBlk) {
+    delete captureDrafts[selectedBlk.id];
+    const pending = getPendingCaptureBlocksForToday();
+    garageCaptureActiveBlockId = pending.length ? pending[0].id : null;
+  }
   renderGarage();
 }
 
 function resetGarageCapture() {
-  ['session','duration','attempts','laps','stoppages','estops','damage','speed','replans','instab','sensor','manual'].forEach(k => {
+  ['session','attempts','laps','stoppages','estops','damage','speed','replans','instab','sensor','manual'].forEach(k => {
     const el = document.getElementById('g-'+k);
     if (!el) return;
-    el.value = (k === 'session') ? 1 : (k === 'duration' ? 30 : 0);
+    el.value = (k === 'session') ? 1 : 0;
   });
   const st = document.getElementById('g-sess-type'); if (st) st.value = 'Single Car';
   const cr = document.getElementById('g-crashed'); if (cr) cr.value = 'No';
   const wx = document.getElementById('g-weather'); if (wx) wx.value = 'Clear';
   const nt = document.getElementById('g-notes'); if (nt) nt.value = '';
+  saveGarageCaptureDraftFromInputs();
+}
+
+function bindGarageCaptureDraftAutosave() {
+  const ids = ['g-attempts','g-laps','g-stoppages','g-estops','g-crashed','g-damage','g-speed','g-replans','g-instab','g-sensor','g-manual','g-weather','g-notes'];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el || el.dataset.boundDraft === '1') return;
+    el.addEventListener('input', saveGarageCaptureDraftFromInputs);
+    el.addEventListener('change', saveGarageCaptureDraftFromInputs);
+    el.dataset.boundDraft = '1';
+  });
 }
 
 function resetForm() {
@@ -3170,8 +3212,10 @@ function exportScheduleToSessions() {
 // ═══════════════════════════════════════════════════════════════════════
 function renderGarage() {
   populateTeamDropdowns();
+  bindGarageCaptureDraftAutosave();
   const grid = document.getElementById('garage-grid');
-  if (!grid) return;
+  const gridAlloc = document.getElementById('garage-grid-alloc');
+  if (!grid && !gridAlloc) return;
   const numBays = Math.max(20, teams.length + 4);
   let html = '';
   for (let i = 1; i <= numBays; i++) {
@@ -3191,8 +3235,14 @@ function renderGarage() {
       </div>`;
     }
   }
-  grid.innerHTML = html;
+  if (grid) grid.innerHTML = html;
+  if (gridAlloc) gridAlloc.innerHTML = html;
   syncGarageCaptureFromLive();
+  renderGarageCaptureTabs();
+  if (garageCaptureActiveBlockId) {
+    const b = schedule.find(x => x.id === garageCaptureActiveBlockId);
+    if (b) loadGarageCaptureFromBlock(b);
+  }
   renderSessionQueue();
   renderPublishedTodayPlan();
   renderActivityLog();
@@ -3204,12 +3254,16 @@ function syncGarageCaptureFromLive() {
   const teamSel = document.getElementById('g-team');
   if (!teamSel) return;
   if (liveBlk && (liveBlk.teams||[]).length) {
+    const sb = schedule.find(x => x.id === liveBlk.id);
+    if (sb && sb.published && !sb.completed) {
+      sb.runStarted = true;
+      if (!garageCaptureActiveBlockId) garageCaptureActiveBlockId = sb.id;
+      save();
+    }
     const lead = (liveBlk.teams||[])[0];
     teamSel.value = lead;
     const st = document.getElementById('g-sess-type');
     if (st) st.value = liveBlk.type === 'multi' ? 'Multi Car' : (liveBlk.type === 'open' ? 'Open Pit Lane' : 'Single Car');
-    const dur = document.getElementById('g-duration');
-    if (dur) dur.value = liveBlk.duration || 30;
     if (hint) hint.textContent = `Live scheduled block detected: ${liveBlk.time} · ${(liveBlk.teams||[]).join(' + ')}`;
   } else if (hint) {
     hint.textContent = 'No live scheduled block detected. You can still submit manual capture.';
@@ -3219,6 +3273,86 @@ function syncGarageCaptureFromLive() {
 function getTodayScheduleDayIndex() {
   if (schedCfg?.eventStart) return getEventDayIndex(new Date());
   return currentSchedDay || 0;
+}
+
+function getSessionOrdinalForBlock(block) {
+  if (!block || !(block.teams||[]).length) return 1;
+  const team = (block.teams||[])[0];
+  const day = block.day || 0;
+  const all = schedule
+    .filter(b => (b.day||0)===day && b.type!=='break' && b.type!=='reserve' && (b.teams||[])[0]===team)
+    .sort((a,b)=>_toM(a.time)-_toM(b.time));
+  const idx = all.findIndex(b => b.id === block.id);
+  return idx >= 0 ? (idx + 1) : 1;
+}
+
+function getPendingCaptureBlocksForToday() {
+  const dayIdx = getTodayScheduleDayIndex();
+  return schedule
+    .filter(b => (b.day||0)===dayIdx && b.published && !b.completed && b.type!=='break' && b.type!=='reserve' && (b.teams||[]).length && b.runStarted)
+    .sort((a,b)=>_toM(a.time)-_toM(b.time));
+}
+
+function loadGarageCaptureFromBlock(block) {
+  if (!block) return;
+  const d = captureDrafts[block.id] || {};
+  const set = (k, v) => { const el = document.getElementById('g-'+k); if (el) el.value = v; };
+  set('team', (block.teams||[])[0] || '');
+  set('sess-type', block.type === 'multi' ? 'Multi Car' : (block.type === 'open' ? 'Open Pit Lane' : 'Single Car'));
+  set('session', getSessionOrdinalForBlock(block));
+  ['attempts','laps','stoppages','estops','damage','speed','replans','instab','sensor','manual'].forEach(k => set(k, d[k] ?? 0));
+  set('crashed', d.crashed ?? 'No');
+  set('weather', d.weather ?? 'Clear');
+  set('notes', d.notes ?? '');
+}
+
+function saveGarageCaptureDraftFromInputs() {
+  if (!garageCaptureActiveBlockId) return;
+  const g = key => document.getElementById('g-'+key)?.value;
+  captureDrafts[garageCaptureActiveBlockId] = {
+    attempts: parseInt(g('attempts')) || 0,
+    laps: parseInt(g('laps')) || 0,
+    stoppages: parseInt(g('stoppages')) || 0,
+    estops: parseInt(g('estops')) || 0,
+    crashed: g('crashed') || 'No',
+    damage: parseFloat(g('damage')) || 0,
+    speed: parseFloat(g('speed')) || 0,
+    replans: parseInt(g('replans')) || 0,
+    instab: parseFloat(g('instab')) || 0,
+    sensor: parseFloat(g('sensor')) || 0,
+    manual: parseFloat(g('manual')) || 0,
+    weather: g('weather') || 'Clear',
+    notes: g('notes') || '',
+  };
+  save();
+}
+
+function selectGarageCaptureTab(blockId) {
+  garageCaptureActiveBlockId = blockId;
+  const block = schedule.find(b => b.id === blockId);
+  if (block) loadGarageCaptureFromBlock(block);
+  renderGarageCaptureTabs();
+}
+
+function renderGarageCaptureTabs() {
+  const wrap = document.getElementById('garage-capture-tabs');
+  if (!wrap) return;
+  const pending = getPendingCaptureBlocksForToday();
+  if (!pending.length) {
+    wrap.innerHTML = '<span style="font-size:11px;color:var(--muted);">No pending capture tabs.</span>';
+    garageCaptureActiveBlockId = null;
+    return;
+  }
+  if (!garageCaptureActiveBlockId || !pending.some(b=>b.id===garageCaptureActiveBlockId)) {
+    garageCaptureActiveBlockId = pending[pending.length-1].id;
+  }
+  wrap.innerHTML = pending.map(b => {
+    const active = b.id === garageCaptureActiveBlockId;
+    const team = (b.teams||[])[0] || 'Team';
+    const ord = getSessionOrdinalForBlock(b);
+    const label = `${team} · ${b.time} · Session ${ord}`;
+    return `<button class="btn sm" onclick="selectGarageCaptureTab('${b.id}')" style="border-color:${active?'rgba(0,212,255,0.5)':'var(--border2)'};color:${active?'var(--accent)':'var(--muted)'};background:${active?'rgba(0,212,255,0.08)':'var(--card)'};">${label}</button>`;
+  }).join('');
 }
 
 function renderPublishedTodayPlan() {
@@ -3282,15 +3416,28 @@ function saveGarageAllocation() {
 
 // ── LIVE TIMER ──
 function openStartSessionModal() {
+  const liveBlk = scheduleLive?.current;
+  if (liveBlk && (liveBlk.teams||[]).length) {
+    // Prefer the active scheduled block for one-click start
+    const leadTeam = (liveBlk.teams||[])[0];
+    const typeMap = { single:'Single Car', multi:'Multi Car', open:'Open Pit Lane' };
+    startActiveSession({
+      team: leadTeam,
+      type: typeMap[liveBlk.type] || 'Single Car',
+      duration: liveBlk.duration || 30,
+      sessNum: 1,
+    });
+    return;
+  }
   populateTeamDropdowns();
   openModal('modal-start-session');
 }
 
-function startActiveSession() {
-  const team = document.getElementById('ot-team-select').value;
-  const type = document.getElementById('ot-type-select').value;
-  const duration = parseInt(document.getElementById('ot-duration').value) || 30;
-  const sessNum = parseInt(document.getElementById('ot-sess-num').value) || 1;
+function startActiveSession(opts) {
+  const team = opts?.team || document.getElementById('ot-team-select').value;
+  const type = opts?.type || document.getElementById('ot-type-select').value;
+  const duration = Number.isFinite(opts?.duration) ? opts.duration : (parseInt(document.getElementById('ot-duration').value) || 30);
+  const sessNum = Number.isFinite(opts?.sessNum) ? opts.sessNum : (parseInt(document.getElementById('ot-sess-num').value) || 1);
 
   if (liveSession?.timerInterval) clearInterval(liveSession.timerInterval);
 
@@ -3329,6 +3476,26 @@ function startActiveSession() {
 
   closeModal('modal-start-session');
   addFeedEvent(team, `Session started — ${type} · ${duration}min`, null);
+  // Prepare Garage capture for this live session
+  if (document.getElementById('view-garage')) showView('garage');
+  const liveBlk = scheduleLive?.current;
+  if (liveBlk && (liveBlk.teams||[]).includes(team)) {
+    const sb = schedule.find(x => x.id === liveBlk.id);
+    if (sb) {
+      sb.runStarted = true;
+      garageCaptureActiveBlockId = sb.id;
+      save();
+    }
+  }
+  const gt = document.getElementById('g-team'); if (gt) gt.value = team;
+  const gs = document.getElementById('g-sess-type'); if (gs) gs.value = type;
+  const hint = document.getElementById('garage-capture-hint');
+  if (hint) hint.textContent = `On track now: ${team} · ${type} · ${duration}m. Add risk data below and submit.`;
+  const cap = document.getElementById('garage-capture-panel');
+  if (cap) {
+    cap.style.borderColor = 'rgba(0,212,255,0.5)';
+    cap.scrollIntoView({ behavior:'smooth', block:'start' });
+  }
   renderActivityLog();
 }
 
@@ -3352,9 +3519,31 @@ function endActiveSession() {
   const ring = document.getElementById('timer-ring');
   if (ring) { ring.style.strokeDashoffset = '326.7'; ring.style.stroke = 'var(--accent)'; }
   document.getElementById('ot-session-type').textContent = '';
+  const cap = document.getElementById('garage-capture-panel');
+  if (cap) cap.style.borderColor = 'var(--border)';
 
   addFeedEvent(liveSession.team, `Session ended`, null);
   liveSession = null;
+  // Auto-advance to next scheduled block if it should already be running now.
+  const computed = computeScheduleLive(new Date());
+  const next = computed.current || computed.next;
+  if (next) {
+    const now = new Date();
+    const nowM = now.getHours()*60 + now.getMinutes();
+    const startsNow = (next.startM || 0) <= (nowM + 1);
+    if (startsNow) {
+      const typeMap = { single:'Single Car', multi:'Multi Car', open:'Open Pit Lane' };
+      startActiveSession({
+        team: (next.teams||[])[0] || document.getElementById('ot-team-select')?.value || '',
+        type: typeMap[next.type] || 'Single Car',
+        duration: next.duration || 30,
+        sessNum: 1,
+      });
+      return;
+    }
+    const hint = document.getElementById('garage-capture-hint');
+    if (hint) hint.textContent = `Next scheduled: ${(next.teams||[]).join(' + ')} at ${next.time}.`;
+  }
   renderActivityLog();
 }
 

@@ -598,6 +598,12 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
               <button class="btn sm" style="margin-top:10px;width:100%;" onclick="openQueueModal()">+ Add to Queue</button>
             </div>
           </div>
+          <div class="panel" style="margin-top:14px;">
+            <div class="panel-head"><div class="panel-title">Today's Published On-Track Plan</div></div>
+            <div class="panel-body" style="padding:8px 14px;">
+              <div id="garage-published-today" style="display:flex;flex-direction:column;gap:6px;"></div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -606,7 +612,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
         <div class="panel-body" style="padding:0">
           <table class="data-table">
             <thead><tr>
-              <th>Time</th><th>Team</th><th>Session Type</th><th>Duration</th><th>Risk Score</th><th>Notes</th><th></th>
+              <th>Time</th><th>Team</th><th>Session Type</th><th>Duration</th><th>Risk Score</th><th>Run</th><th>Notes</th><th></th>
             </tr></thead>
             <tbody id="activity-tbody"></tbody>
           </table>
@@ -3144,7 +3150,37 @@ function renderGarage() {
   }
   grid.innerHTML = html;
   renderSessionQueue();
+  renderPublishedTodayPlan();
   renderActivityLog();
+}
+
+function getTodayScheduleDayIndex() {
+  if (schedCfg?.eventStart) return getEventDayIndex(new Date());
+  return currentSchedDay || 0;
+}
+
+function renderPublishedTodayPlan() {
+  const el = document.getElementById('garage-published-today');
+  if (!el) return;
+  const dayIdx = getTodayScheduleDayIndex();
+  const blocks = schedule
+    .filter(b => (b.day||0) === dayIdx && b.published && b.type !== 'break' && b.type !== 'reserve' && (b.teams||[]).length)
+    .sort((a,b)=>_toM(a.time)-_toM(b.time));
+  if (!blocks.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:10px;">No published sessions for today.</div>';
+    return;
+  }
+  el.innerHTML = blocks.map(b => {
+    const run = b.completed ? 'Yes' : 'No';
+    const runCol = b.completed ? C.green : C.muted;
+    return `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--card);border:1px solid var(--border);border-radius:5px;">
+      <span class="mono" style="font-size:10px;color:var(--muted);min-width:40px;">${b.time}</span>
+      <span style="font-weight:600;flex:1;font-size:12px;">${(b.teams||[]).join(' + ')}</span>
+      <span class="badge badge-blue" style="font-size:9px;">${b.type}</span>
+      <span class="mono" style="font-size:10px;">${b.duration}m</span>
+      <span style="font-size:10px;color:${runCol};">Run: ${run}</span>
+    </div>`;
+  }).join('');
 }
 
 function autoAllocateGarages() {
@@ -3307,17 +3343,35 @@ function dequeueSession(i) {
 function renderActivityLog() {
   const tbody = document.getElementById('activity-tbody');
   if (!tbody) return;
-  if (!activityLog.length) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:16px;">No activity today</td></tr>'; return; }
-  tbody.innerHTML = activityLog.map((a,i) => {
+  const dayIdx = getTodayScheduleDayIndex();
+  const schedRows = schedule
+    .filter(b => (b.day||0)===dayIdx && b.published && b.type!=='break' && b.type!=='reserve' && (b.teams||[]).length)
+    .map((b, i) => ({
+      _sched: true,
+      _key: `s-${i}-${b.id}`,
+      time: b.time,
+      team: (b.teams||[]).join(' + '),
+      type: b.type,
+      duration: b.duration,
+      riskScore: b.completed ? 'Submitted' : '—',
+      run: b.completed ? 'Yes' : 'No',
+      notes: b.completed ? 'Scheduled session completed and submitted' : 'Published schedule session pending run/submission',
+    }));
+  const manualRows = activityLog.map((a,i)=>({ ...a, _sched:false, _key:`m-${i}`, run:'—', _idx:i }));
+  const rows = [...schedRows, ...manualRows].sort((a,b)=>String(a.time).localeCompare(String(b.time)));
+  if (!rows.length) { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:16px;">No activity today</td></tr>'; return; }
+  tbody.innerHTML = rows.map((a) => {
     const t = teams.find(x=>x.name===a.team);
+    const runCol = a.run==='Yes' ? C.green : (a.run==='No' ? C.muted : C.muted);
     return `<tr>
       <td class="mono" style="font-size:10px;color:var(--muted);">${a.time}</td>
       <td><span class="team-dot" style="background:${t?.color||'#aaa'}"></span>${a.team}</td>
       <td><span class="badge badge-blue" style="font-size:9px;">${a.type}</span></td>
       <td class="mono">${a.duration}min</td>
       <td class="mono">${a.riskScore}</td>
+      <td class="mono" style="color:${runCol};">${a.run}</td>
       <td style="font-size:11px;color:var(--muted);">${a.notes}</td>
-      <td><button class="btn sm danger" onclick="activityLog.splice(${i},1);renderActivityLog()">✕</button></td>
+      <td>${a._sched ? '' : `<button class="btn sm danger" onclick="activityLog.splice(${a._idx},1);renderActivityLog()">✕</button>`}</td>
     </tr>`;
   }).join('');
 }

@@ -3454,7 +3454,8 @@ function syncGarageCaptureFromLive() {
     const sb = schedule.find(x => x.id === liveBlk.id);
     if (sb && sb.published && !sb.completed) {
       sb.runStarted = true;
-      if (!garageCaptureActiveBlockId) garageCaptureActiveBlockId = sb.id;
+      // Always focus default capture box on the currently running team
+      garageCaptureActiveBlockId = sb.id;
       save();
     }
     const lead = (liveBlk.teams||[])[0];
@@ -3486,7 +3487,8 @@ function getSessionOrdinalForBlock(block) {
 function getPendingCaptureBlocksForToday() {
   const dayIdx = getTodayScheduleDayIndex();
   return schedule
-    .filter(b => (b.day||0)===dayIdx && b.published && !b.completed && b.type!=='break' && b.type!=='reserve' && (b.teams||[]).length)
+    // Tabs appear only after a team has actually started on track
+    .filter(b => (b.day||0)===dayIdx && b.published && !b.completed && !!b.runStarted && b.type!=='break' && b.type!=='reserve' && (b.teams||[]).length)
     .sort((a,b)=>_toM(a.time)-_toM(b.time));
 }
 
@@ -3541,7 +3543,9 @@ function renderGarageCaptureTabs() {
     return;
   }
   if (!garageCaptureActiveBlockId || !pending.some(b=>b.id===garageCaptureActiveBlockId)) {
-    garageCaptureActiveBlockId = pending[pending.length-1].id;
+    // Default to currently live block if available, otherwise latest started
+    const liveId = scheduleLive?.current?.id;
+    garageCaptureActiveBlockId = pending.some(b=>b.id===liveId) ? liveId : pending[pending.length-1].id;
   }
   wrap.innerHTML = pending.map(b => {
     const active = b.id === garageCaptureActiveBlockId;

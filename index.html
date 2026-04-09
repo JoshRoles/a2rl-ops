@@ -1563,10 +1563,25 @@ function getEventDayIndex(now=new Date()) {
   const diff = Math.floor((n0 - new Date(d0.getFullYear(), d0.getMonth(), d0.getDate())) / 86400000);
   return Math.max(0, diff);
 }
+function getRuntimeScheduleDayIndex(evId, now=new Date()) {
+  const maxDay = Math.max(0, (schedCfg.days || 1) - 1);
+  const byDate = Math.max(0, Math.min(maxDay, getEventDayIndex(now)));
+  const hasBlocksForDay = (day) => schedule.some(b =>
+    (b.eventId === evId || !evId) && (b.day||0) === day && b.type !== 'break' && b.type !== 'reserve'
+  );
+  if (hasBlocksForDay(byDate)) return byDate;
+  const uiDay = Math.max(0, Math.min(maxDay, currentSchedDay || 0));
+  if (hasBlocksForDay(uiDay)) return uiDay;
+  const firstDay = schedule
+    .filter(b => (b.eventId === evId || !evId) && b.type !== 'break' && b.type !== 'reserve')
+    .map(b => (b.day||0))
+    .sort((a,b)=>a-b)[0];
+  return Number.isFinite(firstDay) ? firstDay : byDate;
+}
 function computeScheduleLive(now=new Date()) {
   const ev = getActiveEvent();
   if (!ev || !schedCfg.eventStart) return { current:null, next:null };
-  const dayIdx = getEventDayIndex(now);
+  const dayIdx = getRuntimeScheduleDayIndex(ev.id, now);
   const dayDate = new Date(schedCfg.eventStart + 'T00:00:00');
   dayDate.setDate(dayDate.getDate() + dayIdx);
   const dateStr = dayDate.toISOString().split('T')[0];
@@ -2602,11 +2617,20 @@ function startScheduleWizard() {
     alert('Select an Event in the Schedule dropdown before building.');
     return;
   }
+  const initialTargetDate = (() => {
+    if (schedCfg.eventStart) {
+      const d = new Date(schedCfg.eventStart + 'T00:00:00');
+      d.setDate(d.getDate() + (currentSchedDay || 0));
+      return d.toISOString().split('T')[0];
+    }
+    return new Date().toISOString().split('T')[0];
+  })();
   wiz = {
     dayStart: '08:00', dayEnd: '20:00',
     trackOpen: '09:00', trackClose: '18:00',
     days: 1, buffer: 15,
     targetDay: currentSchedDay || 0,
+    targetDate: initialTargetDate,
     buildScope: 'day',
     teams: [], // [{name, category, sesstype}]
     sessionDur: 30, sessionsPerDay: 2,
@@ -2661,6 +2685,13 @@ function renderWizardStep() {
 }
 
 function renderWizStep0(body) {
+  const derivedDayLabel = (() => {
+    if (!schedCfg.eventStart || !wiz.targetDate) return `Day ${(wiz.targetDay||0)+1}`;
+    const start = new Date(schedCfg.eventStart + 'T00:00:00');
+    const target = new Date(wiz.targetDate + 'T00:00:00');
+    const diff = Math.floor((target - start) / 86400000);
+    return `Day ${Math.max(1, diff + 1)}`;
+  })();
   body.innerHTML = `
     <div class="panel"><div class="panel-head"><div class="panel-title">Track & Day Setup</div></div>
     <div class="panel-body">
@@ -2675,11 +2706,12 @@ function renderWizStep0(body) {
             <option value="all" ${(wiz.buildScope||'day')==='all'?'selected':''}>All Event Days</option>
           </select>
         </div>
-        <div class="field"><label>Current Tab</label><input type="text" id="wiz-build-day" value="Day ${(wiz.targetDay||0)+1}" readonly></div>
+        <div class="field"><label>Build Date</label><input type="date" id="wiz-target-date" value="${wiz.targetDate||''}"></div>
+        <div class="field"><label>Derived Event Day</label><input type="text" id="wiz-build-day" value="${derivedDayLabel}" readonly></div>
         <div class="field"><label>Buffer Between Sessions (min)</label><input type="number" id="wiz-buffer" value="${wiz.buffer}" min="0" max="60"></div>
       </div>
       <div style="margin-top:14px;padding:12px;background:rgba(0,212,255,0.04);border:1px solid rgba(0,212,255,0.12);border-radius:6px;font-size:12px;color:var(--muted);">
-        <span style="color:var(--accent);">ⓘ</span> Choose whether to build only the current tab (Day ${(wiz.targetDay||0)+1}) or all event days. Day window controls the visible timetable. Track window controls where sessions can be scheduled.
+        <span style="color:var(--accent);">ⓘ</span> Build Date pulls from Event Setup by default. You can override it here; if no event start date exists yet, this date will become Day 1.
       </div>
     </div></div>`;
 }
@@ -2690,6 +2722,13 @@ function saveWizStep0() {
   wiz.trackOpen = document.getElementById('wiz-open').value;
   wiz.trackClose = document.getElementById('wiz-close').value;
   wiz.buildScope = document.getElementById('wiz-build-scope')?.value || 'day';
+  wiz.targetDate = document.getElementById('wiz-target-date')?.value || wiz.targetDate || new Date().toISOString().split('T')[0];
+  if (schedCfg.eventStart && wiz.targetDate) {
+    const start = new Date(schedCfg.eventStart + 'T00:00:00');
+    const target = new Date(wiz.targetDate + 'T00:00:00');
+    const diff = Math.floor((target - start) / 86400000);
+    wiz.targetDay = Math.max(0, diff);
+  }
   // Build either current day only, or all event days
   wiz.days = wiz.buildScope === 'all' ? Math.max(1, parseInt(schedCfg.days||1)) : 1;
   const bufV = parseInt(document.getElementById('wiz-buffer').value);
@@ -3046,7 +3085,18 @@ function wizardBack() {
 
 function generateSchedule() {
   pushScheduleHistory();
-  const targetStartDay = wiz.buildScope === 'all' ? 0 : Math.max(0, parseInt(wiz.targetDay||0));
+  let targetStartDay = wiz.buildScope === 'all' ? 0 : Math.max(0, parseInt(wiz.targetDay||0));
+  if (wiz.targetDate) {
+    if (schedCfg.eventStart) {
+      const start = new Date(schedCfg.eventStart + 'T00:00:00');
+      const target = new Date(wiz.targetDate + 'T00:00:00');
+      const diff = Math.floor((target - start) / 86400000);
+      if (wiz.buildScope !== 'all') targetStartDay = Math.max(0, diff);
+    } else {
+      schedCfg.eventStart = wiz.targetDate;
+      targetStartDay = wiz.buildScope === 'all' ? 0 : 0;
+    }
+  }
   const targetDays = Math.max(1, parseInt(wiz.days||1));
   const targetSet = new Set(Array.from({length:targetDays}).map((_,i)=>targetStartDay+i));
   schedule = schedule.filter(b => !targetSet.has(b.day));
@@ -3676,7 +3726,7 @@ function syncGarageCaptureFromLive() {
 }
 
 function getTodayScheduleDayIndex() {
-  if (schedCfg?.eventStart) return getEventDayIndex(new Date());
+  if (schedCfg?.eventStart) return getRuntimeScheduleDayIndex(schedCfg.eventId || null, new Date());
   return currentSchedDay || 0;
 }
 

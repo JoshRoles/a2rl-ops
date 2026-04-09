@@ -392,9 +392,9 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
     <div class="view active" id="view-live">
       <div class="panel" style="margin-bottom:12px;padding:14px 16px;border-color:rgba(0,212,255,0.28);background:rgba(0,212,255,0.06);">
         <div style="display:flex;gap:24px;align-items:flex-end;flex-wrap:wrap;">
-          <div style="flex:1;min-width:320px;">
-            <span style="color:var(--muted);text-transform:uppercase;letter-spacing:1.4px;font-size:10px;">Currently On Track</span><br>
-            <span id="live-banner-current" style="display:block;font-weight:800;color:var(--text);font-size:34px;line-height:1.15;">—</span>
+          <div style="flex:1;min-width:480px;">
+            <span style="color:var(--muted);text-transform:uppercase;letter-spacing:2.1px;font-size:15px;">Currently On Track</span><br>
+            <span id="live-banner-current" style="display:block;font-weight:800;color:var(--text);font-size:51px;line-height:1.15;">—</span>
           </div>
           <div style="min-width:220px;">
             <span style="color:var(--muted);text-transform:uppercase;letter-spacing:1.2px;font-size:10px;">Next Up</span><br>
@@ -1371,6 +1371,7 @@ let scheduleRedo = [];
 let lastChangeNotesBase = [];
 let captureDrafts = JSON.parse(localStorage.getItem('a2rl_capture_drafts') || '{}');
 let garageCaptureActiveBlockId = null;
+let garageCaptureActiveTeam = '';
 let users = JSON.parse(localStorage.getItem('a2rl_users') || '[]');
 let currentUser = JSON.parse(localStorage.getItem('a2rl_current_user') || 'null');
 
@@ -1601,7 +1602,7 @@ function syncAutoOnTrack() {
     renderGarageCaptureTabs();
     if (garageCaptureActiveBlockId) {
       const b = schedule.find(x => x.id === garageCaptureActiveBlockId);
-      if (b) loadGarageCaptureFromBlock(b);
+      if (b) loadGarageCaptureFromBlock(b, garageCaptureActiveTeam);
     }
     renderPublishedTodayPlan();
     renderActivityLog();
@@ -1989,7 +1990,7 @@ function renderFeed() {
   feed.innerHTML = sorted.map(s => {
     const t = teams.find(x=>x.name===s.team);
     const col = t ? t.color : '#aaa';
-    const dt = new Date(s.timestamp);
+    const dt = new Date(s.trackTimestamp || s.timestamp);
     const dateStr = isNaN(dt) ? '' : dt.toLocaleDateString('en-GB',{day:'2-digit',month:'short'});
     const timeStr = isNaN(dt) ? '—' : dt.toTimeString().slice(0,5);
     const tier = riskTier(s.riskScore||0);
@@ -2050,7 +2051,8 @@ function calcAndSubmit(prefix='f') {
   const from = key => document.getElementById(`${prefix}-${key}`);
   const selectedBlk = prefix === 'g' ? schedule.find(b => b.id === garageCaptureActiveBlockId) : null;
   const liveBlk = scheduleLive.current;
-  const team = from('team')?.value || '';
+  const activeTabTeam = prefix === 'g' ? (garageCaptureActiveTeam || (selectedBlk?.teams||[])[0] || '') : '';
+  const team = prefix === 'g' ? activeTabTeam : (from('team')?.value || '');
   const eventType = prefix === 'g' ? 'Testing (Track)' : (from('event')?.value || 'Testing (Track)');
   const sessType = from('sess-type')?.value || 'Single Car';
   const sessNum = prefix === 'g' && selectedBlk ? getSessionOrdinalForBlock(selectedBlk) : (parseInt(from('session')?.value) || 1);
@@ -2066,13 +2068,23 @@ function calcAndSubmit(prefix='f') {
     alert('Select a session capture tab before submitting.');
     return;
   }
+  if (prefix === 'g' && !team) {
+    alert('Select a team capture tab before submitting.');
+    return;
+  }
 
   // Prevent duplicate capture submits for the same scheduled run.
   if (prefix === 'g' && selectedBlk) {
-    const alreadyCompleted = !!selectedBlk.completed;
-    const alreadyLogged = sessions.some(x => String(x.schedBlockId || '') === String(selectedBlk.id));
-    if (alreadyCompleted || alreadyLogged) {
-      alert('This session run has already been submitted. One publish per session run.');
+    const capKey = `${selectedBlk.id}::${team}`;
+    const alreadyLogged = sessions.some(x => {
+      const byTeamKey = String(x.schedCaptureKey || '') === capKey;
+      const legacySingle = selectedBlk.type !== 'multi'
+        && String(x.schedBlockId || '') === String(selectedBlk.id)
+        && String(x.team || '') === String(team);
+      return byTeamKey || legacySingle;
+    });
+    if (alreadyLogged) {
+      alert('This team run has already been submitted for this scheduled slot.');
       return;
     }
   }
@@ -2080,6 +2092,7 @@ function calcAndSubmit(prefix='f') {
   const s = {
     team, eventType, sessType, sessNum, duration, weather, notes,
     timestamp: new Date(`${dateVal}T${timeVal}`).toISOString(),
+    trackTimestamp: new Date(`${dateVal}T${timeVal}`).toISOString(),
     startAttempts: parseInt(from('attempts')?.value) || 0,
     laps:          parseInt(from('laps')?.value) || 0,
     stoppages:     parseInt(from('stoppages')?.value) || 0,
@@ -2102,14 +2115,15 @@ function calcAndSubmit(prefix='f') {
   const linkBlk = prefix === 'g' ? selectedBlk : (selectedBlk || scheduleLive.current);
   if (linkBlk && (linkBlk.teams||[]).includes(team)) {
     s.schedBlockId = linkBlk.id;
+    s.schedCaptureKey = `${linkBlk.id}::${team}`;
     s.eventId = linkBlk.eventId || activeEv?.id || schedCfg.eventId || null;
     s.eventName = activeEv?.name || schedCfg.eventName || null;
     const d = schedCfg.eventStart ? new Date(schedCfg.eventStart + 'T00:00:00') : new Date();
     d.setDate(d.getDate() + (linkBlk.day || 0));
     const dateStr = d.toISOString().split('T')[0];
-    s.timestamp = `${dateStr}T${linkBlk.time}:00`;
+    s.trackTimestamp = `${dateStr}T${linkBlk.time}:00`;
     const b = schedule.find(x=>x.id===linkBlk.id);
-    if (b) b.completed = true;
+    if (b) recomputeBlockCompletion(b);
   }
 
   const { score, breakdown } = calcRisk(s);
@@ -2144,9 +2158,16 @@ function calcAndSubmit(prefix='f') {
   renderLiveTable();
   addFeedEvent(team, `Session logged — Risk ${score} (${tier.label})`, col);
   if (prefix === 'g' && selectedBlk) {
-    delete captureDrafts[selectedBlk.id];
+    delete captureDrafts[`${selectedBlk.id}::${team}`];
     const pending = getPendingCaptureBlocksForToday();
-    garageCaptureActiveBlockId = pending.length ? pending[0].id : null;
+    if (!pending.length) {
+      garageCaptureActiveBlockId = null;
+      garageCaptureActiveTeam = '';
+    } else {
+      const first = pending[0];
+      garageCaptureActiveBlockId = first.block.id;
+      garageCaptureActiveTeam = first.team;
+    }
   }
   renderGarage();
 }
@@ -2278,7 +2299,7 @@ function renderHistory() {
       <td class="mono" style="font-size:10px;color:var(--muted)">${dtStr}</td>
       <td><span class="team-dot" style="background:${tc}"></span>${s.team}</td>
       <td style="font-size:12px;">${s.eventType||'—'}</td>
-      <td><span class="badge ${s.sessType==='Multi Car'?'badge-purple':s.sessType==='Open Pit Lane'?'badge-blue':'badge-med'}" style="font-size:9px;">${s.sessType||'Single'}</span></td>
+      <td><span class="badge ${s.sessType==='Multi Car'?'badge-purple':s.sessType==='Open Pit Lane'?'badge-blue':'badge-med'}" style="font-size:9px;">${s.sessType||'Single'}</span>${s.sessType==='Multi Car' ? ' <span class="badge badge-purple" style="font-size:9px;opacity:0.9;">MULTI GROUP</span>' : ''}</td>
       <td class="mono">#${s.sessNum||1}</td>
       <td><span style="color:${col};font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600">${(s.riskScore||0).toFixed(1)}</span> <span class="badge ${tier.cls}">${tier.label}</span></td>
       <td class="mono">${s.laps||0}</td>
@@ -2293,6 +2314,7 @@ function renderHistory() {
 
 function deleteSession(id) {
   sessions = sessions.filter(s => String(s.id) !== String(id));
+  schedule.forEach(b => recomputeBlockCompletion(b));
   save();
   renderHistory();
   renderLiveTable();
@@ -2489,35 +2511,6 @@ function renderWizStep0(body) {
         <div class="field"><label>Current Tab</label><input type="text" id="wiz-build-day" value="Day ${(wiz.targetDay||0)+1}" readonly></div>
         <div class="field"><label>Buffer Between Sessions (min)</label><input type="number" id="wiz-buffer" value="${wiz.buffer}" min="0" max="60"></div>
       </div>
-      <div class="sep" style="margin:16px 0 12px;"></div>
-      <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:8px;">Per-day overrides (optional)</div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
-        If blank, a day inherits the defaults above. Use this to adjust Day Start/End and Track Open/Close per day.
-      </div>
-      <div style="overflow-x:auto;border:1px solid var(--border);border-radius:6px;">
-        <table class="data-table" style="min-width:720px;">
-          <thead><tr>
-            <th style="width:70px;">Day</th>
-            <th>Day Start</th><th>Day End</th>
-            <th>Track Open</th><th>Track Close</th>
-            <th style="width:120px;">Date</th>
-          </tr></thead>
-          <tbody>
-            ${Array.from({length:wiz.days||1}).map((_,i)=>{
-              const d=(wiz.dayCfgs||[])[i]||{};
-              const date = (schedCfg.eventStart ? (()=>{const dt=new Date(schedCfg.eventStart+'T00:00:00');dt.setDate(dt.getDate()+i);return dt.toISOString().split('T')[0];})() : '');
-              return `<tr>
-                <td class="mono">Day ${i+1}</td>
-                <td><input type="time" data-daycfg="${i}" data-field="dayStart" value="${d.dayStart||''}" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);padding:4px 8px;border-radius:4px;"></td>
-                <td><input type="time" data-daycfg="${i}" data-field="dayEnd" value="${d.dayEnd||''}" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);padding:4px 8px;border-radius:4px;"></td>
-                <td><input type="time" data-daycfg="${i}" data-field="trackOpen" value="${d.trackOpen||''}" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);padding:4px 8px;border-radius:4px;"></td>
-                <td><input type="time" data-daycfg="${i}" data-field="trackClose" value="${d.trackClose||''}" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);padding:4px 8px;border-radius:4px;"></td>
-                <td class="mono" style="color:var(--muted);">${date||'—'}</td>
-              </tr>`;
-            }).join('')}
-          </tbody>
-        </table>
-      </div>
       <div style="margin-top:14px;padding:12px;background:rgba(0,212,255,0.04);border:1px solid rgba(0,212,255,0.12);border-radius:6px;font-size:12px;color:var(--muted);">
         <span style="color:var(--accent);">ⓘ</span> Choose whether to build only the current tab (Day ${(wiz.targetDay||0)+1}) or all event days. Day window controls the visible timetable. Track window controls where sessions can be scheduled.
       </div>
@@ -2535,16 +2528,6 @@ function saveWizStep0() {
   const bufV = parseInt(document.getElementById('wiz-buffer').value);
   wiz.buffer = Number.isFinite(bufV) && bufV >= 0 ? bufV : 15;
 
-  // Per-day overrides
-  wiz.dayCfgs = Array.from({length:wiz.days}).map(()=>({}));
-  document.querySelectorAll('input[data-daycfg][data-field]').forEach(inp => {
-    const di = parseInt(inp.getAttribute('data-daycfg'));
-    const field = inp.getAttribute('data-field');
-    if (!Number.isFinite(di) || di < 0 || di >= wiz.days) return;
-    const v = (inp.value||'').trim();
-    if (!v) return;
-    wiz.dayCfgs[di][field] = v;
-  });
 }
 
 function renderWizStep1(body) {
@@ -2648,10 +2631,9 @@ function renderWizStep2(body) {
           <div style="color:var(--accent);font-weight:600;margin-bottom:6px;">How allocation works:</div>
           <div style="color:var(--muted);line-height:1.7;">
             • Rookie baseline = ${wiz.sessionsPerDay||2} sessions × ${wiz.sessionDur||30}min<br>
-            • Challenger = 20% less (×0.8 multiplier)<br>
-            • Pro = 40% less (×0.6 multiplier)<br>
-            • Multi Car teams share a slot — 2 teams in 1 session<br>
-            • Multi Car teams each get half the normal allocation
+            • Category multipliers come from Admin Settings (${Math.round((CAT_MULT.rookie||1)*100)}% / ${Math.round((CAT_MULT.challenger||0.8)*100)}% / ${Math.round((CAT_MULT.pro||0.6)*100)}%)<br>
+            • Multi Car groups use the same session rule as configured here (sessions/day and duration)<br>
+            • Multi Car groups share one slot in the final schedule, so total track load still fits available time
           </div>
         </div>
       </div></div>
@@ -2699,10 +2681,6 @@ function saveWizStep2() {
 
 function calcAllocation() {
   // Returns array of {name, category, sesstype, isMulti, allocMins, sessionsPerDay}
-  const toM = t => { const [h,m]=t.split(':').map(Number); return h*60+m; };
-  const dayMins = (toM(wiz.trackClose) - toM(wiz.trackOpen));
-  const rookieBase = wiz.sessionsPerDay * wiz.sessionDur;
-
   const multiNames2 = new Set((wiz.multiGroups||[]).flat());
   return wiz.teams.map(t => {
     const cat = t.category || 'rookie';
@@ -2710,10 +2688,10 @@ function calcAllocation() {
     const isMulti = multiNames2.has(t.name);
     const group = (wiz.multiGroups||[]).find(g=>g.includes(t.name));
     const groupSize = group ? group.length : 1;
-    // Per-car time shrinks with group size: 2 cars = 50% each, 3 = 33%, etc.
-    const shareFactor = isMulti ? (1/groupSize) : 1;
-    const allocMins = Math.round(rookieBase * mult * (isMulti ? shareFactor * 2 : 1)); // x2 so multi teams still get reasonable time
-    const numSessions = Math.max(1, Math.round((wiz.sessionsPerDay||2) * mult));
+    const numSessions = isMulti
+      ? Math.max(1, parseInt(wiz.sessionsPerDay||2))
+      : Math.max(1, Math.round((wiz.sessionsPerDay||2) * mult));
+    const allocMins = numSessions * wiz.sessionDur;
     return { name: t.name, category: cat, isMulti, groupSize, allocMins, numSessions };
   });
 }
@@ -2750,11 +2728,10 @@ function buildWizardScheduleOption(lunchAnchor) {
   let total = 0;
   let hadOverflow = false;
   for (let day = 0; day < wiz.days; day++) {
-    const dc = (wiz.dayCfgs && wiz.dayCfgs[day]) || {};
-    const dayStartM = toM(dc.dayStart || wiz.dayStart || '08:00');
-    const dayEndM = toM(dc.dayEnd || wiz.dayEnd || '20:00');
-    const trackO = toM(dc.trackOpen || wiz.trackOpen || '09:00');
-    const trackC = toM(dc.trackClose || wiz.trackClose || '18:00');
+    const dayStartM = toM(wiz.dayStart || '08:00');
+    const dayEndM = toM(wiz.dayEnd || '20:00');
+    const trackO = toM(wiz.trackOpen || '09:00');
+    const trackC = toM(wiz.trackClose || '18:00');
     const trackStart = Math.max(dayStartM, trackO);
     const trackEnd = Math.min(dayEndM, trackC);
     let lunchStart = null;
@@ -2799,7 +2776,8 @@ function renderWizStep3(body) {
   const alloc = calcAllocation();
   const toM = t => { const [h,m]=t.split(':').map(Number); return h*60+m; };
   const dayMins = (toM(wiz.trackClose) - toM(wiz.trackOpen));
-  const totalSchedMins = alloc.reduce((a,t)=>a+t.allocMins,0) * wiz.days;
+  const queueLoadPerDay = getWizardSessionQueue(alloc).reduce((a,s)=>a+(s.dur||0),0);
+  const totalSchedMins = queueLoadPerDay * wiz.days;
   const totalAvail = dayMins * wiz.days;
   const opts = ['start','middle','end'].map(buildWizardScheduleOption);
   if (!wiz.selectedOption) wiz.selectedOption = opts[0].id;
@@ -2894,11 +2872,10 @@ function generateSchedule() {
 
   for (let day = 0; day < wiz.days; day++) {
     const actualDay = targetStartDay + day;
-    const dc = (wiz.dayCfgs && wiz.dayCfgs[day]) || {};
-    const dayStartM = toM(dc.dayStart || wiz.dayStart || '08:00');
-    const dayEndM = toM(dc.dayEnd || wiz.dayEnd || '20:00');
-    const trackO = toM(dc.trackOpen || wiz.trackOpen || '09:00');
-    const trackC = toM(dc.trackClose || wiz.trackClose || '18:00');
+    const dayStartM = toM(wiz.dayStart || '08:00');
+    const dayEndM = toM(wiz.dayEnd || '20:00');
+    const trackO = toM(wiz.trackOpen || '09:00');
+    const trackC = toM(wiz.trackClose || '18:00');
 
     // Safety clamp: track window must be within day window
     const trackStart = Math.max(dayStartM, trackO);
@@ -2980,12 +2957,11 @@ function generateSchedule() {
   _ensureSchedDayCfg();
   for (let i = 0; i < targetDays; i++) {
     const realDay = targetStartDay + i;
-    const dc = (wiz.dayCfgs && wiz.dayCfgs[i]) || {};
     schedCfg.dayCfgs[realDay] = {
-      dayStart: dc.dayStart || wiz.dayStart,
-      dayEnd: dc.dayEnd || wiz.dayEnd,
-      trackOpen: dc.trackOpen || wiz.trackOpen,
-      trackClose: dc.trackClose || wiz.trackClose,
+      dayStart: wiz.dayStart,
+      dayEnd: wiz.dayEnd,
+      trackOpen: wiz.trackOpen,
+      trackClose: wiz.trackClose,
     };
   }
 
@@ -3107,7 +3083,13 @@ function renderScheduleView() {
   const closeM = w.dayEndM;
   const trackOpenM = w.trackOpenM;
   const trackCloseM = w.trackCloseM;
-  const PX=2, totalH=(closeM-openM)*PX;
+  const dayBlocks = schedule.filter(b=>b.day===currentSchedDay)
+    .sort((a,b)=>toM(a.time)-toM(b.time));
+  const minDur = dayBlocks
+    .filter(b => b.type !== 'reserve')
+    .reduce((m,b) => Math.min(m, Math.max(1, parseInt(b.duration)||1)), Infinity);
+  const PX = Math.max(2, Math.min(12, Math.ceil(14 / (Number.isFinite(minDur) ? minDur : 30))));
+  const totalH=(closeM-openM)*PX;
 
   const typeInfo={
     single:{cls:'sched-single',label:'Single',icon:'\u25cf'},
@@ -3116,9 +3098,6 @@ function renderScheduleView() {
     break: {cls:'sched-break', label:'Break', icon:'\u2014'},
     reserve:{cls:'sched-break',label:'Reserve',icon:'\u2295'},
   };
-
-  const dayBlocks = schedule.filter(b=>b.day===currentSchedDay)
-    .sort((a,b)=>toM(a.time)-toM(b.time));
 
   // Time axis
   let axH='<div style="width:46px;position:relative;height:'+totalH+'px;flex-shrink:0;border-right:1px solid var(--border);">';
@@ -3138,7 +3117,7 @@ function renderScheduleView() {
     +'</div>';
   dayBlocks.forEach(b=>{
     if(b.type==='reserve') return;
-    const bS=toM(b.time), top=(bS-openM)*PX, bH=Math.max(b.duration*PX,24);
+    const bS=toM(b.time), top=(bS-openM)*PX, bH=Math.max((parseInt(b.duration)||0)*PX,10);
     inH+='<div style="position:absolute;top:'+top+'px;left:0;right:0;height:'+bH+'px;padding:2px 5px;border-left:2px solid rgba(255,255,255,0.06);display:flex;flex-direction:column;justify-content:center;">'
       +'<span class="sched-info-time">'+b.time+'</span>'
       +'<span class="sched-info-range">\u2013'+fM(bS+b.duration)+' · '+b.duration+'m</span>'
@@ -3155,7 +3134,7 @@ function renderScheduleView() {
   const frag = document.createDocumentFragment();
   dayBlocks.forEach(block=>{
     const bStartM=toM(block.time), bTop=(bStartM-openM)*PX;
-    const blockH=Math.max(block.duration*PX,24);
+    const blockH=Math.max((parseInt(block.duration)||0)*PX,10);
     const endTime=fM(bStartM+block.duration);
     const ti=typeInfo[block.type]||typeInfo.single;
     const ft=teams.find(x=>x.name===(block.teams||[])[0]);
@@ -3328,6 +3307,7 @@ function pushDayToOnTrack(dayIdx) {
   blocks.forEach(b => {
     sessionQueue.push({
       team: (b.teams||[])[0] || '',
+      teams: (b.teams||[]).slice(),
       type: typeMap[b.type] || 'Single Car',
       duration: b.duration || 30,
       priority: 'High',
@@ -3346,6 +3326,7 @@ function pushBlockToOnTrack(blockId) {
   const typeMap = { single:'Single Car', multi:'Multi Car', open:'Open Pit Lane' };
   sessionQueue.push({
     team: (b.teams||[])[0] || '',
+    teams: (b.teams||[]).slice(),
     type: typeMap[b.type] || 'Single Car',
     duration: b.duration || 30,
     priority: 'High',
@@ -3439,7 +3420,12 @@ function nextSchedDay() {
 function exportScheduleToSessions() {
   const blocks = schedule.filter(b=>b.type!=='break' && b.type!=='reserve' && b.teams && b.teams.length>0);
   if (!blocks.length) { alert('No session blocks to push. Build a schedule first.'); return; }
-  blocks.forEach(b => { b.published = true; b.completed = false; });
+  blocks.forEach(b => {
+    b.published = true;
+    b.completed = false;
+    b.completedTeams = [];
+    b.runStarted = false;
+  });
   lastChangeNotesBase = JSON.parse(JSON.stringify(schedule));
   save();
   alert('Schedule published. Sessions will be added to Session History only after risk data is submitted.');
@@ -3479,7 +3465,7 @@ function renderGarage() {
   renderGarageCaptureTabs();
   if (garageCaptureActiveBlockId) {
     const b = schedule.find(x => x.id === garageCaptureActiveBlockId);
-    if (b) loadGarageCaptureFromBlock(b);
+    if (b) loadGarageCaptureFromBlock(b, garageCaptureActiveTeam);
   }
   renderSessionQueue();
   renderPublishedTodayPlan();
@@ -3495,8 +3481,17 @@ function syncGarageCaptureFromLive() {
     const sb = schedule.find(x => x.id === liveBlk.id);
     if (sb && sb.published && !sb.completed) {
       sb.runStarted = true;
-      // Always focus default capture box on the currently running team
-      garageCaptureActiveBlockId = sb.id;
+      // Keep manual tab choice; only auto-focus when nothing valid is selected.
+      const pending = getPendingCaptureBlocksForToday();
+      const hasSelected = !!garageCaptureActiveBlockId && !!garageCaptureActiveTeam
+        && pending.some(p => p.block.id === garageCaptureActiveBlockId && p.team === garageCaptureActiveTeam);
+      if (!hasSelected) {
+        const firstPending = pending.find(p => p.block.id === sb.id) || pending[0];
+        if (firstPending) {
+          garageCaptureActiveBlockId = firstPending.block.id;
+          garageCaptureActiveTeam = firstPending.team;
+        }
+      }
       save();
     }
     const lead = (liveBlk.teams||[])[0];
@@ -3525,19 +3520,54 @@ function getSessionOrdinalForBlock(block) {
   return idx >= 0 ? (idx + 1) : 1;
 }
 
-function getPendingCaptureBlocksForToday() {
-  const dayIdx = getTodayScheduleDayIndex();
-  return schedule
-    // Tabs appear only after a team has actually started on track
-    .filter(b => (b.day||0)===dayIdx && b.published && !b.completed && !!b.runStarted && b.type!=='break' && b.type!=='reserve' && (b.teams||[]).length)
-    .sort((a,b)=>_toM(a.time)-_toM(b.time));
+function getCaptureTeamsForBlock(block) {
+  if (!block) return [];
+  if (block.type === 'multi') return (block.teams||[]).slice();
+  const lead = (block.teams||[])[0] || '';
+  return lead ? [lead] : [];
+}
+function buildCaptureKey(blockId, team) {
+  return `${blockId}::${team}`;
+}
+function isCapturedForBlockTeam(block, team) {
+  const key = buildCaptureKey(block.id, team);
+  return sessions.some(s => {
+    const byTeamKey = String(s.schedCaptureKey || '') === key;
+    const legacySingle = block.type !== 'multi'
+      && String(s.schedBlockId || '') === String(block.id)
+      && String(s.team || '') === String(team);
+    return byTeamKey || legacySingle;
+  });
+}
+function recomputeBlockCompletion(block) {
+  if (!block || !block.id) return;
+  const reqTeams = getCaptureTeamsForBlock(block);
+  const doneTeams = reqTeams.filter(tn => isCapturedForBlockTeam(block, tn));
+  block.completedTeams = doneTeams;
+  block.completed = reqTeams.length > 0 && doneTeams.length >= reqTeams.length;
 }
 
-function loadGarageCaptureFromBlock(block) {
+function getPendingCaptureBlocksForToday() {
+  const dayIdx = getTodayScheduleDayIndex();
+  const blocks = schedule
+    .filter(b => (b.day||0)===dayIdx && b.published && !!b.runStarted && b.type!=='break' && b.type!=='reserve' && (b.teams||[]).length)
+    .sort((a,b)=>_toM(a.time)-_toM(b.time));
+  const items = [];
+  blocks.forEach(block => {
+    getCaptureTeamsForBlock(block).forEach(team => {
+      if (!isCapturedForBlockTeam(block, team)) items.push({ block, team });
+    });
+  });
+  return items;
+}
+
+function loadGarageCaptureFromBlock(block, activeTeam='') {
   if (!block) return;
-  const d = captureDrafts[block.id] || {};
+  const defaultTeam = activeTeam && (block.teams||[]).includes(activeTeam) ? activeTeam : ((block.teams||[])[0] || '');
+  const draftKey = buildCaptureKey(block.id, defaultTeam);
+  const d = captureDrafts[draftKey] || {};
   const set = (k, v) => { const el = document.getElementById('g-'+k); if (el) el.value = v; };
-  set('team', (block.teams||[])[0] || '');
+  set('team', defaultTeam);
   set('sess-type', block.type === 'multi' ? 'Multi Car' : (block.type === 'open' ? 'Open Pit Lane' : 'Single Car'));
   set('session', getSessionOrdinalForBlock(block));
   ['attempts','laps','stoppages','estops','damage','speed','replans','instab','sensor','manual'].forEach(k => set(k, d[k] ?? 0));
@@ -3547,9 +3577,9 @@ function loadGarageCaptureFromBlock(block) {
 }
 
 function saveGarageCaptureDraftFromInputs() {
-  if (!garageCaptureActiveBlockId) return;
+  if (!garageCaptureActiveBlockId || !garageCaptureActiveTeam) return;
   const g = key => document.getElementById('g-'+key)?.value;
-  captureDrafts[garageCaptureActiveBlockId] = {
+  captureDrafts[buildCaptureKey(garageCaptureActiveBlockId, garageCaptureActiveTeam)] = {
     attempts: parseInt(g('attempts')) || 0,
     laps: parseInt(g('laps')) || 0,
     stoppages: parseInt(g('stoppages')) || 0,
@@ -3567,10 +3597,12 @@ function saveGarageCaptureDraftFromInputs() {
   save();
 }
 
-function selectGarageCaptureTab(blockId) {
-  garageCaptureActiveBlockId = blockId;
+function selectGarageCaptureTab(blockId, team='') {
   const block = schedule.find(b => b.id === blockId);
-  if (block) loadGarageCaptureFromBlock(block);
+  const resolvedTeam = team || ((block?.teams||[])[0] || '');
+  garageCaptureActiveTeam = resolvedTeam;
+  garageCaptureActiveBlockId = blockId;
+  if (block) loadGarageCaptureFromBlock(block, resolvedTeam);
   renderGarageCaptureTabs();
 }
 
@@ -3581,19 +3613,30 @@ function renderGarageCaptureTabs() {
   if (!pending.length) {
     wrap.innerHTML = '<span style="font-size:11px;color:var(--muted);">No pending capture tabs.</span>';
     garageCaptureActiveBlockId = null;
+    garageCaptureActiveTeam = '';
     return;
   }
-  if (!garageCaptureActiveBlockId || !pending.some(b=>b.id===garageCaptureActiveBlockId)) {
+  if (!garageCaptureActiveBlockId || !garageCaptureActiveTeam || !pending.some(p => p.block.id===garageCaptureActiveBlockId && p.team===garageCaptureActiveTeam)) {
     // Default to currently live block if available, otherwise latest started
-    const liveId = scheduleLive?.current?.id;
-    garageCaptureActiveBlockId = pending.some(b=>b.id===liveId) ? liveId : pending[pending.length-1].id;
+    const liveId = scheduleLive?.current?.id || '';
+    const livePending = pending.find(p => p.block.id === liveId);
+    const pick = livePending || pending[pending.length-1];
+    garageCaptureActiveBlockId = pick.block.id;
+    garageCaptureActiveTeam = pick.team;
   }
-  wrap.innerHTML = pending.map(b => {
-    const active = b.id === garageCaptureActiveBlockId;
-    const team = (b.teams||[])[0] || 'Team';
+  wrap.innerHTML = pending.map(p => {
+    const b = p.block;
+    const team = p.team;
+    const active = b.id === garageCaptureActiveBlockId && team === garageCaptureActiveTeam;
+    const isLive = b.id === (scheduleLive?.current?.id || null);
     const ord = getSessionOrdinalForBlock(b);
-    const label = `${team} · ${b.time} · Session ${ord}`;
-    return `<button class="btn sm" onclick="selectGarageCaptureTab('${b.id}')" style="border-color:${active?'rgba(0,212,255,0.5)':'var(--border2)'};color:${active?'var(--accent)':'var(--muted)'};background:${active?'rgba(0,212,255,0.08)':'var(--card)'};">${label}</button>`;
+    const sessLabel = b.type === 'multi' ? 'Multi Car Session' : 'Session';
+    const label = `${team} · ${b.time} · ${sessLabel} ${ord}`;
+    const border = active ? 'rgba(0,212,255,0.5)' : (isLive ? 'rgba(0,232,122,0.45)' : 'var(--border2)');
+    const color = active ? 'var(--accent)' : (isLive ? 'var(--green)' : 'var(--muted)');
+    const bg = active ? 'rgba(0,212,255,0.08)' : (isLive ? 'rgba(0,232,122,0.09)' : 'var(--card)');
+    const safeTeam = String(team).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    return `<button class="btn sm" onclick="selectGarageCaptureTab('${b.id}','${safeTeam}')" style="border-color:${border};color:${color};background:${bg};">${label}</button>`;
   }).join('');
 }
 
@@ -3734,6 +3777,7 @@ function startActiveSession(opts) {
     sb.runStarted = true;
     sb.onTrackQueued = true;
     garageCaptureActiveBlockId = sb.id;
+    garageCaptureActiveTeam = (sb.teams||[])[0] || '';
     save();
   }
   const gt = document.getElementById('g-team'); if (gt) gt.value = team;
@@ -3806,11 +3850,13 @@ function renderSessionQueue() {
   if (!el) return;
   if (!sessionQueue.length) { el.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:10px;">Queue is empty</div>'; return; }
   el.innerHTML = sessionQueue.map((q,i) => {
-    const t = teams.find(x=>x.name===q.team);
+    const lead = q.team || (q.teams||[])[0] || '';
+    const label = (q.teams && q.teams.length) ? q.teams.join(' + ') : lead;
+    const t = teams.find(x=>x.name===lead);
     return `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--card);border:1px solid var(--border);border-radius:5px;">
       <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);">${i+1}</span>
       <span class="team-dot" style="background:${t?.color||'#aaa'}"></span>
-      <span style="font-weight:600;flex:1;">${q.team}</span>
+      <span style="font-weight:600;flex:1;">${label}</span>
       <span class="badge badge-blue" style="font-size:9px;">${q.type}</span>
       <span class="mono" style="font-size:10px;">${q.duration}min</span>
       <button class="btn sm" onclick="dequeueSession(${i})">▶</button>
@@ -3833,8 +3879,9 @@ function addToQueue() {
 function removeFromQueue(i) { sessionQueue.splice(i,1); renderSessionQueue(); }
 function dequeueSession(i) {
   const q = sessionQueue.splice(i,1)[0];
+  const lead = q.team || (q.teams||[])[0] || '';
   startActiveSession({
-    team: q.team,
+    team: lead,
     type: q.type,
     duration: q.duration,
     sessNum: 1,
@@ -5448,6 +5495,7 @@ function init(){
   refreshAuthUI();
   rebuildLiveRisks();
   syncTrackUsedFromSessions();
+  schedule.forEach(b => recomputeBlockCompletion(b));
   updateTopbarSessionInfo();
   renderLiveTable();
   renderFeed();

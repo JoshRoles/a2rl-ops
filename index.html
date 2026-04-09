@@ -650,7 +650,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
                 <div class="field"><label>Planner Replans</label><input type="number" id="g-replans" value="0" min="0"></div>
                 <div class="field"><label>Instability (0-10)</label><input type="number" id="g-instab" value="0" min="0" max="10"></div>
                 <div class="field"><label>Sensor (0-1)</label><input type="number" id="g-sensor" value="0" min="0" max="1" step="0.01"></div>
-                <div class="field"><label>Manual Override (0-10)</label><input type="number" id="g-manual" value="0" min="0" max="10"></div>
+                <div class="field"><label>Manual Override (0=No, 1=Yes)</label><input type="number" id="g-manual" value="0" min="0" max="1" step="1"></div>
                 <div class="field"><label>Weather</label><select id="g-weather"><option>Clear</option><option>Cloudy</option><option>Light Wind</option><option>Strong Wind</option><option>Rain</option></select></div>
               </div>
               <div class="field" style="margin-top:8px;"><label>Notes</label><textarea id="g-notes" placeholder="Capture notes from the run..."></textarea></div>
@@ -822,7 +822,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
           <div class="field"><label>E-Stops / Session</label><input type="number" id="f-estops" value="0" min="0"></div>
           <div class="field"><label>Planner Instability (0–10)</label><input type="number" id="f-instab" value="0" min="0" max="10"></div>
           <div class="field"><label>Sensor Degrade (0–1)</label><input type="number" id="f-sensor" value="0" min="0" max="1" step="0.01"></div>
-          <div class="field"><label>Manual Risk Override (0–10)</label><input type="number" id="f-manual" value="0" min="0" max="10"></div>
+          <div class="field"><label>Manual Risk Override (0=No, 1=Yes)</label><input type="number" id="f-manual" value="0" min="0" max="1" step="1"></div>
         </div>
 
         <div class="form-section-title" style="margin-top:18px;">Pending Automation (Future ROS Integration)</div>
@@ -931,10 +931,51 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
         <div class="panel-body" style="padding:0">
           <table class="data-table">
             <thead><tr>
-              <th>Team</th><th>Sessions</th><th>Avg Risk</th><th>Best</th><th>Worst</th>
-              <th>E-Stops</th><th>Crashes</th><th>Track Hrs</th><th>Tier</th>
+              <th>Team</th><th>Total Sessions</th><th>Cumulative Risk</th><th>Avg Risk</th><th>Best</th><th>Worst</th>
+              <th>E-Stops</th><th>Crashes</th><th>Total Track Hrs</th><th>Tier</th>
             </tr></thead>
             <tbody id="team-summary-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="grid-2" style="margin-top:14px;">
+        <div class="panel">
+          <div class="panel-head"><div class="panel-title">Team Drilldown</div></div>
+          <div class="panel-body">
+            <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;">
+              <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Team</label>
+              <select id="team-drill-select" onchange="renderTeamDrilldown(this.value)" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);padding:6px 10px;border-radius:4px;font-size:12px;font-family:'Barlow',sans-serif;"></select>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+              <input type="date" id="team-drill-date-from" onchange="renderTeamDrilldown(teamAnalysisSelected)" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);padding:6px 8px;border-radius:4px;font-size:12px;font-family:'Barlow',sans-serif;">
+              <input type="date" id="team-drill-date-to" onchange="renderTeamDrilldown(teamAnalysisSelected)" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);padding:6px 8px;border-radius:4px;font-size:12px;font-family:'Barlow',sans-serif;">
+              <select id="team-drill-sess-type" onchange="renderTeamDrilldown(teamAnalysisSelected)" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);padding:6px 8px;border-radius:4px;font-size:12px;font-family:'Barlow',sans-serif;">
+                <option value="">All Session Types</option>
+                <option>Single Car</option><option>Multi Car</option><option>Open Pit Lane</option>
+              </select>
+              <select id="team-drill-event-type" onchange="renderTeamDrilldown(teamAnalysisSelected)" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);padding:6px 8px;border-radius:4px;font-size:12px;font-family:'Barlow',sans-serif;">
+                <option value="">All Event Types</option>
+                <option>Track Competition</option><option>Testing (Track)</option><option>Testing (VDA)</option>
+                <option>Simulator Race</option><option>Simulator Testing</option>
+              </select>
+              <button class="btn sm" onclick="resetTeamDrillFilters()">Reset Filters</button>
+            </div>
+            <div class="chart-wrap-lg"><canvas id="chart-team-drill"></canvas></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><div class="panel-title">Risk Breakdown (Selected Team)</div></div>
+          <div class="panel-body"><div class="chart-wrap-lg"><canvas id="chart-team-factors"></canvas></div></div>
+        </div>
+      </div>
+      <div class="panel" style="margin-top:14px;">
+        <div class="panel-head"><div class="panel-title">Selected Team Session Log</div></div>
+        <div class="panel-body" style="padding:0">
+          <table class="data-table">
+            <thead><tr>
+              <th>Date/Time</th><th>Type</th><th>Sess#</th><th>Risk</th><th>E-Stops</th><th>Crash</th><th>Laps</th><th>Speed</th><th>Damage</th><th>Replans</th><th>Instab</th><th>Manual</th>
+            </tr></thead>
+            <tbody id="team-drill-tbody"></tbody>
           </table>
         </div>
       </div>
@@ -944,18 +985,21 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
     <div class="view" id="view-trends">
       <div class="grid-2" style="margin-bottom:14px;">
         <div class="panel">
-          <div class="panel-head"><div class="panel-title">Fleet Risk — Season Arc</div></div>
+          <div class="panel-head"><div class="panel-title">Team Risk Trend by Session</div></div>
           <div class="panel-body"><div class="chart-wrap-lg"><canvas id="chart-arc"></canvas></div></div>
         </div>
         <div class="panel">
-          <div class="panel-head"><div class="panel-title">DQI Metrics Over Time</div></div>
+          <div class="panel-head"><div class="panel-title">Team Risk Trend by Date</div></div>
           <div class="panel-body"><div class="chart-wrap-lg"><canvas id="chart-dqi2"></canvas></div></div>
         </div>
       </div>
       <div class="panel">
-        <div class="panel-head"><div class="panel-title">Risk Factor Correlation Heatmap</div></div>
-        <div class="panel-body">
-          <div id="heatmap-wrap" style="display:grid;gap:3px;"></div>
+        <div class="panel-head"><div class="panel-title">Team Trend Summary</div></div>
+        <div class="panel-body" style="padding:0">
+          <table class="data-table">
+            <thead><tr><th>Team</th><th>Sessions</th><th>First Avg</th><th>Last Avg</th><th>Delta</th><th>Direction</th></tr></thead>
+            <tbody id="trend-summary-tbody"></tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -1372,6 +1416,7 @@ let lastChangeNotesBase = [];
 let captureDrafts = JSON.parse(localStorage.getItem('a2rl_capture_drafts') || '{}');
 let garageCaptureActiveBlockId = null;
 let garageCaptureActiveTeam = '';
+let teamAnalysisSelected = '';
 let users = JSON.parse(localStorage.getItem('a2rl_users') || '[]');
 let currentUser = JSON.parse(localStorage.getItem('a2rl_current_user') || 'null');
 
@@ -1827,8 +1872,8 @@ function calcRisk(s) {
   breakdown.ttc = ttcPts;
   score += ttcPts;
 
-  // Manual override bump
-  const manualBump = ((s.manualOverride || 0) / 10) * 15;
+  // Manual override bump (boolean 0/1)
+  const manualBump = (Math.max(0, Math.min(1, Number(s.manualOverride) || 0))) * 15;
   breakdown.manual = manualBump;
   score += manualBump;
 
@@ -1911,7 +1956,8 @@ function renderLiveTable() {
   const hasRealRisk = sessions.some(s => (s.riskScore || 0) > 0 && !s.stub);
 
   let rank = 1;
-  document.getElementById('team-tbody').innerHTML = sorted.map(({team,score}) => {
+  document.getElementById('team-tbody').innerHTML = sorted.map((row) => {
+    const { team, score } = row;
     const c = riskColor(score);
     const tier = riskTier(score);
     // Trend is computed from last two real sessions for this team
@@ -1927,6 +1973,13 @@ function renderLiveTable() {
       else if (d < 0) { trend = '▼'; trendCol = 'var(--green)'; trendVal = ' ' + Math.abs(d).toFixed(1); }
       else { trend = '—'; trendCol = 'var(--muted)'; trendVal = ' 0.0'; }
     }
+    const recent = real.slice(-3);
+    const estopsAvg = recent.length ? (recent.reduce((a,s)=>a+(s.estops||0),0) / recent.length) : 0;
+    const ttcAvg = recent.length ? (recent.reduce((a,s)=>a+(s.ttc||0),0) / recent.length) : 0;
+    const estopsDisplay = recent.length ? estopsAvg.toFixed(1) : '—';
+    const ttcDisplay = recent.length && ttcAvg > 0 ? ttcAvg.toFixed(1) : '—';
+    const latest = real.length ? getSessionDateObj(real[real.length-1]) : null;
+    const freshness = latest ? `${latest.toLocaleDateString(undefined,{day:'2-digit',month:'short'})} ${latest.toTimeString().slice(0,5)}` : 'no data';
     return `<tr>
       <td style="color:var(--muted);font-size:11px;">${rank++}</td>
       <td><span class="team-dot" style="background:${team.color}"></span><span class="team-name" style="font-weight:600">${team.name}</span></td>
@@ -1936,9 +1989,12 @@ function renderLiveTable() {
           <span class="risk-num" style="color:${c}">${score.toFixed(1)}</span>
         </div>
       </td>
-      <td class="mono" style="color:var(--muted)">—</td>
-      <td class="mono" style="color:var(--muted)">—</td>
-      <td style="color:${trendCol};font-size:12px;">${trend}${trendVal}</td>
+      <td class="mono" style="color:var(--muted)">${ttcDisplay}</td>
+      <td class="mono" style="color:var(--muted)">${estopsDisplay}</td>
+      <td style="font-size:11px;">
+        <div style="color:${trendCol};font-size:12px;">${trend}${trendVal}</div>
+        <div style="color:var(--muted);font-size:10px;">last: ${freshness}</div>
+      </td>
       <td><span class="badge ${tier.cls}">${tier.label}</span></td>
     </tr>`;
   }).join('');
@@ -1963,7 +2019,7 @@ function renderLiveTable() {
   document.getElementById('stat-active-teams').textContent = activeTeams.length;
 
   const today = new Date().toDateString();
-  const todaySessions = sessions.filter(s => new Date(s.timestamp).toDateString() === today);
+  const todaySessions = sessions.filter(s => new Date(s.trackTimestamp || s.timestamp).toDateString() === today);
   document.getElementById('stat-sessions-today').textContent = todaySessions.length;
 }
 
@@ -2106,7 +2162,7 @@ function calcAndSubmit(prefix='f') {
     estops:        parseInt(from('estops')?.value) || 0,
     instability:   parseFloat(from('instab')?.value) || 0,
     sensor:        parseFloat(from('sensor')?.value) || 0,
-    manualOverride:parseFloat(from('manual')?.value) || 0,
+    manualOverride:Math.max(0, Math.min(1, parseInt(from('manual')?.value) || 0)),
     ttc: 0, ttcMin: 0, gpsDeviation: 0, lateralAccel: 0,
   };
 
@@ -2122,8 +2178,6 @@ function calcAndSubmit(prefix='f') {
     d.setDate(d.getDate() + (linkBlk.day || 0));
     const dateStr = d.toISOString().split('T')[0];
     s.trackTimestamp = `${dateStr}T${linkBlk.time}:00`;
-    const b = schedule.find(x=>x.id===linkBlk.id);
-    if (b) recomputeBlockCompletion(b);
   }
 
   const { score, breakdown } = calcRisk(s);
@@ -2132,6 +2186,10 @@ function calcAndSubmit(prefix='f') {
   s.id = String(Date.now());
 
   sessions.push(s);
+  if (linkBlk) {
+    const b2 = schedule.find(x=>x.id===linkBlk.id);
+    if (b2) recomputeBlockCompletion(b2);
+  }
   liveRisks[team] = score;
   syncTrackUsedFromSessions();
   save();
@@ -2156,6 +2214,8 @@ function calcAndSubmit(prefix='f') {
 
   // Update live
   renderLiveTable();
+  renderPublishedSessionsTable();
+  renderSessionOverviewTable();
   addFeedEvent(team, `Session logged — Risk ${score} (${tier.label})`, col);
   if (prefix === 'g' && selectedBlk) {
     delete captureDrafts[`${selectedBlk.id}::${team}`];
@@ -2239,7 +2299,7 @@ function submitManualSession() {
     estops: parseInt(document.getElementById('ms-estops')?.value) || 0,
     instability: parseFloat(document.getElementById('ms-instab')?.value) || 0,
     sensor: parseFloat(document.getElementById('ms-sensor')?.value) || 0,
-    manualOverride: parseFloat(document.getElementById('ms-manual')?.value) || 0,
+    manualOverride: Math.max(0, Math.min(1, parseInt(document.getElementById('ms-manual')?.value) || 0)),
     ttc:0, ttcMin:0, gpsDeviation:0, lateralAccel:0,
   };
   const { score, breakdown } = calcRisk(s);
@@ -2291,7 +2351,7 @@ function renderHistory() {
   tbody.innerHTML = filtered.map(s => {
     const tier = riskTier(s.riskScore || 0);
     const col = riskColor(s.riskScore || 0);
-    const dt = new Date(s.timestamp);
+    const dt = new Date(s.trackTimestamp || s.timestamp);
     const dtStr = isNaN(dt) ? '—' : `${dt.toLocaleDateString()} ${dt.toTimeString().slice(0,5)}`;
     const t = teams.find(x => x.name === s.team);
     const tc = t ? t.color : '#aaa';
@@ -2323,61 +2383,167 @@ function deleteSession(id) {
 // ═══════════════════════════════════════════════════════════════════════
 // TEAM ANALYSIS VIEW
 // ═══════════════════════════════════════════════════════════════════════
+function getSessionDateObj(s) {
+  const dt = new Date(s.trackTimestamp || s.timestamp);
+  return isNaN(dt) ? new Date(0) : dt;
+}
 function renderTeamView() {
-  const activeTeams = teams.filter(t => t.active);
+  const teamMap = {};
+  teams.forEach(t => { teamMap[t.name] = t; });
+  sessions.forEach(s => {
+    if (!teamMap[s.team]) teamMap[s.team] = { name: s.team, color: '#8899aa', active: true };
+  });
+  const allTeams = Object.values(teamMap);
 
-  // Compute per-team stats from sessions
   const stats = {};
-  activeTeams.forEach(t => {
-    const ts = sessions.filter(s => s.team === t.name);
+  allTeams.forEach(t => {
+    const ts = sessions.filter(s => s.team === t.name).sort((a,b)=>getSessionDateObj(a)-getSessionDateObj(b));
     const scores = ts.map(s => s.riskScore || 0);
+    const cumRisk = scores.reduce((a,b)=>a+b,0);
+    const totalMins = ts.reduce((a,s)=>a+(parseInt(s.duration)||0),0);
     stats[t.name] = {
       sessions: ts.length,
-      avg: scores.length ? scores.reduce((a,b)=>a+b,0)/scores.length : 0,
+      cumRisk,
+      avg: scores.length ? (cumRisk/scores.length) : 0,
       best: scores.length ? Math.min(...scores) : 0,
       worst: scores.length ? Math.max(...scores) : 0,
       estops: ts.reduce((a,s)=>a+(s.estops||0),0),
       crashes: ts.filter(s=>s.crashed==='Yes').length,
-      trackHrs: (trackAlloc.find(a=>a.team===t.name)?.used || 0).toFixed(1),
+      trackHrs: (totalMins/60),
+      rows: ts,
     };
   });
 
-  // Stat cards
-  const byAvg = activeTeams.filter(t=>stats[t.name].sessions>0).sort((a,b)=>stats[a.name].avg-stats[b.name].avg);
+  const withData = allTeams.filter(t => stats[t.name].sessions > 0);
+  const byAvg = [...withData].sort((a,b)=>stats[a.name].avg-stats[b.name].avg);
   if (byAvg.length) {
     document.getElementById('ta-lowest').textContent = byAvg[0].name;
     document.getElementById('ta-lowest-score').textContent = `Avg score: ${stats[byAvg[0].name].avg.toFixed(1)}`;
     document.getElementById('ta-highest').textContent = byAvg[byAvg.length-1].name;
     document.getElementById('ta-highest-score').textContent = `Avg score: ${stats[byAvg[byAvg.length-1].name].avg.toFixed(1)}`;
   }
-  const bySess = [...activeTeams].sort((a,b)=>stats[b.name].sessions-stats[a.name].sessions);
+  const bySess = [...allTeams].sort((a,b)=>stats[b.name].sessions-stats[a.name].sessions);
   if (bySess.length) {
     document.getElementById('ta-most').textContent = bySess[0].name;
     document.getElementById('ta-most-count').textContent = `${stats[bySess[0].name].sessions} sessions`;
-    const byEstops = [...activeTeams].sort((a,b)=>stats[b.name].estops-stats[a.name].estops);
+    const byEstops = [...allTeams].sort((a,b)=>stats[b.name].estops-stats[a.name].estops);
     document.getElementById('ta-estops').textContent = byEstops[0].name;
     document.getElementById('ta-estops-count').textContent = `${stats[byEstops[0].name].estops} total e-stops`;
   }
 
-  // Summary table
-  document.getElementById('team-summary-tbody').innerHTML = activeTeams.map(t => {
+  const tbody = document.getElementById('team-summary-tbody');
+  if (tbody) tbody.innerHTML = allTeams.map(t => {
     const st = stats[t.name];
     const tier = riskTier(st.avg);
-    return `<tr>
+    const click = `teamAnalysisSelected='${String(t.name).replace(/\\/g,'\\\\').replace(/'/g,"\\'")}';renderTeamDrilldown(teamAnalysisSelected);`;
+    return `<tr onclick="${click}" style="cursor:pointer;">
       <td><span class="team-dot" style="background:${t.color}"></span><b>${t.name}</b></td>
       <td class="mono">${st.sessions}</td>
+      <td class="mono" style="color:${riskColor(Math.min(100, st.cumRisk/Math.max(1,st.sessions)))}">${st.cumRisk.toFixed(1)}</td>
       <td><span style="color:${riskColor(st.avg)};font-family:'JetBrains Mono',monospace;font-weight:600">${st.avg.toFixed(1)}</span></td>
       <td class="mono" style="color:var(--green)">${st.best.toFixed(1)}</td>
       <td class="mono" style="color:var(--red)">${st.worst.toFixed(1)}</td>
       <td class="mono">${st.estops}</td>
       <td class="mono" style="color:${st.crashes>0?C.red:C.muted}">${st.crashes}</td>
-      <td class="mono">${st.trackHrs}h</td>
+      <td class="mono">${st.trackHrs.toFixed(1)}h</td>
       <td><span class="badge ${tier.cls}">${tier.label}</span></td>
     </tr>`;
   }).join('');
 
-  // Charts
-  renderTeamCharts(stats, activeTeams);
+  const sel = document.getElementById('team-drill-select');
+  if (sel) {
+    sel.innerHTML = allTeams.map(t => `<option value="${t.name}">${t.name}</option>`).join('');
+    const pick = teamAnalysisSelected && allTeams.some(t=>t.name===teamAnalysisSelected) ? teamAnalysisSelected : (allTeams[0]?.name || '');
+    if (pick) {
+      teamAnalysisSelected = pick;
+      sel.value = pick;
+      renderTeamDrilldown(pick);
+    } else {
+      const body = document.getElementById('team-drill-tbody');
+      if (body) body.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:16px;">No team data</td></tr>';
+    }
+  }
+}
+
+function renderTeamDrilldown(teamName) {
+  if (!teamName) return;
+  teamAnalysisSelected = teamName;
+  const fromV = document.getElementById('team-drill-date-from')?.value || '';
+  const toV = document.getElementById('team-drill-date-to')?.value || '';
+  const sessTypeV = document.getElementById('team-drill-sess-type')?.value || '';
+  const eventTypeV = document.getElementById('team-drill-event-type')?.value || '';
+  const fromD = fromV ? new Date(fromV + 'T00:00:00') : null;
+  const toD = toV ? new Date(toV + 'T23:59:59') : null;
+  const rows = sessions
+    .filter(s => s.team === teamName)
+    .filter(s => !sessTypeV || (s.sessType||'') === sessTypeV)
+    .filter(s => !eventTypeV || (s.eventType||'') === eventTypeV)
+    .filter(s => {
+      const dt = getSessionDateObj(s);
+      if (fromD && dt < fromD) return false;
+      if (toD && dt > toD) return false;
+      return true;
+    })
+    .sort((a,b)=>getSessionDateObj(a)-getSessionDateObj(b));
+  const labels = rows.map((_,i)=>`S${i+1}`);
+  mkChart('chart-team-drill', {
+    type:'line',
+    data:{
+      labels: labels.length ? labels : ['No Data'],
+      datasets:[{
+        label: `${teamName} Risk`,
+        data: rows.length ? rows.map(s=>s.riskScore||0) : [0],
+        borderColor:'#00d4ff', backgroundColor:'rgba(0,212,255,0.12)', tension:0.3, fill:true, pointRadius:3
+      }]
+    },
+    options:{...chartCfg, responsive:true, maintainAspectRatio:false}
+  });
+  const factorAvg = key => rows.length ? +(rows.reduce((a,s)=>a+(Number(s[key])||0),0)/rows.length).toFixed(2) : 0;
+  mkChart('chart-team-factors', {
+    type:'bar',
+    data:{
+      labels:['E-Stops','Stoppages','Instability','Replans','Damage','Manual'],
+      datasets:[{
+        label:'Per-session average',
+        data:[factorAvg('estops'),factorAvg('stoppages'),factorAvg('instability'),factorAvg('replans'),factorAvg('damage'),factorAvg('manualOverride')],
+        backgroundColor:'rgba(123,111,255,0.45)', borderColor:'rgba(123,111,255,0.95)', borderWidth:1, borderRadius:4
+      }]
+    },
+    options:{...chartCfg, responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}}
+  });
+  const tb = document.getElementById('team-drill-tbody');
+  if (!tb) return;
+  if (!rows.length) {
+    tb.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:16px;">No sessions for this team</td></tr>';
+    return;
+  }
+  tb.innerHTML = rows.map(s => {
+    const dt = getSessionDateObj(s);
+    const dtStr = isNaN(dt) ? '—' : `${dt.toLocaleDateString()} ${dt.toTimeString().slice(0,5)}`;
+    const r = Number(s.riskScore||0);
+    return `<tr>
+      <td class="mono" style="font-size:10px;color:var(--muted)">${dtStr}</td>
+      <td>${s.sessType||'Single Car'}</td>
+      <td class="mono">#${s.sessNum||1}</td>
+      <td><span style="color:${riskColor(r)};font-family:'JetBrains Mono',monospace;font-weight:600">${r.toFixed(1)}</span></td>
+      <td class="mono">${s.estops||0}</td>
+      <td style="color:${s.crashed==='Yes'?C.red:C.muted}">${s.crashed||'No'}</td>
+      <td class="mono">${s.laps||0}</td>
+      <td class="mono">${s.speed||0}</td>
+      <td class="mono">${s.damage||0}</td>
+      <td class="mono">${s.replans||0}</td>
+      <td class="mono">${s.instability||0}</td>
+      <td class="mono">${s.manualOverride||0}</td>
+    </tr>`;
+  }).join('');
+}
+
+function resetTeamDrillFilters() {
+  const df = document.getElementById('team-drill-date-from'); if (df) df.value = '';
+  const dt = document.getElementById('team-drill-date-to'); if (dt) dt.value = '';
+  const st = document.getElementById('team-drill-sess-type'); if (st) st.value = '';
+  const et = document.getElementById('team-drill-event-type'); if (et) et.value = '';
+  renderTeamDrilldown(teamAnalysisSelected);
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -2444,6 +2610,7 @@ function startScheduleWizard() {
     buildScope: 'day',
     teams: [], // [{name, category, sesstype}]
     sessionDur: 30, sessionsPerDay: 2,
+    multiSharePct: 50,
     lunchDuration: 45, lunchWindowStart: '12:00', lunchWindowEnd: '14:00',
     includeEndBuffer: true, endBufferMins: 15, selectedOption: 'middle',
     multiCarTeams: [],  // team names that share track (multi-car)
@@ -2609,6 +2776,8 @@ function renderWizStep2(body) {
             <input type="number" id="wiz-sess-dur" value="${wiz.sessionDur}" min="10" max="120"></div>
           <div class="field"><label>Sessions Per Team Per Day</label>
             <input type="number" id="wiz-sess-per-day" value="${wiz.sessionsPerDay}" min="1" max="6"></div>
+          <div class="field"><label>Multi Session Share (%)</label>
+            <input type="number" id="wiz-multi-share" value="${wiz.multiSharePct ?? 50}" min="0" max="100"></div>
         </div>
         <div class="sep" style="margin:12px 0;"></div>
         <div class="form-grid">
@@ -2632,7 +2801,7 @@ function renderWizStep2(body) {
           <div style="color:var(--muted);line-height:1.7;">
             • Rookie baseline = ${wiz.sessionsPerDay||2} sessions × ${wiz.sessionDur||30}min<br>
             • Category multipliers come from Admin Settings (${Math.round((CAT_MULT.rookie||1)*100)}% / ${Math.round((CAT_MULT.challenger||0.8)*100)}% / ${Math.round((CAT_MULT.pro||0.6)*100)}%)<br>
-            • Multi Car groups use the same session rule as configured here (sessions/day and duration)<br>
+            • Multi Car groups can run both multi and single sessions using the Multi Session Share split<br>
             • Multi Car groups share one slot in the final schedule, so total track load still fits available time
           </div>
         </div>
@@ -2644,7 +2813,7 @@ function renderWizStep2(body) {
       </div>
       <div class="panel-body">
         <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
-          Create groups of 2–5 cars that share one track slot. Each group runs as one session. Allocation per car reduces with group size.
+          Create groups of 2–5 cars that share one track slot. Grouped teams can still run single sessions using the mix split.
         </div>
         <div id="wiz-multi-groups" style="display:flex;flex-direction:column;gap:8px;"></div>
         <div style="margin-top:10px;font-size:11px;color:var(--muted);padding:8px 10px;background:rgba(255,255,255,0.025);border-radius:4px;">
@@ -2669,6 +2838,8 @@ function wizMultiToggle(cb) {
 function saveWizStep2() {
   wiz.sessionDur = parseInt(document.getElementById('wiz-sess-dur')?.value) || 30;
   wiz.sessionsPerDay = parseInt(document.getElementById('wiz-sess-per-day')?.value) || 2;
+  const ms = parseInt(document.getElementById('wiz-multi-share')?.value);
+  wiz.multiSharePct = Number.isFinite(ms) ? Math.max(0, Math.min(100, ms)) : 50;
   const ld = parseInt(document.getElementById('wiz-lunch-dur')?.value);
   wiz.lunchDuration = Number.isFinite(ld) && ld >= 0 ? ld : 45;
   wiz.lunchWindowStart = document.getElementById('wiz-lunch-start')?.value || '12:00';
@@ -2680,33 +2851,53 @@ function saveWizStep2() {
 }
 
 function calcAllocation() {
-  // Returns array of {name, category, sesstype, isMulti, allocMins, sessionsPerDay}
-  const multiNames2 = new Set((wiz.multiGroups||[]).flat());
-  return wiz.teams.map(t => {
+  // Returns array of {name, category, isMulti, groupSize, numSessions, singleSessions, multiSessions, allocMins}
+  const groups = wiz.multiGroups || [];
+  const multiNames = new Set(groups.flat());
+  const byName = {};
+  wiz.teams.forEach(t => {
     const cat = t.category || 'rookie';
     const mult = CAT_MULT[cat];
-    const isMulti = multiNames2.has(t.name);
-    const group = (wiz.multiGroups||[]).find(g=>g.includes(t.name));
-    const groupSize = group ? group.length : 1;
-    const numSessions = isMulti
-      ? Math.max(1, parseInt(wiz.sessionsPerDay||2))
-      : Math.max(1, Math.round((wiz.sessionsPerDay||2) * mult));
-    const allocMins = numSessions * wiz.sessionDur;
-    return { name: t.name, category: cat, isMulti, groupSize, allocMins, numSessions };
+    const totalSessions = Math.max(1, Math.round((wiz.sessionsPerDay||2) * mult));
+    const group = groups.find(g=>g.includes(t.name));
+    byName[t.name] = {
+      name: t.name,
+      category: cat,
+      isMulti: !!group,
+      groupSize: group ? group.length : 1,
+      numSessions: totalSessions,
+      singleSessions: totalSessions,
+      multiSessions: 0,
+      allocMins: totalSessions * wiz.sessionDur,
+    };
   });
+
+  const share = Math.max(0, Math.min(1, (wiz.multiSharePct ?? 50) / 100));
+  groups.forEach(group => {
+    if (!group.length) return;
+    const totals = group.map(n => byName[n]?.numSessions || 0).filter(n => n > 0);
+    if (!totals.length) return;
+    const base = Math.max(1, Math.round(totals.reduce((a,b)=>a+b,0) / totals.length));
+    const groupMulti = Math.max(1, Math.min(base, Math.round(base * share)));
+    group.forEach(name => {
+      const row = byName[name];
+      if (!row) return;
+      row.multiSessions = Math.min(groupMulti, row.numSessions);
+      row.singleSessions = Math.max(0, row.numSessions - row.multiSessions);
+    });
+  });
+
+  return wiz.teams.map(t => byName[t.name]).filter(Boolean);
 }
 
 function getWizardSessionQueue(alloc) {
   const multiGroups = wiz.multiGroups || [];
-  const multiNames = new Set(multiGroups.flat());
-  const singleAlloc = alloc.filter(t => !multiNames.has(t.name));
   const queue = [];
-  singleAlloc.forEach(t => {
-    for (let s = 0; s < t.numSessions; s++) queue.push({ type:'single', teams:[t.name], dur: wiz.sessionDur });
+  alloc.forEach(t => {
+    for (let s = 0; s < (t.singleSessions || 0); s++) queue.push({ type:'single', teams:[t.name], dur: wiz.sessionDur });
   });
   multiGroups.forEach(group => {
-    const ref = alloc.find(t => t.name === group[0]);
-    const n = ref ? ref.numSessions : (wiz.sessionsPerDay||2);
+    const n = Math.min(...group.map(name => (alloc.find(t => t.name === name)?.multiSessions || 0)));
     for (let s = 0; s < n; s++) queue.push({ type:'multi', teams:group, dur: wiz.sessionDur });
   });
   const byKey = {};
@@ -2803,15 +2994,16 @@ function renderWizStep3(body) {
       <div class="panel"><div class="panel-head"><div class="panel-title">Per-Team Allocation</div></div>
       <div class="panel-body" style="padding:0;">
         <table class="data-table">
-          <thead><tr><th>Team</th><th>Category</th><th>Type</th><th>Sessions/Day</th><th>Total Mins</th></tr></thead>
+          <thead><tr><th>Team</th><th>Category</th><th>Mix</th><th>Single/Day</th><th>Multi/Day</th><th>Total Mins</th></tr></thead>
           <tbody>
             ${alloc.map(t => {
               const tm = teams.find(x=>x.name===t.name);
               return `<tr>
                 <td><span class="team-dot" style="background:${tm?tm.color:'#aaa'}"></span><b>${t.name}</b></td>
                 <td><span style="font-size:10px;font-weight:700;color:${CAT_COLOR[t.category]}">${CAT_LABEL[t.category]}</span></td>
-                <td>${t.isMulti?'<span class="badge badge-purple" style="font-size:9px;">MULTI</span>':'<span class="badge badge-blue" style="font-size:9px;">SINGLE</span>'}</td>
-                <td class="mono">${t.numSessions}</td>
+                <td>${t.isMulti?'<span class="badge badge-purple" style="font-size:9px;">MIXED</span>':'<span class="badge badge-blue" style="font-size:9px;">SINGLE</span>'}</td>
+                <td class="mono">${t.singleSessions||0}</td>
+                <td class="mono">${t.multiSessions||0}</td>
                 <td class="mono">${t.allocMins} min (${(t.allocMins/60).toFixed(1)}h)</td>
               </tr>`;
             }).join('')}
@@ -2865,11 +3057,6 @@ function generateSchedule() {
   const alloc = calcAllocation();
   const optionId = wiz.selectedOption || 'middle';
 
-  // Multi-car groups from wizard; singles = everyone not in a group
-  const multiGroups = wiz.multiGroups || [];
-  const multiNames = new Set(multiGroups.flat());
-  const singleAlloc = alloc.filter(t => !multiNames.has(t.name));
-
   for (let day = 0; day < wiz.days; day++) {
     const actualDay = targetStartDay + day;
     const dayStartM = toM(wiz.dayStart || '08:00');
@@ -2911,24 +3098,8 @@ function generateSchedule() {
       });
     }
 
-    // Build session queue: interleaved round-robin
-    const queue = [];
-    singleAlloc.forEach(t => {
-      for (let s = 0; s < t.numSessions; s++) queue.push({ type:'single', teams:[t.name], dur });
-    });
-    multiGroups.forEach(group => {
-      const ref = alloc.find(t => t.name === group[0]);
-      const n = ref ? ref.numSessions : (wiz.sessionsPerDay||2);
-      for (let s = 0; s < n; s++) queue.push({ type:'multi', teams:group, dur });
-    });
-
-    // Round-robin so same team doesn't run back-to-back
-    const byKey = {};
-    queue.forEach(s => { const k=s.teams[0]; if(!byKey[k]) byKey[k]=[]; byKey[k].push(s); });
-    const keys = Object.keys(byKey);
-    const interleaved = [];
-    const maxLen = Math.max(...keys.map(k=>byKey[k].length), 0);
-    for (let i=0; i<maxLen; i++) keys.forEach(k => { if(byKey[k][i]) interleaved.push(byKey[k][i]); });
+    // Build mixed single+multi queue
+    const interleaved = getWizardSessionQueue(alloc);
 
     // Place back-to-back into windows
     let wi = 0, cursor = windows[0]?.start ?? trackO;
@@ -4522,126 +4693,97 @@ function renderAllocationChart() {
 // ═══════════════════════════════════════════════════════════════════════
 function renderTrends() {
   setTimeout(() => {
-    const activeTeams = teams.filter(t => t.active);
+    const teamMap = {};
+    teams.forEach(t => { teamMap[t.name] = t; });
+    sessions.forEach(s => { if (!teamMap[s.team]) teamMap[s.team] = { name:s.team, color:'#8899aa', active:true }; });
+    const allTeams = Object.values(teamMap);
+    const real = [...sessions]
+      .filter(s => (s.riskScore || 0) > 0 && !s.stub)
+      .sort((a,b)=>getSessionDateObj(a)-getSessionDateObj(b));
 
-    // ── Season arc: avg risk per session, ordered by timestamp ──
-    const sorted = [...sessions].filter(s => s.riskScore > 0)
-      .sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
-    const arcLabels = sorted.map((s,i) => '#'+(i+1)+' '+s.team.slice(0,4));
-    const arcData   = sorted.map(s => s.riskScore);
-    // rolling 5-session average
-    const rollingAvg = arcData.map((_, i) => {
-      const window = arcData.slice(Math.max(0,i-4), i+1);
-      return +(window.reduce((a,b)=>a+b,0)/window.length).toFixed(1);
-    });
+    const byTeam = {};
+    allTeams.forEach(t => { byTeam[t.name] = real.filter(s => s.team === t.name); });
+    const sessionCountMax = Math.max(1, ...allTeams.map(t => byTeam[t.name].length));
+    const labelsBySession = Array.from({length:sessionCountMax}, (_,i)=>`S${i+1}`);
 
     mkChart('chart-arc', {
       type:'line',
       data:{
-        labels: arcLabels.length ? arcLabels : ['No Data'],
-        datasets:[
-          { label:'Session Risk', data: arcData.length?arcData:[0],
-            borderColor:'rgba(0,212,255,0.4)', backgroundColor:'rgba(0,212,255,0.05)',
-            tension:0.3, fill:true, pointRadius:3, pointBackgroundColor: arcData.map(v => riskColor(v)) },
-          { label:'5-Session Rolling Avg', data: rollingAvg.length?rollingAvg:[0],
-            borderColor:'#ffaa00', borderWidth:2, tension:0.5,
-            fill:false, pointRadius:0, borderDash:[5,3] },
-        ]
+        labels: labelsBySession,
+        datasets: allTeams.filter(t => byTeam[t.name].length > 0).map(t => ({
+          label: t.name,
+          data: labelsBySession.map((_,i)=>byTeam[t.name][i] ? +(byTeam[t.name][i].riskScore||0).toFixed(1) : null),
+          spanGaps:true,
+          borderColor: t.color,
+          backgroundColor: t.color+'22',
+          tension:0.25,
+          fill:false,
+          pointRadius:2
+        }))
       },
-      options:{...chartCfg,responsive:true,maintainAspectRatio:false,
-        plugins:{...chartCfg.plugins, tooltip:{callbacks:{
-          label: ctx => ctx.dataset.label+': '+ctx.parsed.y.toFixed(1)
-        }}}
-      }
+      options:{...chartCfg, responsive:true, maintainAspectRatio:false}
     });
 
-    // ── DQI over time: e-stops, instability, stoppages per session ──
-    const dqiLabels = sorted.map((s,i) => '#'+(i+1));
+    // Aggregate by day per team
+    const daySet = new Set(real.map(s => {
+      const d = getSessionDateObj(s);
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    }));
+    const dayLabels = [...daySet].sort();
+    const byTeamDay = {};
+    allTeams.forEach(t => {
+      byTeamDay[t.name] = {};
+      byTeam[t.name].forEach(s => {
+        const d = getSessionDateObj(s);
+        const k = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        if (!byTeamDay[t.name][k]) byTeamDay[t.name][k] = [];
+        byTeamDay[t.name][k].push(s.riskScore||0);
+      });
+    });
     mkChart('chart-dqi2', {
       type:'line',
       data:{
-        labels: dqiLabels.length ? dqiLabels : ['No Data'],
-        datasets:[
-          { label:'E-Stops', data: sorted.map(s=>s.estops||0),
-            borderColor:'#ff3c3c', tension:0.4, pointRadius:2, fill:false },
-          { label:'Planner Instability', data: sorted.map(s=>s.instability||0),
-            borderColor:'#7b6fff', tension:0.4, pointRadius:2, fill:false },
-          { label:'SW Stoppages', data: sorted.map(s=>s.stoppages||0),
-            borderColor:'#ffaa00', tension:0.4, pointRadius:2, fill:false },
-        ]
+        labels: dayLabels.length ? dayLabels : ['No Data'],
+        datasets: allTeams.filter(t => byTeam[t.name].length > 0).map(t => ({
+          label: t.name,
+          data: dayLabels.map(d => {
+            const arr = byTeamDay[t.name][d] || [];
+            return arr.length ? +(arr.reduce((a,b)=>a+b,0)/arr.length).toFixed(1) : null;
+          }),
+          spanGaps:true,
+          borderColor:t.color,
+          backgroundColor:t.color+'22',
+          tension:0.25,
+          fill:false,
+          pointRadius:2
+        }))
       },
-      options:{...chartCfg,responsive:true,maintainAspectRatio:false}
+      options:{...chartCfg, responsive:true, maintainAspectRatio:false}
     });
 
-    // ── Per-team avg risk bar chart ──
-    const teamLabels = activeTeams.map(t=>t.name);
-    const teamAvgs   = activeTeams.map(t => {
-      const ts = sessions.filter(s=>s.team===t.name&&s.riskScore>0);
-      return ts.length ? +(ts.reduce((a,s)=>a+s.riskScore,0)/ts.length).toFixed(1) : 0;
-    });
-    const teamColors = activeTeams.map(t=>t.color);
-    mkChart('chart-dist', {
-      type:'bar',
-      data:{
-        labels: teamLabels,
-        datasets:[{
-          label:'Avg Risk Score',
-          data: teamAvgs,
-          backgroundColor: activeTeams.map(t=>t.color+'99'),
-          borderColor: activeTeams.map(t=>t.color),
-          borderWidth:1, borderRadius:4
-        }]
-      },
-      options:{...chartCfg,responsive:true,maintainAspectRatio:false,
-        plugins:{legend:{display:false}},
-        scales:{
-          ...chartCfg.scales,
-          y:{...chartCfg.scales.y, max:100, title:{display:true,text:'Risk Score',color:'#6b7a99'}}
-        }
-      }
-    });
-
-    // ── Crash + E-stop incidents per team ──
-    mkChart('chart-incidents', {
-      type:'bar',
-      data:{
-        labels: teamLabels,
-        datasets:[
-          { label:'Crashes',   data: activeTeams.map(t=>sessions.filter(s=>s.team===t.name&&s.crashed==='Yes').length),
-            backgroundColor:'rgba(255,60,60,0.7)',  borderRadius:4 },
-          { label:'E-Stops Total', data: activeTeams.map(t=>sessions.filter(s=>s.team===t.name).reduce((a,s)=>a+(s.estops||0),0)),
-            backgroundColor:'rgba(255,170,0,0.6)', borderRadius:4 },
-        ]
-      },
-      options:{...chartCfg,responsive:true,maintainAspectRatio:false}
-    });
-
-    // ── Heatmap correlation matrix ──
-    const factors = ['TTC','E-Stop','Instab','Sensor','Start','Crash','SW Stop','Replan','Damage','Speed'];
-    const hw = document.getElementById('heatmap-wrap');
-    if (!hw) return;
-    hw.style.gridTemplateColumns = 'repeat('+factors.length+',1fr)';
-    hw.innerHTML = '';
-    factors.forEach((r,ri) => {
-      factors.forEach((c,ci) => {
-        const v = ri===ci ? 1 : Math.abs(Math.sin(ri*7+ci*3)*Math.cos(ri+ci*2));
-        const alpha = 0.08 + v*0.75;
-        const color = ri===ci ? 'rgba(0,212,255,' : (v>0.6?'rgba(255,60,60,':(v>0.3?'rgba(255,170,0,':'rgba(0,232,122,'));
-        const el = document.createElement('div');
-        el.style.cssText = 'height:28px;border-radius:2px;background:'+color+alpha+');display:flex;align-items:center;justify-content:center;font-size:8px;color:rgba(255,255,255,0.5);font-family:monospace;';
-        el.textContent = v.toFixed(2);
-        el.title = r+' × '+c+': '+v.toFixed(3);
-        hw.appendChild(el);
-      });
-    });
-    const labelRow = document.createElement('div');
-    labelRow.style.cssText = 'grid-column:1/-1;display:grid;grid-template-columns:repeat('+factors.length+',1fr);gap:3px;margin-top:4px';
-    factors.forEach(f => {
-      const d = document.createElement('div');
-      d.style.cssText = 'text-align:center;font-size:9px;color:#6b7a99;';
-      d.textContent = f; labelRow.appendChild(d);
-    });
-    hw.appendChild(labelRow);
+    const tb = document.getElementById('trend-summary-tbody');
+    if (!tb) return;
+    const rows = allTeams.map(t => {
+      const arr = byTeam[t.name];
+      if (!arr.length) return null;
+      const firstN = arr.slice(0, Math.min(3, arr.length));
+      const lastN = arr.slice(Math.max(0, arr.length-3));
+      const firstAvg = firstN.reduce((a,s)=>a+(s.riskScore||0),0)/firstN.length;
+      const lastAvg = lastN.reduce((a,s)=>a+(s.riskScore||0),0)/lastN.length;
+      const delta = +(lastAvg - firstAvg).toFixed(1);
+      const dir = delta < 0 ? 'Improving' : (delta > 0 ? 'Worsening' : 'Flat');
+      return { team:t, n:arr.length, firstAvg, lastAvg, delta, dir };
+    }).filter(Boolean).sort((a,b)=>a.delta-b.delta);
+    tb.innerHTML = rows.length ? rows.map(r => `
+      <tr>
+        <td><span class="team-dot" style="background:${r.team.color}"></span><b>${r.team.name}</b></td>
+        <td class="mono">${r.n}</td>
+        <td class="mono">${r.firstAvg.toFixed(1)}</td>
+        <td class="mono">${r.lastAvg.toFixed(1)}</td>
+        <td class="mono" style="color:${r.delta<0?C.green:r.delta>0?C.red:C.muted}">${r.delta>0?'+':''}${r.delta.toFixed(1)}</td>
+        <td style="color:${r.delta<0?C.green:r.delta>0?C.red:C.muted}">${r.dir}</td>
+      </tr>
+    `).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px;">No trend data yet</td></tr>';
   }, 80);
 }
 
@@ -4814,7 +4956,7 @@ function editSession(id) {
   document.getElementById('es-stoppages').value = s.stoppages || 0;
   document.getElementById('es-attempts').value = s.startAttempts || 0;
   document.getElementById('es-sensor').value = s.sensor || 0;
-  document.getElementById('es-manual').value = s.manualOverride || 0;
+  document.getElementById('es-manual').value = Math.max(0, Math.min(1, parseInt(s.manualOverride) || 0));
   document.getElementById('es-notes').value = s.notes || '';
   openModal('modal-edit-session');
 }
@@ -4842,7 +4984,7 @@ function saveEditSession() {
     stoppages: parseInt(document.getElementById('es-stoppages').value) || 0,
     startAttempts: parseInt(document.getElementById('es-attempts').value) || 0,
     sensor: parseFloat(document.getElementById('es-sensor').value) || 0,
-    manualOverride: parseFloat(document.getElementById('es-manual').value) || 0,
+    manualOverride: Math.max(0, Math.min(1, parseInt(document.getElementById('es-manual').value) || 0)),
     replans: s.replans || 0,
     ttc: s.ttc || 0,
     notes: document.getElementById('es-notes').value,
@@ -5235,7 +5377,7 @@ function editSession(id) {
   document.getElementById('es-stoppages').value=s.stoppages||0;
   document.getElementById('es-attempts').value=s.startAttempts||0;
   document.getElementById('es-sensor').value=s.sensor||0;
-  document.getElementById('es-manual').value=s.manualOverride||0;
+  document.getElementById('es-manual').value=Math.max(0, Math.min(1, parseInt(s.manualOverride)||0));
   document.getElementById('es-notes').value=s.notes||'';
   openModal('modal-edit-session');
 }
@@ -5260,7 +5402,7 @@ function saveEditSession() {
     stoppages:parseInt(document.getElementById('es-stoppages').value)||0,
     startAttempts:parseInt(document.getElementById('es-attempts').value)||0,
     sensor:parseFloat(document.getElementById('es-sensor').value)||0,
-    manualOverride:parseFloat(document.getElementById('es-manual').value)||0,
+    manualOverride:Math.max(0, Math.min(1, parseInt(document.getElementById('es-manual').value)||0)),
     notes:document.getElementById('es-notes').value, stub:false,
   };
   const {score,breakdown}=calcRisk(u);
@@ -5611,7 +5753,7 @@ init();
       <div class="field"><label>SW Stoppages</label><input type="number" id="es-stoppages" min="0"></div>
       <div class="field"><label>Start Attempts</label><input type="number" id="es-attempts" min="0"></div>
       <div class="field"><label>Sensor Degrade (0-1)</label><input type="number" id="es-sensor" min="0" max="1" step="0.01"></div>
-      <div class="field"><label>Manual Override (0-10)</label><input type="number" id="es-manual" min="0" max="10"></div>
+      <div class="field"><label>Manual Override (0=No, 1=Yes)</label><input type="number" id="es-manual" min="0" max="1" step="1"></div>
     </div>
     <div class="field" style="margin-top:12px;"><label>Notes</label>
       <textarea id="es-notes" style="min-height:60px;resize:vertical;"></textarea>
@@ -5672,7 +5814,7 @@ init();
       <div class="field"><label>Planner Replans</label><input type="number" id="ms-replans" value="0" min="0"></div>
       <div class="field"><label>Instability (0-10)</label><input type="number" id="ms-instab" value="0" min="0" max="10"></div>
       <div class="field"><label>Sensor (0-1)</label><input type="number" id="ms-sensor" value="0" min="0" max="1" step="0.01"></div>
-      <div class="field"><label>Manual Override (0-10)</label><input type="number" id="ms-manual" value="0" min="0" max="10"></div>
+      <div class="field"><label>Manual Override (0=No, 1=Yes)</label><input type="number" id="ms-manual" value="0" min="0" max="1" step="1"></div>
     </div>
     <div class="field" style="margin-top:10px;"><label>Notes</label><textarea id="ms-notes"></textarea></div>
     <div class="modal-footer">

@@ -1,9 +1,9 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>A2RL â€” Race Control Â· Quality Gateway Script</title>
+<title>A2RL — Race Control · Quality Gateway Script</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@300;400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -20,7 +20,7 @@
   *{box-sizing:border-box;margin:0;padding:0;}
   body{background:var(--bg);color:var(--text);font-family:'Barlow',sans-serif;font-size:14px;min-height:100vh;}
 
-  /* â”€â”€ HEADER â”€â”€ */
+  /* ── HEADER ── */
   .header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:52px;position:sticky;top:0;z-index:100;}
   .header-left{display:flex;align-items:center;gap:14px;}
   .logo{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:20px;letter-spacing:0.05em;}
@@ -28,7 +28,7 @@
   .header-badge{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;color:var(--text-muted);background:var(--bg);border:1px solid var(--border);padding:3px 8px;border-radius:3px;letter-spacing:0.08em;text-transform:uppercase;}
   .header-date{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-muted);}
 
-  /* â”€â”€ NAV â”€â”€ */
+  /* ── NAV ── */
   .nav-strip{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;gap:4px;height:44px;}
   .nav-btn{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;padding:10px 16px;border:none;background:none;cursor:pointer;border-bottom:3px solid transparent;color:var(--text-muted);transition:all 0.15s;position:relative;bottom:-1px;}
   .nav-btn:hover{color:var(--text);}
@@ -36,14 +36,14 @@
   .summary-btn{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;padding:6px 14px;background:var(--surface);border:1px solid var(--border);color:var(--text-muted);border-radius:4px;cursor:pointer;transition:all 0.15s;}
   .summary-btn:hover{border-color:var(--accent);color:var(--accent);}
 
-  /* â”€â”€ SESSION BREADCRUMB â”€â”€ */
+  /* ── SESSION BREADCRUMB ── */
   .session-breadcrumb{background:var(--surface2);border-bottom:1px solid var(--border);padding:7px 24px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-height:36px;}
   .back-btn-sm{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;padding:3px 8px;background:none;border:none;color:var(--text-muted);cursor:pointer;transition:color 0.15s;}
   .back-btn-sm:hover{color:var(--text);}
   .sess-rc-label{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-muted);margin-left:8px;}
   .sess-date-label{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-dim);}
 
-  /* â”€â”€ TIER BAR â”€â”€ */
+  /* ── TIER BAR ── */
   .tier-bar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;gap:4px;}
   .tier-btn{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:0.1em;text-transform:uppercase;padding:11px 18px;border:none;background:none;cursor:pointer;border-bottom:3px solid transparent;color:var(--text-muted);transition:all 0.15s;position:relative;bottom:-1px;}
   .tier-btn:hover{color:var(--text);}
@@ -55,7 +55,7 @@
   .tier-btn.challenger .tier-dot{background:var(--challenger);}
   .tier-btn.pro .tier-dot{background:var(--pro);}
 
-  /* â”€â”€ PROGRESS â”€â”€ */
+  /* ── PROGRESS ── */
   .progress-strip{background:var(--surface2);border-bottom:1px solid var(--border);padding:6px 24px;display:flex;align-items:center;gap:12px;height:33px;}
   .progress-label{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-muted);white-space:nowrap;}
   .progress-bar-track{flex:1;height:5px;background:var(--border);border-radius:3px;overflow:hidden;}
@@ -65,12 +65,12 @@
   .progress-bar-fill.pro{background:var(--pro);}
   .progress-count{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:var(--text);white-space:nowrap;}
 
-  /* â”€â”€ MAIN LAYOUT â”€â”€ */
+  /* ── MAIN LAYOUT ── */
   .main{display:flex;}
   .sidebar{width:256px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);overflow-y:auto;padding:10px 0;}
   .content{flex:1;overflow-y:auto;background:var(--bg);}
 
-  /* â”€â”€ SIDEBAR â”€â”€ */
+  /* ── SIDEBAR ── */
   .sidebar-section-label{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:0.15em;color:var(--text-dim);padding:10px 16px 5px;}
   .gw-item{padding:8px 16px;cursor:pointer;border-left:3px solid transparent;transition:all 0.1s;display:flex;align-items:center;gap:10px;}
   .gw-item:hover{background:var(--surface2);}
@@ -88,7 +88,7 @@
   .att-count{font-family:'JetBrains Mono',monospace;font-size:9px;background:var(--accent);color:#fff;padding:1px 5px;border-radius:8px;font-weight:600;}
   .carryover-tag{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text-muted);opacity:0.7;margin-left:3px;}
 
-  /* â”€â”€ GATEWAY CARD â”€â”€ */
+  /* ── GATEWAY CARD ── */
   .content-pad{padding:22px;}
   .gw-card{max-width:860px;}
   .gw-header{display:flex;align-items:flex-start;gap:16px;margin-bottom:18px;}
@@ -120,8 +120,8 @@
   .verdict-label.nopass-label{color:var(--nopass);}
   .verdict-item{font-size:12px;color:var(--text);line-height:1.5;padding:2px 0 2px 12px;position:relative;}
   .verdict-item::before{position:absolute;left:0;top:4px;font-size:10px;}
-  .pass-col .verdict-item::before{content:'âœ“';color:var(--pass);}
-  .nopass-col .verdict-item::before{content:'âœ—';color:var(--nopass);}
+  .pass-col .verdict-item::before{content:'✓';color:var(--pass);}
+  .nopass-col .verdict-item::before{content:'✗';color:var(--nopass);}
   .decision-panel{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:14px;margin-bottom:10px;}
   .decision-label{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;letter-spacing:0.15em;text-transform:uppercase;color:var(--text-muted);margin-bottom:10px;display:flex;align-items:center;gap:8px;}
   .decision-label::after{content:'';flex:1;height:1px;background:var(--border);}
@@ -141,12 +141,12 @@
   .result-banner.pass{background:var(--pass-bg);border:1px solid rgba(34,197,94,0.3);color:var(--pass);}
   .result-banner.nopass{background:var(--nopass-bg);border:1px solid rgba(239,68,68,0.3);color:var(--nopass);}
 
-  /* â”€â”€ TAGS â”€â”€ */
+  /* ── TAGS ── */
   .tag-mandatory{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;padding:2px 6px;border-radius:2px;background:rgba(239,68,68,0.1);color:var(--nopass);border:1px solid rgba(239,68,68,0.2);}
   .tag-bridge{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;padding:2px 6px;border-radius:2px;background:rgba(99,102,241,0.1);color:#818cf8;border:1px solid rgba(99,102,241,0.2);}
   .tag-prereq{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;padding:2px 6px;border-radius:2px;background:rgba(234,179,8,0.1);color:#fbbf24;border:1px solid rgba(234,179,8,0.2);}
 
-  /* â”€â”€ ATTEMPT HISTORY â”€â”€ */
+  /* ── ATTEMPT HISTORY ── */
   .attempt-history{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:14px;margin-top:12px;}
   .attempt-history-title{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:10px;display:flex;align-items:center;gap:8px;}
   .att-count-badge{font-family:'JetBrains Mono',monospace;font-size:10px;background:var(--surface2);border:1px solid var(--border);padding:1px 6px;border-radius:10px;color:var(--text-muted);}
@@ -160,13 +160,13 @@
   .attempt-time{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-muted);}
   .attempt-notes{font-size:12px;color:var(--text);line-height:1.4;}
 
-  /* â”€â”€ WELCOME â”€â”€ */
+  /* ── WELCOME ── */
   .welcome-pane{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--text-muted);text-align:center;padding:40px;}
   .welcome-icon{font-size:48px;margin-bottom:16px;opacity:0.4;}
   .welcome-title{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:20px;letter-spacing:0.05em;color:var(--text-dim);margin-bottom:8px;text-transform:uppercase;}
   .welcome-sub{font-size:13px;color:var(--text-dim);max-width:320px;line-height:1.6;}
 
-  /* â”€â”€ MODALS â”€â”€ */
+  /* ── MODALS ── */
   .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:200;align-items:center;justify-content:center;}
   .modal-overlay.show{display:flex;}
   .modal{background:var(--surface);border:1px solid var(--border);border-radius:8px;width:90%;max-width:680px;max-height:85vh;overflow-y:auto;padding:24px;}
@@ -198,7 +198,7 @@
   .field-input{background:var(--bg);border:1px solid var(--border);color:var(--text);font-family:'Barlow',sans-serif;font-size:13px;padding:7px 10px;border-radius:4px;outline:none;width:100%;}
   .field-input:focus{border-color:var(--accent);}
 
-  /* â”€â”€ DASHBOARD â”€â”€ */
+  /* ── DASHBOARD ── */
   .dash-wrap{padding:24px;max-width:1100px;}
   .dash-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;}
   .dash-title{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:22px;letter-spacing:0.04em;text-transform:uppercase;}
@@ -224,7 +224,7 @@
   .dash-gw-dot.nopass{background:var(--nopass);}
   .dash-last-session{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-dim);}
 
-  /* â”€â”€ TEAM PROFILE â”€â”€ */
+  /* ── TEAM PROFILE ── */
   .profile-wrap{padding:24px;max-width:960px;}
   .profile-header{margin-bottom:20px;}
   .back-btn{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;padding:5px 12px;background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:4px;cursor:pointer;transition:all 0.15s;margin-bottom:12px;display:inline-block;}
@@ -268,7 +268,7 @@
   .sess-verdict.nopass{background:var(--nopass-bg);color:var(--nopass);}
   .sess-verdict.pending{background:var(--surface2);color:var(--text-muted);}
 
-  /* â”€â”€ LICENSE PANEL â”€â”€ */
+  /* ── LICENSE PANEL ── */
   .license-panel{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:16px 18px;margin-bottom:16px;}
   .license-panel-title{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-muted);margin-bottom:12px;display:flex;align-items:center;gap:8px;}
   .license-panel-title::after{content:'';flex:1;height:1px;background:var(--border);}
@@ -296,7 +296,7 @@
   .license-btn.revoke{color:var(--text-muted);border-color:var(--border-bright);}
   .license-btn.revoke:hover{color:var(--text);border-color:var(--text-muted);}
 
-  /* â”€â”€ SCROLLBAR â”€â”€ */
+  /* ── SCROLLBAR ── */
   .scrollbar-thin::-webkit-scrollbar{width:5px;}
   .scrollbar-thin::-webkit-scrollbar-track{background:transparent;}
   .scrollbar-thin::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
@@ -307,7 +307,7 @@
 <!-- HEADER -->
 <div class="header">
   <div class="header-left">
-    <div class="logo">A2RL<span>Â·</span>RC</div>
+    <div class="logo">A2RL<span>·</span>RC</div>
     <div class="header-badge">Race Control</div>
     <div class="header-badge">Quality Gateway Script</div>
   </div>
@@ -316,9 +316,9 @@
 
 <!-- NAV -->
 <div class="nav-strip">
-  <button class="nav-btn active" id="navDashboard" onclick="showView('dashboard')">ðŸ  Teams</button>
+  <button class="nav-btn active" id="navDashboard" onclick="showView('dashboard')">🏠 Teams</button>
   <div style="flex:1"></div>
-  <button class="summary-btn" id="summaryBtn" onclick="openSummary()">ðŸ“‹ Session Summary</button>
+  <button class="summary-btn" id="summaryBtn" onclick="openSummary()">📋 Session Summary</button>
 </div>
 
 <!-- SESSION BREADCRUMB (shown in session view) -->
@@ -353,10 +353,10 @@
   <div class="modal">
     <div class="modal-title">Session Summary</div>
     <div class="modal-sub" id="modalMeta"></div>
-    <div id="overallResult" class="overall-result pending">â³ Assessment In Progress</div>
+    <div id="overallResult" class="overall-result pending">⏳ Assessment In Progress</div>
     <div id="summaryRows"></div>
     <div class="modal-footer">
-      <button class="modal-btn primary" onclick="printCurrentSummary()">ðŸ–¨ Print / Export</button>
+      <button class="modal-btn primary" onclick="printCurrentSummary()">🖨 Print / Export</button>
       <button class="modal-btn secondary" onclick="closeSummary()">Close</button>
     </div>
   </div>
@@ -423,7 +423,7 @@
     </div>
     <div class="field-row">
       <label class="field-label">Session Notes (optional)</label>
-      <textarea class="field-input" id="nsNotes" placeholder="e.g. Morning session, dry conditionsâ€¦" style="min-height:52px;resize:vertical"></textarea>
+      <textarea class="field-input" id="nsNotes" placeholder="e.g. Morning session, dry conditions…" style="min-height:52px;resize:vertical"></textarea>
     </div>
     <div style="display:flex;gap:10px;margin-top:16px">
       <button class="modal-btn primary" onclick="confirmNewSession()">Start Session</button>
@@ -433,21 +433,21 @@
 </div>
 
 <script>
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ══════════════════════════════════════════════════════════════
 // GATEWAY DATA
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ══════════════════════════════════════════════════════════════
 const gateways = {
   rookie:{
-    label:'Rookie',licenseOutcome:'Rookie License â€” Single-car time trial',failConsequence:'Restricted to Digital Championship only',
+    label:'Rookie',licenseOutcome:'Rookie License — Single-car time trial',failConsequence:'Restricted to Digital Championship only',
     static:[
       {id:'S1',name:'Static System Readiness',mandatory:true,
         objective:'Ensure the vehicle and autonomous software stack are safe to activate and enter operational states. The 60-second startup limit is an A2RL operational benchmark ensuring track sessions run to schedule.',
         conditions:['Car powered on in pitlane or garage with engine off.','All items from A2RL Operational and Safety Checklist General Safety 1 must be completed first.'],
-        metrics:[{text:'System start time',value:'â‰¤ 60 s'},{text:'All critical CAN/ROS nodes confirmed healthy',value:'Nominal'},{text:'Safety bits (E-stop circuits, BSU status, power supplies)',value:'Nominal'},{text:'Redundancy confirmed for heading, car speed, positioning sensors',value:'Confirmed'}],
+        metrics:[{text:'System start time',value:'≤ 60 s'},{text:'All critical CAN/ROS nodes confirmed healthy',value:'Nominal'},{text:'Safety bits (E-stop circuits, BSU status, power supplies)',value:'Nominal'},{text:'Redundancy confirmed for heading, car speed, positioning sensors',value:'Confirmed'}],
         pass:['Autonomous stack launches correctly without errors within 60 s.','All safety systems armed and reporting nominal status.','No critical faults in system diagnostics.','Emergency stop validated per Operational Checklist General Safety 2.'],
         nopass:['Stack fails to launch within 60 seconds.','Any safety system fault preventing arming or activation.','Emergency stop procedure not validated.']},
       {id:'S2',name:'Static Safety Checks',mandatory:true,
-        objective:'Successfully complete the full A2RL static safety inspection whilst the vehicle is stationary. A2RL provides the vehicle â€” teams are responsible only for software integration and any hardware modifications.',
+        objective:'Successfully complete the full A2RL static safety inspection whilst the vehicle is stationary. A2RL provides the vehicle — teams are responsible only for software integration and any hardware modifications.',
         conditions:['Car Receipt and Risk Assumption Confirmation must be signed before this check commences.','All checks carried out by A2RL Technical team.'],
         metrics:[{text:'All safety checks passed to satisfaction of A2RL Technical team',value:'Pass'}],
         pass:['All safety checks passed to the satisfaction of the A2RL Technical team.'],
@@ -457,79 +457,79 @@ const gateways = {
       {id:'T1',name:'Autonomous Pitlane Exit',mandatory:true,
         objective:'Ensure the vehicle can safely and autonomously exit the pitlane and merge onto the circuit while respecting pit speed limits, lane discipline, and Race Control procedures.',
         conditions:['Vehicle stationary in holding zone 2.','Race Control authorisation required before vehicle moves.','Vehicle accelerates to pitlane speed limit and merges onto circuit.'],
-        metrics:[{text:'Pitlane speed (min/max enforced)',value:'25â€“30 km/h'},{text:'Vehicle remains within pitlane boundaries (white lines)',value:'Required'},{text:'Smooth and stable merge onto track',value:'Observable'},{text:'Manual or remote intervention',value:'None'}],
+        metrics:[{text:'Pitlane speed (min/max enforced)',value:'25–30 km/h'},{text:'Vehicle remains within pitlane boundaries (white lines)',value:'Required'},{text:'Smooth and stable merge onto track',value:'Observable'},{text:'Manual or remote intervention',value:'None'}],
         pass:['Vehicle initiates pit exit only after RC authorisation.','Speed maintained between 25 km/h (min) and 30 km/h (max) throughout pitlane.','Vehicle remains within pitlane boundaries.','Smooth, stable merge onto track.','No manual or remote intervention confirmed at TSMU.'],
         nopass:['Speed below 25 km/h or above 30 km/h.','Visible boundary violation within pitlane.','Unsafe or hesitant merge.','Manual and/or remote intervention.']},
       {id:'T2',name:'Sensor Redundancy & Localisation Integrity',mandatory:true,
         objective:'Confirm the vehicle can reliably localise using multiple sensor types and continue operating safely if any single sensor fails. Two sub-tests: one lap with one LiDAR disabled, one lap with GNSS disabled.',
         conditions:['Baseline: one full lap of YMC North at >60 km/h with all sensors active.','Sub-test A: one lap with one of the three LiDARs disabled.','Sub-test B: one lap with GNSS disabled.','Sub-tests run independently, not simultaneously.'],
-        metrics:[{text:'Baseline + both sub-test laps without unsafe behaviour',value:'Required'},{text:'Sub-test A (LiDAR off): stable localisation and raceline',value:'Confirmed'},{text:'Sub-test B (GNSS off): lap using LiDAR/Radar/Camera only',value:'â‰¤ 2:30 (YMC N)'},{text:'No sensor dropouts causing unsafe behaviour',value:'None'}],
+        metrics:[{text:'Baseline + both sub-test laps without unsafe behaviour',value:'Required'},{text:'Sub-test A (LiDAR off): stable localisation and raceline',value:'Confirmed'},{text:'Sub-test B (GNSS off): lap using LiDAR/Radar/Camera only',value:'≤ 2:30 (YMC N)'},{text:'No sensor dropouts causing unsafe behaviour',value:'None'}],
         pass:['Vehicle completes both sub-test laps without unsafe behaviour or intervention.','Stable localisation maintained throughout each sub-test.','No perception failures requiring manual intervention.'],
         nopass:['Unsafe behaviour or intervention required during any sub-test.','Failure to demonstrate functional localisation with one sensor type disabled.']},
       {id:'T3',name:'Low-Speed Vehicle Control',mandatory:true,
-        objective:'Validate basic physical vehicle control at low speeds. Isolates control quality without aero loads â€” oscillation, overcorrection, and throttle/brake calibration errors are most visible at 10â€“30 km/h.',
-        conditions:['Two passes of the main straight at 10â€“30 km/h.'],
-        metrics:[{text:'Lateral behaviour â€” observable on CCTV',value:'Stable'},{text:'Commanded vs measured speed (team supporting data)',value:'Matched'},{text:'Throttle and braking commands executed predictably',value:'Stable'}],
-        pass:['Both passes completed with no manual intervention.','Throttle and braking executed predictably and stably.','Steering stable â€” no oscillation or overcorrection.','Consistent trajectory maintained throughout.'],
+        objective:'Validate basic physical vehicle control at low speeds. Isolates control quality without aero loads — oscillation, overcorrection, and throttle/brake calibration errors are most visible at 10–30 km/h.',
+        conditions:['Two passes of the main straight at 10–30 km/h.'],
+        metrics:[{text:'Lateral behaviour — observable on CCTV',value:'Stable'},{text:'Commanded vs measured speed (team supporting data)',value:'Matched'},{text:'Throttle and braking commands executed predictably',value:'Stable'}],
+        pass:['Both passes completed with no manual intervention.','Throttle and braking executed predictably and stably.','Steering stable — no oscillation or overcorrection.','Consistent trajectory maintained throughout.'],
         nopass:['Visible oscillatory control behaviour.','Any manual intervention.']},
       {id:'T4',name:'Single-Vehicle YMC North Autonomy',mandatory:true,
         objective:'Demonstrate safe, uninterrupted autonomous operation during solo running. The 80-second lap time threshold was validated as the correct Rookie benchmark during the 2025 season.',
         conditions:['Five (5) full autonomous laps of YMC North configuration.','Single vehicle only.'],
-        metrics:[{text:'Off-track events (no wheels beyond white line)',value:'Zero'},{text:'Manual interventions or emergency stops',value:'Zero'},{text:'Lap time per lap',value:'â‰¤ 80 s'}],
-        pass:['Completion of 5 clean laps without intervention.','Vehicle remains within track limits at all times.','No emergency stops or safety-critical events.','All lap times â‰¤ 80 seconds.'],
+        metrics:[{text:'Off-track events (no wheels beyond white line)',value:'Zero'},{text:'Manual interventions or emergency stops',value:'Zero'},{text:'Lap time per lap',value:'≤ 80 s'}],
+        pass:['Completion of 5 clean laps without intervention.','Vehicle remains within track limits at all times.','No emergency stops or safety-critical events.','All lap times ≤ 80 seconds.'],
         nopass:['Track limits violations.','Emergency stop activation.','Any manual or remote intervention.','Lap time exceeding 80 seconds.']},
       {id:'T5',name:'Flag Compliance (Solo)',mandatory:true,
         objective:'Validate correct and timely response to Race Control flag commands. EM Marshalling system logs exact timestamp of signal transmission and reception, cross-referenced with CCTV.',
         conditions:['Single-vehicle operation.','RC issues Code 60, FCY, Red Flag, and Emergency Stop commands at various points on circuit.'],
-        metrics:[{text:'Speed reaches Code 60 zone (60 km/h) or FCY zone (80 km/h)',value:'â‰¤ 5 s'},{text:'Speed maintained at commanded zone once reached',value:'Required'},{text:'Red Flag / Emergency Stop deceleration',value:'â‰¥ 7 m/sÂ²'},{text:'EM Marshalling system confirms receipt + state transition',value:'Logged'}],
-        pass:['Deterministic and correct response to all flag commands.','Vehicle reaches and maintains commanded speed zone.','Deceleration of â‰¥ 7 m/sÂ² achieved on Red Flag / Emergency Stop.','EM Marshalling system confirms signal receipt and correct state transition.'],
+        metrics:[{text:'Speed reaches Code 60 zone (60 km/h) or FCY zone (80 km/h)',value:'≤ 5 s'},{text:'Speed maintained at commanded zone once reached',value:'Required'},{text:'Red Flag / Emergency Stop deceleration',value:'≥ 7 m/s²'},{text:'EM Marshalling system confirms receipt + state transition',value:'Logged'}],
+        pass:['Deterministic and correct response to all flag commands.','Vehicle reaches and maintains commanded speed zone.','Deceleration of ≥ 7 m/s² achieved on Red Flag / Emergency Stop.','EM Marshalling system confirms signal receipt and correct state transition.'],
         nopass:['Missed, delayed, or incorrect response to any flag command.','Failure to reach commanded speed zone within 5 seconds.','Insufficient deceleration on flag commands.']},
       {id:'T6',name:'Stop and Restart (Solo)',mandatory:true,
-        objective:'Ensure safe and reliable transitions between stopped and driving states. The critical safety element is the deceleration profile â€” the car must stop predictably at â‰¥ 7 m/sÂ² when commanded.',
+        objective:'Ensure safe and reliable transitions between stopped and driving states. The critical safety element is the deceleration profile — the car must stop predictably at ≥ 7 m/s² when commanded.',
         conditions:['Vehicle commanded to stop and restart at various track locations under Race Control supervision.'],
-        metrics:[{text:'Controlled stop deceleration',value:'â‰¥ 7 m/sÂ²'},{text:'Restart: smooth and controlled, no dangerous lurch',value:'Observable'},{text:'Manual or remote intervention',value:'None'}],
-        pass:['Clean, controlled stop at â‰¥ 7 m/sÂ² deceleration.','Safe and controlled restart.','No hesitation or unsafe behaviour during restart.'],
-        nopass:['Insufficient deceleration on stop command (< 7 m/sÂ²).','Unsafe acceleration or lurch during restart.','Any manual or remote intervention required.']},
+        metrics:[{text:'Controlled stop deceleration',value:'≥ 7 m/s²'},{text:'Restart: smooth and controlled, no dangerous lurch',value:'Observable'},{text:'Manual or remote intervention',value:'None'}],
+        pass:['Clean, controlled stop at ≥ 7 m/s² deceleration.','Safe and controlled restart.','No hesitation or unsafe behaviour during restart.'],
+        nopass:['Insufficient deceleration on stop command (< 7 m/s²).','Unsafe acceleration or lurch during restart.','Any manual or remote intervention required.']},
       {id:'T7',name:'Foam Car Avoidance',mandatory:false,bridge:true,
-        objective:'Baseline assurance that the perception stack can detect a vehicle-shaped object on track. NOT mandatory for standard Rookie license. MANDATORY when applying for Challenger gateways â€” minimum perception prerequisite.',
-        conditions:['Foam car positioned statically in and perpendicular to the vehicle path.','Ego vehicle approach speed â‰¥ 100 km/h.'],
+        objective:'Baseline assurance that the perception stack can detect a vehicle-shaped object on track. NOT mandatory for standard Rookie license. MANDATORY when applying for Challenger gateways — minimum perception prerequisite.',
+        conditions:['Foam car positioned statically in and perpendicular to the vehicle path.','Ego vehicle approach speed ≥ 100 km/h.'],
         metrics:[{text:'Obstacle detected in time to execute safe response (CCTV + onboard)',value:'Confirmed'},{text:'Safe response: controlled stop or safe avoidance',value:'Required'},{text:'Contact with foam car',value:'None'}],
         pass:['Vehicle detects foam car in time.','Safe response executed (controlled stop or avoidance).','No contact.'],
         nopass:['Collision with foam car.','Missed or late detection leading to unsafe proximity.','No demonstrable perception output for the obstacle.']},
       {id:'T8',name:'Autonomous Pitlane Entry',mandatory:true,
-        objective:'Ensure the vehicle can safely and autonomously enter the pitlane under Race Control instruction. Stopping position tolerance Â± 1 m. Speed compliance strictly enforced.',
+        objective:'Ensure the vehicle can safely and autonomously enter the pitlane under Race Control instruction. Stopping position tolerance ± 1 m. Speed compliance strictly enforced.',
         conditions:['Vehicle travelling at race speed.','Upon PIT-IN instruction: vehicle decelerates, moves to pit entry line, enters pitlane, proceeds to designated stopping point.'],
-        metrics:[{text:'Speed before pit speed limiter line',value:'â‰¤ 30 km/h'},{text:'Pitlane speed limit respected immediately upon crossing entry line',value:'Required'},{text:'Vehicle remains within pitlane boundaries',value:'Required'},{text:'Stop position at designated pit box',value:'Â± 1 m'},{text:'Deceleration prior to pit entry (team supporting data)',value:'â‰¤ 8 m/sÂ²'}],
-        pass:['Vehicle responds correctly to PIT-IN instruction.','Speed â‰¤ 30 km/h achieved before pit speed limiter line.','Pitlane speed limit respected throughout.','Vehicle stops within Â± 1 m of designated position.','No manual or remote intervention.'],
-        nopass:['Speed above 30 km/h at pit speed limiter line.','Pitlane speed limit exceeded.','Stop outside Â± 1 m of designated position.','Boundary violations.','Manual intervention.']}
+        metrics:[{text:'Speed before pit speed limiter line',value:'≤ 30 km/h'},{text:'Pitlane speed limit respected immediately upon crossing entry line',value:'Required'},{text:'Vehicle remains within pitlane boundaries',value:'Required'},{text:'Stop position at designated pit box',value:'± 1 m'},{text:'Deceleration prior to pit entry (team supporting data)',value:'≤ 8 m/s²'}],
+        pass:['Vehicle responds correctly to PIT-IN instruction.','Speed ≤ 30 km/h achieved before pit speed limiter line.','Pitlane speed limit respected throughout.','Vehicle stops within ± 1 m of designated position.','No manual or remote intervention.'],
+        nopass:['Speed above 30 km/h at pit speed limiter line.','Pitlane speed limit exceeded.','Stop outside ± 1 m of designated position.','Boundary violations.','Manual intervention.']}
     ]
   },
   challenger:{
-    label:'Challenger',licenseOutcome:'Challenger License â€” Multi-car Silver Race',failConsequence:'Downgraded to Rookie classification for physical on-track participation',
+    label:'Challenger',licenseOutcome:'Challenger License — Multi-car Silver Race',failConsequence:'Downgraded to Rookie classification for physical on-track participation',
     track:[
       {id:'CH-1',name:'Emergency Braking and Car Following',mandatory:true,
         objective:'Ensure the vehicle can respond safely and promptly to unexpected deceleration or stopping of a leading vehicle. Verifies emergency responsiveness, braking authority, and collision avoidance under realistic traffic scenarios.',
         conditions:['Following a lead vehicle at 130 km/h (formation lap speed) in parallel line configuration.','Lead vehicle brakes to zero.','Both cars in designated lanes.'],
-        metrics:[{text:'Braking initiated promptly after lead vehicle deceleration (team data)',value:'Timely'},{text:'Minimum gap to lead car maintained',value:'â‰¥ 30 m'},{text:'Contact or unsafe proximity',value:'None'}],
-        pass:['Controlled braking initiated promptly.','Safe gap of â‰¥ 30 m maintained throughout.','No contact.'],
+        metrics:[{text:'Braking initiated promptly after lead vehicle deceleration (team data)',value:'Timely'},{text:'Minimum gap to lead car maintained',value:'≥ 30 m'},{text:'Contact or unsafe proximity',value:'None'}],
+        pass:['Controlled braking initiated promptly.','Safe gap of ≥ 30 m maintained throughout.','No contact.'],
         nopass:['Late or delayed reaction.','Contact or unsafe proximity.']},
       {id:'CH-2',name:'Adaptive Cruise Control and Following Distance',mandatory:true,
-        objective:'Validate disciplined longitudinal control when operating behind another autonomous vehicle at 80 km/h â€” the challenge is precision of distance control during speed changes and in corners.',
-        conditions:['Follow a lead vehicle at 80 km/h for 1 km.','Lead car performs three Â±10 km/h speed changes and one sudden deceleration to 50 km/h.'],
-        metrics:[{text:'Headway maintained within 15â€“25 m for',value:'â‰¥ 95% of test'},{text:'Reaction to lead car deceleration (PTP-synchronised team data)',value:'Timely'},{text:'Maximum longitudinal jerk',value:'< 30 m/sÂ³'},{text:'Accordion braking or collapse of following distance',value:'None'}],
+        objective:'Validate disciplined longitudinal control when operating behind another autonomous vehicle at 80 km/h — the challenge is precision of distance control during speed changes and in corners.',
+        conditions:['Follow a lead vehicle at 80 km/h for 1 km.','Lead car performs three ±10 km/h speed changes and one sudden deceleration to 50 km/h.'],
+        metrics:[{text:'Headway maintained within 15–25 m for',value:'≥ 95% of test'},{text:'Reaction to lead car deceleration (PTP-synchronised team data)',value:'Timely'},{text:'Maximum longitudinal jerk',value:'< 30 m/s³'},{text:'Accordion braking or collapse of following distance',value:'None'}],
         pass:['Stable following distance maintained throughout.','Braking smooth, anticipatory, proportional.','No oscillatory or abrupt longitudinal control.'],
         nopass:['Collapse of following distance.','Accordion braking or unstable longitudinal control.']},
       {id:'CH-3',name:'Performing an Overtake Safely',mandatory:true,
         objective:'Demonstrate safe, autonomous overtaking against another car at comparable speed, maintaining disciplined behaviour and respecting shared track space.',
         conditions:['Overtake a slower vehicle on a straight and in a corner (both cars on same raceline).','Test entry speed confirmed with RC prior to test. Defender restricted to 1:10 lap pace; attacker unrestricted.'],
-        metrics:[{text:'Minimum distance to lead car at overtake initiation (engagement zone and right-of-way trigger)',value:'â‰¥ 15 m'},{text:'Lead car correctly tracked with stable perception',value:'Confirmed'},{text:'Peak lateral acceleration on a straight',value:'< 1 g'},{text:'Minimum lateral clearance (real-world)',value:'â‰¥ 2 m'},{text:'Overtake completed within',value:'10 s'},{text:'Vehicle returns to line with gap behind',value:'â‰¥ 5 m'}],
+        metrics:[{text:'Minimum distance to lead car at overtake initiation (engagement zone and right-of-way trigger)',value:'≥ 15 m'},{text:'Lead car correctly tracked with stable perception',value:'Confirmed'},{text:'Peak lateral acceleration on a straight',value:'< 1 g'},{text:'Minimum lateral clearance (real-world)',value:'≥ 2 m'},{text:'Overtake completed within',value:'10 s'},{text:'Vehicle returns to line with gap behind',value:'≥ 5 m'}],
         pass:['Overtake initiated when safe gap available and target correctly tracked.','Stable departure from reference line.','Lateral clearance maintained.','Clean completion within 10 s.','Vehicle remains within track limits. No intervention.'],
         nopass:['Aborted, incomplete, or contact.','Unstable or erratic execution.','Track limits exceeded.','Manual intervention.']},
       {id:'CH-4',name:'Parallel Running Discipline',mandatory:true,
-        objective:"Validate safe operation alongside another autonomous vehicle in close lateral proximity â€” including corners. Minimum distance: the run must cover at least one full lap of YMC North to ensure the test includes both straight and cornering discipline. Two cars in designated parallel lanes.",
+        objective:"Validate safe operation alongside another autonomous vehicle in close lateral proximity — including corners. Minimum distance: the run must cover at least one full lap of YMC North to ensure the test includes both straight and cornering discipline. Two cars in designated parallel lanes.",
         conditions:['Two vehicles run side-by-side for the entirety of YMC North at a constant 80 km/h.','Both cars in designated lanes on same raceline.'],
-        metrics:[{text:'Lateral separation (observable from CCTV overhead)',value:'2â€“4 m'},{text:'Speed difference throughout',value:'< 6 km/h'},{text:'Contact or unsafe crowding',value:'None'},{text:'Both cars maintain designated lane throughout the circuit',value:'Required'}],
-        pass:['Safe lateral spacing maintained at all times including through corners.','Stable lane discipline â€” no crowding.'],
+        metrics:[{text:'Lateral separation (observable from CCTV overhead)',value:'2–4 m'},{text:'Speed difference throughout',value:'< 6 km/h'},{text:'Contact or unsafe crowding',value:'None'},{text:'Both cars maintain designated lane throughout the circuit',value:'Required'}],
+        pass:['Safe lateral spacing maintained at all times including through corners.','Stable lane discipline — no crowding.'],
         nopass:['Lateral crowding reducing safety margins.','Instability or loss of parallel trajectory through corners.']},
       {id:'CH-5',name:'Being Safely Overtaken',mandatory:true,
         objective:"Demonstrate predictable, safe behaviour when being overtaken. Yield convention: attacker's front wheel level with defender's rear wheel. Includes online raceline switching without stopping.",
@@ -538,90 +538,90 @@ const gateways = {
         pass:['Correct and timely yield when attacker reaches yield trigger point.','Stable position throughout.','No reactive behaviour.','Clean raceline switch without stopping.'],
         nopass:['Blocking or impedance.','Reactive/evasive steering.','Failure to yield at correct point.','Inability to switch racelines without stopping.']},
       {id:'CH-6',name:'Stop and Restart in Traffic',mandatory:true,
-        objective:'Ensure safe and predictable stop/restart transitions while other vehicles are present. Stop triggered while vehicle travelling at â‰¥ 150 km/h â€” representative of Challenger race conditions.',
-        conditions:['Vehicle travelling at â‰¥ 150 km/h.','Restart executed with following car at 20 m.','Teams must be notified in advance if stopping at a specific grid box position is required.'],
-        metrics:[{text:'Controlled stop deceleration',value:'â‰¥ 7 m/sÂ²'},{text:'Restart within',value:'3 s of command'},{text:'Following car headway during restart',value:'â‰¥ 15 m'},{text:'Restart',value:'Smooth & controlled'}],
-        pass:['Controlled stop at â‰¥ 7 m/sÂ² deceleration.','Safe restart with â‰¥ 15 m follower headway.','Smooth, predictable restart.'],
+        objective:'Ensure safe and predictable stop/restart transitions while other vehicles are present. Stop triggered while vehicle travelling at ≥ 150 km/h — representative of Challenger race conditions.',
+        conditions:['Vehicle travelling at ≥ 150 km/h.','Restart executed with following car at 20 m.','Teams must be notified in advance if stopping at a specific grid box position is required.'],
+        metrics:[{text:'Controlled stop deceleration',value:'≥ 7 m/s²'},{text:'Restart within',value:'3 s of command'},{text:'Following car headway during restart',value:'≥ 15 m'},{text:'Restart',value:'Smooth & controlled'}],
+        pass:['Controlled stop at ≥ 7 m/s² deceleration.','Safe restart with ≥ 15 m follower headway.','Smooth, predictable restart.'],
         nopass:['Insufficient deceleration on stop.','Unsafe proximity during restart.','Unpredictable or aggressive restart.']},
       {id:'CH-7',name:'Flag Compliance in Traffic',mandatory:true,
-        objective:'Validate correct and deterministic response to RC commands in traffic. Includes Lapping Flag (Drive-Through): car must move within 1 m of right track boundary and cap speed at â‰¤ 200 km/h.',
+        objective:'Validate correct and deterministic response to RC commands in traffic. Includes Lapping Flag (Drive-Through): car must move within 1 m of right track boundary and cap speed at ≤ 200 km/h.',
         conditions:['RC issues Code 60, FCY, Red Flag, and Lapping Flag (Drive-Through) commands during a two-car run.'],
-        metrics:[{text:'Speed reduction to commanded values (EM log + CCTV)',value:'â‰¤ 5 s'},{text:'Speed maintained at commanded value',value:'Â± 2 km/h'},{text:'Overtaking when prohibited',value:'None'},{text:'Lapping Flag: right track boundary',value:'â‰¤ 1 m'},{text:'Lapping Flag: speed cap',value:'â‰¤ 200 km/h'}],
-        pass:['All flag commands correctly interpreted.','Correct state transitions executed.','Lapping Flag: right boundary achieved and speed capped â‰¤ 200 km/h.'],
+        metrics:[{text:'Speed reduction to commanded values (EM log + CCTV)',value:'≤ 5 s'},{text:'Speed maintained at commanded value',value:'± 2 km/h'},{text:'Overtaking when prohibited',value:'None'},{text:'Lapping Flag: right track boundary',value:'≤ 1 m'},{text:'Lapping Flag: speed cap',value:'≤ 200 km/h'}],
+        pass:['All flag commands correctly interpreted.','Correct state transitions executed.','Lapping Flag: right boundary achieved and speed capped ≤ 200 km/h.'],
         nopass:['Missed, delayed, or incorrect response to any command.','Non-deterministic behaviour.','Failure to comply with Lapping Flag requirements.']},
       {id:'CH-8',name:'Foam Car Avoidance (Advanced)',mandatory:true,
         objective:'Stress-test perception, decision-making, and braking at Challenger race pace. Foam car placement priority: T1 and T6 (primary), T3 and T5 (secondary). One foam car available.',
-        conditions:['Foam car placed at high-priority corner positions (T1 and T6 prioritised; T3 and T5 secondary).','Approach speed â‰¥ 150 km/h â€” reflecting Challenger race pace.'],
-        metrics:[{text:'Obstacle detected in time to execute safe response (CCTV observable)',value:'Confirmed'},{text:'Safe avoidance manoeuvre or controlled stop executed',value:'Required'},{text:'Contact with foam car',value:'None'},{text:'Controlled stop (real-world)',value:'â‰¥ 5 m before obstacle'}],
+        conditions:['Foam car placed at high-priority corner positions (T1 and T6 prioritised; T3 and T5 secondary).','Approach speed ≥ 150 km/h — reflecting Challenger race pace.'],
+        metrics:[{text:'Obstacle detected in time to execute safe response (CCTV observable)',value:'Confirmed'},{text:'Safe avoidance manoeuvre or controlled stop executed',value:'Required'},{text:'Contact with foam car',value:'None'},{text:'Controlled stop (real-world)',value:'≥ 5 m before obstacle'}],
         pass:['Foam car correctly detected.','Safe avoidance or controlled stop executed.','No contact.'],
         nopass:['Collision with foam car.','Missed or late detection leading to unsafe proximity.']},
       {id:'CH-9',name:'Lap Time Benchmark (YMC North)',mandatory:true,
         objective:'Confirm Challenger-level baseline performance sufficient for safe multi-car operation. Real-world target from 2025 reference data. Simulation lap time benchmarks not applied.',
-        conditions:['Solo qualifying lap on YMC North configuration â€” real-world only.'],
-        metrics:[{text:'Reference lap (fastest Challenger 2025)',value:'64.45 s'},{text:'Maximum permitted lap time (110% of reference)',value:'â‰¤ 70.9 s'},{text:'Minimum consecutive laps at or under threshold',value:'5 laps'}],
-        pass:['Lap time â‰¤ 70.9 s for minimum 5 consecutive laps.'],
+        conditions:['Solo qualifying lap on YMC North configuration — real-world only.'],
+        metrics:[{text:'Reference lap (fastest Challenger 2025)',value:'64.45 s'},{text:'Maximum permitted lap time (110% of reference)',value:'≤ 70.9 s'},{text:'Minimum consecutive laps at or under threshold',value:'5 laps'}],
+        pass:['Lap time ≤ 70.9 s for minimum 5 consecutive laps.'],
         nopass:['Lap time slower than 70.9 s.','Inability to demonstrate repeated compliance with threshold.']}
     ]
   },
   pro:{
-    label:'PRO',licenseOutcome:'PRO License â€” Grand Final eligible',failConsequence:'Downgraded to Challenger classification for physical on-track participation',
+    label:'PRO',licenseOutcome:'PRO License — Grand Final eligible',failConsequence:'Downgraded to Challenger classification for physical on-track participation',
     track:[
       {id:'P1',name:'Robust Overtaking Execution',mandatory:true,
-        objective:'Validate that the vehicle can decisively and safely execute overtaking manoeuvres at race pace. Three overtakes required at â‰¥ 150 km/h across different track sections.',
-        conditions:['Three overtakes at speeds â‰¥ 150 km/h: one on main straight, one on South straight, one in braking zone or corner.','Attacker at full potential; defender restricted to 70% lateral/longitudinal limits.'],
-        metrics:[{text:'Minimum distance to target car at overtake initiation',value:'â‰¥ 30 m'},{text:'Minimum lateral clearance',value:'â‰¥ 1 m'},{text:'Contact or forced evasive action',value:'None'}],
+        objective:'Validate that the vehicle can decisively and safely execute overtaking manoeuvres at race pace. Three overtakes required at ≥ 150 km/h across different track sections.',
+        conditions:['Three overtakes at speeds ≥ 150 km/h: one on main straight, one on South straight, one in braking zone or corner.','Attacker at full potential; defender restricted to 70% lateral/longitudinal limits.'],
+        metrics:[{text:'Minimum distance to target car at overtake initiation',value:'≥ 30 m'},{text:'Minimum lateral clearance',value:'≥ 1 m'},{text:'Contact or forced evasive action',value:'None'}],
         pass:['Overtakes initiated decisively when opportunities arise.','Executed cleanly without hesitation.','Lateral and longitudinal separation maintained.','No contact or forced evasive action.'],
         nopass:['Hesitation, indecision, or aborted attempts.','Contact or unsafe proximity.']},
       {id:'P2',name:'Being Overtaken Anywhere on Track',mandatory:true,
         objective:"Ensure defensive stability and predictability when being overtaken in any track context. The vehicle must not exhibit reactive, blocking, or destabilising behaviour. Assessment is primarily behavioural. A clear pass/fail distinction is maintained: the car must give space once the attacker enters the engagement zone. Any behaviour that forces the attacking car to react is a No Pass.",
-        conditions:['Faster vehicle (full pace) overtakes the test vehicle (at 80% lateral/longitudinal limits) in various sections â€” straight, braking zone, and corner.'],
-        metrics:[{text:'Vehicle yields space once attacker is within the engagement zone',value:'Required'},{text:'Minimum lateral clearance provided to overtaking vehicle',value:'â‰¥ 1 m'},{text:'Reactive steering, braking, or trajectory changes',value:'None'},{text:'Behaviour forcing evasive action by overtaking car',value:'None'}],
+        conditions:['Faster vehicle (full pace) overtakes the test vehicle (at 80% lateral/longitudinal limits) in various sections — straight, braking zone, and corner.'],
+        metrics:[{text:'Vehicle yields space once attacker is within the engagement zone',value:'Required'},{text:'Minimum lateral clearance provided to overtaking vehicle',value:'≥ 1 m'},{text:'Reactive steering, braking, or trajectory changes',value:'None'},{text:'Behaviour forcing evasive action by overtaking car',value:'None'}],
         pass:['Calm, predictable behaviour throughout.','Adequate space given at correct trigger point.','No reactive behaviour.'],
         nopass:['Blocking or impedance.','Insufficient space given.','Reactive behaviour forcing evasive action by overtaking car.']},
       {id:'P3',name:'Multi-Car Interaction (>2 Vehicles)',mandatory:true,
         objective:'Validate safe, effective operation in complex traffic scenarios with more than two autonomous cars. System must reason about a dense multi-agent environment without deadlocks or unsafe behaviour.',
         conditions:['Dense traffic scenario: at least three cars on track simultaneously, all within 300 m of one another (nose of first to tail of third).','Minimum pace: 80% of race pace.'],
-        metrics:[{text:'All cars within 300 m of one another for duration of scenario',value:'Required'},{text:'Stop on track (unless commanded)',value:'< 1 s'},{text:'Contact events',value:'None'},{text:'Minimum gap between any two cars at all times',value:'â‰¥ 20 m'},{text:'Planning horizon update rate',value:'â‰¥ 10 Hz'}],
+        metrics:[{text:'All cars within 300 m of one another for duration of scenario',value:'Required'},{text:'Stop on track (unless commanded)',value:'< 1 s'},{text:'Contact events',value:'None'},{text:'Minimum gap between any two cars at all times',value:'≥ 20 m'},{text:'Planning horizon update rate',value:'≥ 10 Hz'}],
         pass:['Continuous motion and situational awareness in 3+ car scenario.','No deadlocks, indecision, or unsafe stops.','Interactions predictable and stable for all surrounding cars.'],
         nopass:['Vehicle stops due to indecision or interaction failure.','Contact with any vehicle.','Unsafe or non-deterministic behaviour.']},
       {id:'P4',name:'Flag Handling Under Pressure',mandatory:true,
-        objective:'Validate immediate, correct, deterministic response to RC commands under race-like pressure and in traffic. Full execution verified on CCTV. Pit In at latest possible point (T6â€“T7) included.',
-        conditions:['Sequence of Code 60, FCY, Red Flag, and Lapping Flag (Drive-Through) commands during multi-car running.','Pit In request included â€” must include Pit In issued at latest possible point between T6 and T7.'],
-        metrics:[{text:'Speed reduction to commanded values (EM log + team telemetry verification)',value:'â‰¤ 5 s'},{text:'Speed compliance',value:'Â± 2 km/h'},{text:'Lapping Flag: within 1 m of right track boundary, speed cap',value:'â‰¤ 200 km/h'},{text:'Pit entry executed correctly (including late-corner scenario)',value:'Required'},{text:'Full execution verified on CCTV',value:'Required'}],
+        objective:'Validate immediate, correct, deterministic response to RC commands under race-like pressure and in traffic. Full execution verified on CCTV. Pit In at latest possible point (T6–T7) included.',
+        conditions:['Sequence of Code 60, FCY, Red Flag, and Lapping Flag (Drive-Through) commands during multi-car running.','Pit In request included — must include Pit In issued at latest possible point between T6 and T7.'],
+        metrics:[{text:'Speed reduction to commanded values (EM log + team telemetry verification)',value:'≤ 5 s'},{text:'Speed compliance',value:'± 2 km/h'},{text:'Lapping Flag: within 1 m of right track boundary, speed cap',value:'≤ 200 km/h'},{text:'Pit entry executed correctly (including late-corner scenario)',value:'Required'},{text:'Full execution verified on CCTV',value:'Required'}],
         pass:['All track flag commands correctly interpreted and acted upon.','Correct and full state transitions executed.','Lapping Flag: right boundary and speed cap achieved.','Pit entry executed correctly at all test points including late-corner.'],
         nopass:['Incorrect or delayed response to any command.','Non-deterministic behaviour.','Failure to execute full commanded action.']},
       {id:'P5',name:'Lap Time Benchmark (YMC North)',mandatory:true,prereq:true,
-        objective:'Confirm eligibility for PRO-level race pace. MUST be passed before P6 (Consistency Over Sessions) and P8 (High-Speed Stability) â€” establishes the pace reference that both subsequent gateways build upon.',
+        objective:'Confirm eligibility for PRO-level race pace. MUST be passed before P6 (Consistency Over Sessions) and P8 (High-Speed Stability) — establishes the pace reference that both subsequent gateways build upon.',
         conditions:['Solo benchmark lap(s) on YMC North configuration.'],
-        metrics:[{text:'Reference lap',value:'58.18 s'},{text:'Maximum permitted lap time (105% of reference)',value:'â‰¤ 61.1 s'},{text:'Track limits',value:'Respected'},{text:'Manual intervention',value:'None'}],
-        pass:['Solo lap(s) within â‰¤ 105% of reference lap time (â‰¤ 61.1 s).'],
+        metrics:[{text:'Reference lap',value:'58.18 s'},{text:'Maximum permitted lap time (105% of reference)',value:'≤ 61.1 s'},{text:'Track limits',value:'Respected'},{text:'Manual intervention',value:'None'}],
+        pass:['Solo lap(s) within ≤ 105% of reference lap time (≤ 61.1 s).'],
         nopass:['Lap time slower than 61.1 s.','Track limits violations.','Manual intervention.']},
       {id:'P6',name:'Consistency Over Sessions',mandatory:true,
-        objective:'Ensure sustained reliability and performance stability over extended running at PRO pace. Requires prior passing of P5 (Lap Time Benchmark) â€” lap times must be within 103% of the P5 reference pace, not just of the session median.',
+        objective:'Ensure sustained reliability and performance stability over extended running at PRO pace. Requires prior passing of P5 (Lap Time Benchmark) — lap times must be within 103% of the P5 reference pace, not just of the session median.',
         conditions:['Ten (10) consecutive laps at race pace within the P5 Lap Time Benchmark.','Requires P5 to be passed first.'],
-        metrics:[{text:'All 10 lap times within 103% of P5 reference pace',value:'â‰¤ 61.1 s'},{text:'Manual interventions',value:'None'},{text:'Degradation in control or decision-making across session',value:'None'},{text:'Actuator command ranges (team supporting data)',value:'Submitted'},{text:'Perception latency scope (team supporting data)',value:'Submitted'}],
-        pass:['10 laps completed without intervention at â‰¤ 61.1 s (P5 reference).','Lap times stable within 103% band.','No observable degradation.'],
+        metrics:[{text:'All 10 lap times within 103% of P5 reference pace',value:'≤ 61.1 s'},{text:'Manual interventions',value:'None'},{text:'Degradation in control or decision-making across session',value:'None'},{text:'Actuator command ranges (team supporting data)',value:'Submitted'},{text:'Perception latency scope (team supporting data)',value:'Submitted'}],
+        pass:['10 laps completed without intervention at ≤ 61.1 s (P5 reference).','Lap times stable within 103% band.','No observable degradation.'],
         nopass:['Vehicle stops on track due to instability.','Significant lap time degradation across session.','Manual intervention.']},
       {id:'P7',name:'Foam Car Validation (All Configurations)',mandatory:true,
-        objective:'Confirm perception robustness at full race speed (> 180 km/h). Foam car placement priority: T1 and T6 (primary), T3 and T5 (secondary). One foam car available â€” test efficiency is critical.',
+        objective:'Confirm perception robustness at full race speed (> 180 km/h). Foam car placement priority: T1 and T6 (primary), T3 and T5 (secondary). One foam car available — test efficiency is critical.',
         conditions:['Single car on track at > 180 km/h.','Foam car placed at high-priority positions: T1 and T6 first, T3 and T5 if time allows.'],
-        metrics:[{text:'Obstacle detected ahead (team supporting data)',value:'â‰¥ 80 m'},{text:'Avoidance or controlled stop initiated within',value:'40 m'},{text:'Controlled stop before obstacle or lateral clearance',value:'â‰¥ 2 m / â‰¥ 1â€“2 m'},{text:'Contact',value:'None'}],
+        metrics:[{text:'Obstacle detected ahead (team supporting data)',value:'≥ 80 m'},{text:'Avoidance or controlled stop initiated within',value:'40 m'},{text:'Controlled stop before obstacle or lateral clearance',value:'≥ 2 m / ≥ 1–2 m'},{text:'Contact',value:'None'}],
         pass:['Foam car consistently detected.','Safe avoidance or controlled stop executed.','No contact under any configuration.'],
         nopass:['Collision with foam car.','Failure to detect or respond appropriately.']}
     ]
   }
 };
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ══════════════════════════════════════════════════════════════
 // STATE
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ══════════════════════════════════════════════════════════════
 // DATA MODEL
 // teams:    [{id, name, carNo, tier, createdAt}]
 // sessions: [{id, teamId, sessionCode, rcOfficer, date, tier, notes}]
 //           id auto-generated, sessionCode = QG-[ABBR]-001
 // attempts: [{id, sessionId, teamId, gwId, verdict, notes, timestamp}]
 //           full history, latest attempt drives current status
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ══════════════════════════════════════════════════════════════
 let teams    = [];
 let sessions = [];
 let attempts = [];
@@ -633,9 +633,9 @@ let currentSessionId = null;
 let currentGatewayId = null;
 let currentTier      = 'rookie';
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ══════════════════════════════════════════════════════════════
 // STORAGE
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ══════════════════════════════════════════════════════════════
 // Storage: uses window.storage (Claude artifact) when available, falls back to localStorage
 function hasArtifactStorage(){
   return typeof window.storage !== 'undefined' && window.storage !== null;
@@ -678,13 +678,13 @@ async function saveToStorage(){
   }
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ══════════════════════════════════════════════════════════════
 // HELPERS
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ══════════════════════════════════════════════════════════════
 function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
-function fmtDate(ts){ return ts?new Date(ts).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):'â€”'; }
-function fmtDateTime(ts){ return ts?new Date(ts).toLocaleString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'â€”'; }
+function fmtDate(ts){ return ts?new Date(ts).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):'—'; }
+function fmtDateTime(ts){ return ts?new Date(ts).toLocaleString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'—'; }
 
 function teamAbbr(name){
   // Generate 3-letter abbreviation from team name
@@ -769,9 +769,9 @@ function teamGatewayStatus(teamId, tier){
   return status;
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ══════════════════════════════════════════════════════════════
 // VIEWS
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ══════════════════════════════════════════════════════════════
 function showView(view, teamId=null, sessionId=null){
   currentView=view;
   currentTeamId=teamId;
@@ -783,11 +783,11 @@ function showView(view, teamId=null, sessionId=null){
   const summaryBtn = document.getElementById('summaryBtn');
   if(summaryBtn){
     if(view==='session'){
-      summaryBtn.textContent='ðŸ“‹ Session Summary';
+      summaryBtn.textContent='📋 Session Summary';
     } else if(view==='team'){
-      summaryBtn.textContent='ðŸ“‹ Team Summary';
+      summaryBtn.textContent='📋 Team Summary';
     } else {
-      summaryBtn.textContent='ðŸ“‹ Summary';
+      summaryBtn.textContent='📋 Summary';
     }
   }
 
@@ -841,9 +841,9 @@ function setTierUI(tier){
   if(fill) fill.className='progress-bar-fill '+tier;
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ══════════════════════════════════════════════════════════════
 // DASHBOARD
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ══════════════════════════════════════════════════════════════
 function renderDashboard(){
   const tierOrder = ['rookie','challenger','pro'];
   let html = `<div class="dash-wrap">
@@ -854,7 +854,7 @@ function renderDashboard(){
 
   if(teams.length===0){
     html += `<div class="dash-empty">
-      <div class="welcome-icon" style="font-size:40px;opacity:0.3;margin-bottom:14px">ðŸ</div>
+      <div class="welcome-icon" style="font-size:40px;opacity:0.3;margin-bottom:14px">🏁</div>
       <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em">No Teams Registered</div>
       <div style="font-size:13px;color:var(--text-dim);margin-top:6px">Click "Register Team" to add the first team.</div>
     </div>`;
@@ -879,8 +879,8 @@ function renderDashboard(){
         const lic = licenses[team.id];
         const licBadge = lic
           ? (lic.verdict==='granted'
-              ? `<span style="font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:600;letter-spacing:0.08em;padding:2px 7px;border-radius:3px;background:rgba(34,197,94,0.12);color:var(--pass);border:1px solid rgba(34,197,94,0.3);margin-left:6px">âœ“ LICENSE GRANTED</span>`
-              : `<span style="font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:600;letter-spacing:0.08em;padding:2px 7px;border-radius:3px;background:var(--nopass-bg);color:var(--nopass);border:1px solid rgba(239,68,68,0.3);margin-left:6px">âœ— DENIED</span>`)
+              ? `<span style="font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:600;letter-spacing:0.08em;padding:2px 7px;border-radius:3px;background:rgba(34,197,94,0.12);color:var(--pass);border:1px solid rgba(34,197,94,0.3);margin-left:6px">✓ LICENSE GRANTED</span>`
+              : `<span style="font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:600;letter-spacing:0.08em;padding:2px 7px;border-radius:3px;background:var(--nopass-bg);color:var(--nopass);border:1px solid rgba(239,68,68,0.3);margin-left:6px">✗ DENIED</span>`)
           : '';
         html += `<div class="dash-team-card" onclick="showView('team','${team.id}')">
           <div class="dash-card-top">
@@ -891,7 +891,7 @@ function renderDashboard(){
             <div class="dash-prog-bar-track">
               <div class="dash-prog-bar-fill" style="width:${pct}%;background:${tierColor(team.tier)}"></div>
             </div>
-            <div class="dash-prog-label"><span style="color:var(--pass)">${passed} passed</span>${nopass>0?` Â· <span style="color:var(--nopass)">${nopass} failed</span>`:''} Â· ${total} mandatory</div>
+            <div class="dash-prog-label"><span style="color:var(--pass)">${passed} passed</span>${nopass>0?` · <span style="color:var(--nopass)">${nopass} failed</span>`:''} · ${total} mandatory</div>
           </div>
           <div class="dash-card-footer">
             <div class="dash-gw-dots">${all.map(g=>{
@@ -909,9 +909,9 @@ function renderDashboard(){
   document.getElementById('content').innerHTML = html;
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ══════════════════════════════════════════════════════════════
 // TEAM PROFILE
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ══════════════════════════════════════════════════════════════
 function issueLicense(teamId, verdict, rcOfficer, notes){
   licenses[teamId] = {verdict, issuedBy: rcOfficer, issuedAt: Date.now(), notes: notes||''};
   saveToStorage();
@@ -938,27 +938,27 @@ function renderLicensePanel(team, gwStatus){
   let eligState, eligLabel, eligSub;
   if(lic && lic.verdict==='granted'){
     eligState='granted';
-    eligLabel=`âœ… ${tierLbl} LICENSE GRANTED`;
-    eligSub=`Issued by ${esc(lic.issuedBy||'â€”')} on ${fmtDateTime(lic.issuedAt)}${lic.notes?'<br>Notes: '+esc(lic.notes):''}`;
+    eligLabel=`✅ ${tierLbl} LICENSE GRANTED`;
+    eligSub=`Issued by ${esc(lic.issuedBy||'—')} on ${fmtDateTime(lic.issuedAt)}${lic.notes?'<br>Notes: '+esc(lic.notes):''}`;
   } else if(lic && lic.verdict==='denied'){
     eligState='denied';
-    eligLabel=`âŒ LICENSE DENIED`;
-    eligSub=`Denied by ${esc(lic.issuedBy||'â€”')} on ${fmtDateTime(lic.issuedAt)}${lic.notes?'<br>Notes: '+esc(lic.notes):''}`;
+    eligLabel=`❌ LICENSE DENIED`;
+    eligSub=`Denied by ${esc(lic.issuedBy||'—')} on ${fmtDateTime(lic.issuedAt)}${lic.notes?'<br>Notes: '+esc(lic.notes):''}`;
   } else if(allPassed){
     eligState='eligible';
-    eligLabel=`âœ“ ELIGIBLE â€” All mandatory gateways passed`;
+    eligLabel=`✓ ELIGIBLE — All mandatory gateways passed`;
     eligSub='All mandatory gateways have been passed across completed sessions. A license decision can now be issued.';
   } else {
     eligState='incomplete';
     const passed = mandatory.filter(g=>gwStatus[g.id]==='pass').length;
-    eligLabel=`â³ INCOMPLETE â€” ${passed}/${mandatory.length} mandatory passed`;
+    eligLabel=`⏳ INCOMPLETE — ${passed}/${mandatory.length} mandatory passed`;
     eligSub='All mandatory gateways must be passed before a license can be issued.';
   }
 
   // Gateway checklist
   const checkRows = mandatory.map(gw=>{
     const v = gwStatus[gw.id]||'pending';
-    const icon = v==='pass'?'âœ“':v==='nopass'?'âœ—':'â—‹';
+    const icon = v==='pass'?'✓':v==='nopass'?'✗':'○';
     return `<div class="license-gw-check">
       <span class="license-gw-check-id ${team.tier}">${gw.id}</span>
       <span class="license-gw-check-name">${gw.name}</span>
@@ -969,7 +969,7 @@ function renderLicensePanel(team, gwStatus){
   // Action buttons
   let btns = '';
   if(lic){
-    btns = `<button class="license-btn revoke" onclick="revokeLicense('${team.id}')">â†º Revoke Decision</button>`;
+    btns = `<button class="license-btn revoke" onclick="revokeLicense('${team.id}')">↺ Revoke Decision</button>`;
   } else if(allPassed){
     btns = `
       <div style="display:flex;flex-direction:column;gap:8px;width:100%">
@@ -978,8 +978,8 @@ function renderLicensePanel(team, gwStatus){
           <input class="field-input" id="licNotes-${team.id}" placeholder="Notes (optional)" style="flex:1;min-width:160px">
         </div>
         <div style="display:flex;gap:8px">
-          <button class="license-btn grant" onclick="issueLicense('${team.id}','granted',document.getElementById('licOfficer-${team.id}').value,document.getElementById('licNotes-${team.id}').value)">âœ“ Issue License</button>
-          <button class="license-btn deny" onclick="issueLicense('${team.id}','denied',document.getElementById('licOfficer-${team.id}').value,document.getElementById('licNotes-${team.id}').value)">âœ— Deny License</button>
+          <button class="license-btn grant" onclick="issueLicense('${team.id}','granted',document.getElementById('licOfficer-${team.id}').value,document.getElementById('licNotes-${team.id}').value)">✓ Issue License</button>
+          <button class="license-btn deny" onclick="issueLicense('${team.id}','denied',document.getElementById('licOfficer-${team.id}').value,document.getElementById('licNotes-${team.id}').value)">✗ Deny License</button>
         </div>
       </div>`;
   } else if(anyFailed && !allPassed){
@@ -990,7 +990,7 @@ function renderLicensePanel(team, gwStatus){
           <input class="field-input" id="licOfficer-${team.id}" placeholder="Issuing RC Officer" style="width:180px">
           <input class="field-input" id="licNotes-${team.id}" placeholder="Notes (optional)" style="flex:1;min-width:160px">
         </div>
-        <button class="license-btn deny" style="width:fit-content" onclick="issueLicense('${team.id}','denied',document.getElementById('licOfficer-${team.id}').value,document.getElementById('licNotes-${team.id}').value)">âœ— Deny License</button>
+        <button class="license-btn deny" style="width:fit-content" onclick="issueLicense('${team.id}','denied',document.getElementById('licOfficer-${team.id}').value,document.getElementById('licNotes-${team.id}').value)">✗ Deny License</button>
       </div>`;
   }
 
@@ -1018,7 +1018,7 @@ function renderTeamProfile(){
 
   let html = `<div class="profile-wrap">
     <div class="profile-header">
-      <button class="back-btn" onclick="showView('dashboard')">â† All Teams</button>
+      <button class="back-btn" onclick="showView('dashboard')">← All Teams</button>
       <div class="profile-title-row">
         <div>
           <div class="profile-name">${esc(team.name)}${team.carNo?` <span class="dash-car-no">#${esc(team.carNo)}</span>`:''}</div>
@@ -1028,8 +1028,8 @@ function renderTeamProfile(){
           </div>
         </div>
         <div style="display:flex;gap:8px;align-items:center">
-          <button class="action-btn" onclick="openEditTeam('${team.id}')">âœ Edit</button>
-          <button class="action-btn danger" onclick="confirmRemoveTeam('${team.id}')">âœ• Remove</button>
+          <button class="action-btn" onclick="openEditTeam('${team.id}')">✏ Edit</button>
+          <button class="action-btn danger" onclick="confirmRemoveTeam('${team.id}')">✕ Remove</button>
           <button class="action-btn primary" onclick="openNewSession('${team.id}')">+ New Session</button>
         </div>
       </div>
@@ -1039,7 +1039,7 @@ function renderTeamProfile(){
       <div class="stat-card"><div class="stat-val" style="color:${col}">${passed}/${mandatory.length}</div><div class="stat-lbl">Mandatory Passed</div></div>
       <div class="stat-card"><div class="stat-val">${teamSessions.length}</div><div class="stat-lbl">Sessions</div></div>
       <div class="stat-card"><div class="stat-val">${attempts.filter(a=>a.teamId===currentTeamId).length}</div><div class="stat-lbl">Total Attempts</div></div>
-      <div class="stat-card"><div class="stat-val">${teamSessions.length?fmtDate(teamSessions[0].createdAt):'â€”'}</div><div class="stat-lbl">Last Session</div></div>
+      <div class="stat-card"><div class="stat-val">${teamSessions.length?fmtDate(teamSessions[0].createdAt):'—'}</div><div class="stat-lbl">Last Session</div></div>
     </div>
 
     ${renderLicensePanel(team, gwStatus)}
@@ -1055,7 +1055,7 @@ function renderTeamProfile(){
     html += `<div class="gw-overview-item ${v}">
       <div class="gw-ov-code">${gw.id}</div>
       <div class="gw-ov-name">${gw.name}</div>
-      <div class="gw-ov-meta">${sessionsAttempted} session${sessionsAttempted!==1?'s':''} Â· ${v==='pass'?'âœ“ Passed':v==='nopass'?'âœ— No Pass':'Pending'}</div>
+      <div class="gw-ov-meta">${sessionsAttempted} session${sessionsAttempted!==1?'s':''} · ${v==='pass'?'✓ Passed':v==='nopass'?'✗ No Pass':'Pending'}</div>
     </div>`;
   });
 
@@ -1074,7 +1074,7 @@ function renderTeamProfile(){
       html += `<div class="session-row" onclick="showView('session',null,'${sess.id}')">
         <div class="sess-row-left">
           <div class="sess-code">${esc(sess.sessionCode)}</div>
-          <div class="sess-meta">${fmtDate(sess.createdAt)} Â· RC: ${esc(sess.rcOfficer||'â€”')} Â· ${tierLabel(sess.tier)}</div>
+          <div class="sess-meta">${fmtDate(sess.createdAt)} · RC: ${esc(sess.rcOfficer||'—')} · ${tierLabel(sess.tier)}</div>
           ${sess.notes?`<div class="sess-notes-preview">${esc(sess.notes)}</div>`:''}
         </div>
         <div class="sess-row-right">
@@ -1084,7 +1084,7 @@ function renderTeamProfile(){
             return `<div class="dash-gw-dot ${v}" title="${g.id}"></div>`;
           }).join('')}</div>
           <div class="sess-progress">${prog.count}/${prog.total} passed</div>
-          <div class="sess-verdict ${verd}">${verd==='pass'?'âœ“ PASS':verd==='nopass'?'âœ— NO PASS':'â³ IN PROGRESS'}</div>
+          <div class="sess-verdict ${verd}">${verd==='pass'?'✓ PASS':verd==='nopass'?'✗ NO PASS':'⏳ IN PROGRESS'}</div>
         </div>
       </div>`;
     });
@@ -1094,19 +1094,19 @@ function renderTeamProfile(){
   document.getElementById('content').innerHTML = html;
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ══════════════════════════════════════════════════════════════
 // SESSION VIEW
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ══════════════════════════════════════════════════════════════
 function renderSessionBreadcrumb(){
   const sess = sessions.find(s=>s.id===currentSessionId);
   const team = sess ? teams.find(t=>t.id===sess.teamId) : null;
   document.getElementById('sessionBreadcrumb').innerHTML = sess ? `
     <button class="back-btn-sm" onclick="showView('dashboard')">Teams</button>
-    <span style="color:var(--text-dim)">â€º</span>
+    <span style="color:var(--text-dim)">›</span>
     <button class="back-btn-sm" onclick="showView('team','${sess.teamId}')">${esc(team?team.name:'Team')}</button>
-    <span style="color:var(--text-dim)">â€º</span>
+    <span style="color:var(--text-dim)">›</span>
     <span style="color:var(--text)">${esc(sess.sessionCode)}</span>
-    <span class="sess-rc-label">RC: ${esc(sess.rcOfficer||'â€”')}</span>
+    <span class="sess-rc-label">RC: ${esc(sess.rcOfficer||'—')}</span>
     <span class="sess-date-label">${fmtDate(sess.createdAt)}</span>
   ` : '';
 }
@@ -1130,7 +1130,7 @@ function renderSessionSidebar(){
       const nonCarryAttCount = allAtt.filter(a=>!a.carryover).length;
       html += `<div class="gw-item ${isActive?'active-'+tier:''}" onclick="selectGateway('${gw.id}')">
         <span class="gw-code ${tier}">${gw.id}</span>
-        <span class="gw-title-short">${gw.name}${isCarryover?' <span class="carryover-tag">â†©</span>':''}</span>
+        <span class="gw-title-short">${gw.name}${isCarryover?' <span class="carryover-tag">↩</span>':''}</span>
         <div style="display:flex;align-items:center;gap:5px;flex-shrink:0">
           ${nonCarryAttCount>0?`<span class="att-count">${nonCarryAttCount}</span>`:''}
           <div class="gw-status-dot ${verdict==='pass'?'pass':verdict==='nopass'?'nopass':''}" style="${isCarryover?'opacity:0.55':''}" title="${isCarryover?'Carried over from prior session':''}"></div>
@@ -1148,7 +1148,7 @@ function renderSessionSidebar(){
 function renderSessionWelcome(){
   document.getElementById('content').innerHTML = `
     <div class="welcome-pane">
-      <div class="welcome-icon">ðŸ</div>
+      <div class="welcome-icon">🏁</div>
       <div class="welcome-title">Select a Gateway</div>
       <div class="welcome-sub">Choose a gateway from the sidebar to record an attempt.</div>
     </div>`;
@@ -1174,16 +1174,16 @@ function renderGateway(gw){
   if(gw.prereq)    tags+='<span class="tag-prereq">Prerequisite for P6 & P8</span> ';
 
   const metrics = gw.metrics.map(m=>`<div class="metric-row">
-    <span class="metric-icon">â—ˆ</span><span class="metric-text">${m.text}</span><span class="metric-value">${m.value}</span>
+    <span class="metric-icon">◈</span><span class="metric-text">${m.text}</span><span class="metric-value">${m.value}</span>
   </div>`).join('');
-  const conds = gw.conditions.map(c=>`<div class="condition-line">â†’ ${c}</div>`).join('');
+  const conds = gw.conditions.map(c=>`<div class="condition-line">→ ${c}</div>`).join('');
   const passH = gw.pass.map(p=>`<div class="verdict-item">${p}</div>`).join('');
   const nopassH = gw.nopass.map(p=>`<div class="verdict-item">${p}</div>`).join('');
   const isCarryover = latest && latest.carryover && !history.find(a=>!a.carryover);
   const banCls = d.verdict==='pass'?'pass show':d.verdict==='nopass'?'nopass show':'';
   const banTxt = d.verdict==='pass'
-    ? (isCarryover ? 'â†© CARRIED OVER â€” PASSED IN PRIOR SESSION' : 'âœ… GATEWAY PASSED')
-    : d.verdict==='nopass' ? 'âŒ GATEWAY â€” NO PASS' : '';
+    ? (isCarryover ? '↩ CARRIED OVER — PASSED IN PRIOR SESSION' : '✅ GATEWAY PASSED')
+    : d.verdict==='nopass' ? '❌ GATEWAY — NO PASS' : '';
 
   // Attempt history
   let histHtml = '';
@@ -1193,7 +1193,7 @@ function renderGateway(gw){
       ${history.map((a,i)=>`<div class="attempt-row">
         <div class="attempt-num">#${history.length-i}</div>
         <div class="attempt-verdict ${a.verdict}" style="${a.carryover?'opacity:0.65':''}">
-          ${a.carryover ? 'â†© Carry-over' : a.verdict==='pass'?'âœ“ Pass':a.verdict==='nopass'?'âœ— No Pass':'â³ Pending'}
+          ${a.carryover ? '↩ Carry-over' : a.verdict==='pass'?'✓ Pass':a.verdict==='nopass'?'✗ No Pass':'⏳ Pending'}
         </div>
         <div class="attempt-time">${a.carryover?'Prior session':fmtDateTime(a.timestamp)}</div>
         <div class="attempt-notes">${a.notes?esc(a.notes):'<span style="color:var(--text-dim)">No notes</span>'}</div>
@@ -1210,22 +1210,22 @@ function renderGateway(gw){
           <div class="gw-objective">${gw.objective}</div>
         </div>
       </div>
-      <div class="section"><div class="section-header"><span class="section-icon">âš™</span><span class="section-title">Test Conditions</span></div><div class="section-body">${conds}</div></div>
-      <div class="section"><div class="section-header"><span class="section-icon">ðŸ“</span><span class="section-title">Measurable Metrics</span></div><div class="section-body">${metrics}</div></div>
-      <div class="section"><div class="section-header"><span class="section-icon">âš–</span><span class="section-title">Pass / No Pass Criteria</span></div>
+      <div class="section"><div class="section-header"><span class="section-icon">⚙</span><span class="section-title">Test Conditions</span></div><div class="section-body">${conds}</div></div>
+      <div class="section"><div class="section-header"><span class="section-icon">📐</span><span class="section-title">Measurable Metrics</span></div><div class="section-body">${metrics}</div></div>
+      <div class="section"><div class="section-header"><span class="section-icon">⚖</span><span class="section-title">Pass / No Pass Criteria</span></div>
         <div class="section-body"><div class="verdict-grid">
-          <div class="verdict-col pass-col"><div class="verdict-label pass-label">âœ“ Pass</div>${passH}</div>
-          <div class="verdict-col nopass-col"><div class="verdict-label nopass-label">âœ— No Pass</div>${nopassH}</div>
+          <div class="verdict-col pass-col"><div class="verdict-label pass-label">✓ Pass</div>${passH}</div>
+          <div class="verdict-col nopass-col"><div class="verdict-label nopass-label">✗ No Pass</div>${nopassH}</div>
         </div></div>
       </div>
       <div class="decision-panel">
         <div class="decision-label">Record Attempt</div>
         <div class="decision-btns">
-          <button class="decision-btn pass-btn" onclick="recordAttempt('${gw.id}','pass')">âœ“ Pass</button>
-          <button class="decision-btn nopass-btn" onclick="recordAttempt('${gw.id}','nopass')">âœ— No Pass</button>
-          <button class="decision-btn pending-btn" onclick="recordAttempt('${gw.id}','pending')">â³ Pending</button>
+          <button class="decision-btn pass-btn" onclick="recordAttempt('${gw.id}','pass')">✓ Pass</button>
+          <button class="decision-btn nopass-btn" onclick="recordAttempt('${gw.id}','nopass')">✗ No Pass</button>
+          <button class="decision-btn pending-btn" onclick="recordAttempt('${gw.id}','pending')">⏳ Pending</button>
         </div>
-        <textarea class="notes-input" id="attemptNotes" placeholder="RC notes, multi-vehicle roles, conditions, observationsâ€¦">${d.notes||''}</textarea>
+        <textarea class="notes-input" id="attemptNotes" placeholder="RC notes, multi-vehicle roles, conditions, observations…">${d.notes||''}</textarea>
         <div class="result-banner ${banCls}" id="resultBanner">${banTxt}</div>
       </div>
       ${histHtml}
@@ -1269,9 +1269,9 @@ function setTier(tier){
   setTierUI(tier);
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ══════════════════════════════════════════════════════════════
 // ADD/EDIT TEAM MODAL
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ══════════════════════════════════════════════════════════════
 function openAddTeam(){
   document.getElementById('addTeamTitle').textContent='Register Team';
   document.getElementById('newTeamName').value='';
@@ -1327,9 +1327,9 @@ function confirmRemoveTeam(id){
   showView('dashboard');
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ══════════════════════════════════════════════════════════════
 // NEW SESSION MODAL
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ══════════════════════════════════════════════════════════════
 function openNewSession(teamId){
   const team=teams.find(t=>t.id===teamId);
   if(!team) return;
@@ -1367,7 +1367,7 @@ function confirmNewSession(){
       attempts.push({
         id: uid(), sessionId: sessId, teamId, gwId: gw.id,
         verdict: 'pass',
-        notes: 'â†© Carried over from previous session',
+        notes: '↩ Carried over from previous session',
         timestamp: createdAt - 1, // earlier than any new attempt, so new attempts take precedence
         carryover: true
       });
@@ -1379,9 +1379,9 @@ function confirmNewSession(){
   showView('session',null,sessId);
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ══════════════════════════════════════════════════════════════
 // SUMMARY & PRINT
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ══════════════════════════════════════════════════════════════
 
 function openTeamSummary(){
   const team = teams.find(t=>t.id===currentTeamId);
@@ -1399,29 +1399,29 @@ function openTeamSummary(){
 
   // Header meta
   document.getElementById('modalMeta').innerHTML =
-    `Team: <strong>${esc(team.name)}</strong>${team.carNo?' Â· Car #'+esc(team.carNo):''}<br>
-     Category: ${tierLbl} Â· ${teamSessions.length} session${teamSessions.length!==1?'s':''} Â· ${passed}/${mandatory.length} mandatory passed`;
+    `Team: <strong>${esc(team.name)}</strong>${team.carNo?' · Car #'+esc(team.carNo):''}<br>
+     Category: ${tierLbl} · ${teamSessions.length} session${teamSessions.length!==1?'s':''} · ${passed}/${mandatory.length} mandatory passed`;
 
-  // Overall result â€” license decision if issued, otherwise cumulative eligibility
+  // Overall result — license decision if issued, otherwise cumulative eligibility
   const el = document.getElementById('overallResult');
   if(lic && lic.verdict==='granted'){
     el.className='overall-result pass';
-    el.innerHTML=`âœ… ${tierLbl} LICENSE GRANTED Â· Issued by ${esc(lic.issuedBy||'â€”')} on ${fmtDate(lic.issuedAt)}`;
+    el.innerHTML=`✅ ${tierLbl} LICENSE GRANTED · Issued by ${esc(lic.issuedBy||'—')} on ${fmtDate(lic.issuedAt)}`;
   } else if(lic && lic.verdict==='denied'){
     el.className='overall-result nopass';
-    el.innerHTML=`âŒ LICENSE DENIED Â· By ${esc(lic.issuedBy||'â€”')} on ${fmtDate(lic.issuedAt)}${lic.notes?' â€” '+esc(lic.notes):''}`;
+    el.innerHTML=`❌ LICENSE DENIED · By ${esc(lic.issuedBy||'—')} on ${fmtDate(lic.issuedAt)}${lic.notes?' — '+esc(lic.notes):''}`;
   } else if(allPassed){
     el.className='overall-result pass';
-    el.textContent=`âœ… All mandatory gateways passed â€” eligible for license`;
+    el.textContent=`✅ All mandatory gateways passed — eligible for license`;
   } else if(anyNoPass){
     el.className='overall-result nopass';
-    el.textContent=`âš  Not all mandatory gateways passed â€” further attempts required`;
+    el.textContent=`⚠ Not all mandatory gateways passed — further attempts required`;
   } else {
     el.className='overall-result pending';
-    el.textContent=`â³ Assessment in progress â€” ${passed}/${mandatory.length} mandatory passed`;
+    el.textContent=`⏳ Assessment in progress — ${passed}/${mandatory.length} mandatory passed`;
   }
 
-  // Gateway rows â€” cumulative best status + attempt count + latest note
+  // Gateway rows — cumulative best status + attempt count + latest note
   let rows = '';
   all.forEach(gw=>{
     const v       = gwStatus[gw.id] || 'pending';
@@ -1449,12 +1449,12 @@ function openTeamSummary(){
     teamSessions.forEach(sess=>{
       const prog = sessionProgress(sess.id);
       const verd = sessionVerdict(sess.id);
-      const vIcon = verd==='pass'?'âœ“':verd==='nopass'?'âœ—':'â³';
+      const vIcon = verd==='pass'?'✓':verd==='nopass'?'✗':'⏳';
       const vCol  = verd==='pass'?'var(--pass)':verd==='nopass'?'var(--nopass)':'var(--text-muted)';
       rows += `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
         <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;min-width:120px">${esc(sess.sessionCode)}</span>
         <span style="color:var(--text-muted)">${fmtDate(sess.createdAt)}</span>
-        <span style="color:var(--text-muted)">RC: ${esc(sess.rcOfficer||'â€”')}</span>
+        <span style="color:var(--text-muted)">RC: ${esc(sess.rcOfficer||'—')}</span>
         <span style="color:${vCol};font-weight:700;margin-left:auto">${vIcon} ${prog.count}/${prog.total}</span>
       </div>`;
     });
@@ -1483,27 +1483,27 @@ function printTeamSummary(){
   const now=new Date().toLocaleString('en-GB');
 
   let vCls,vTxt;
-  if(lic&&lic.verdict==='granted'){vCls='pass';vTxt=tierLbl+' LICENSE GRANTED â€” Issued by '+esc(lic.issuedBy||'â€”')+' on '+fmtDate(lic.issuedAt);}
-  else if(lic&&lic.verdict==='denied'){vCls='nopass';vTxt='LICENSE DENIED â€” By '+esc(lic.issuedBy||'â€”')+' on '+fmtDate(lic.issuedAt)+(lic.notes?' â€” '+esc(lic.notes):'');}
-  else if(allPassed){vCls='pass';vTxt='All mandatory gateways passed â€” eligible for license';}
-  else if(anyNoPass){vCls='nopass';vTxt='Not all mandatory gateways passed â€” further attempts required';}
-  else{vCls='pending';vTxt='Assessment in progress â€” '+passed+'/'+mandatory.length+' mandatory passed';}
+  if(lic&&lic.verdict==='granted'){vCls='pass';vTxt=tierLbl+' LICENSE GRANTED — Issued by '+esc(lic.issuedBy||'—')+' on '+fmtDate(lic.issuedAt);}
+  else if(lic&&lic.verdict==='denied'){vCls='nopass';vTxt='LICENSE DENIED — By '+esc(lic.issuedBy||'—')+' on '+fmtDate(lic.issuedAt)+(lic.notes?' — '+esc(lic.notes):'');}
+  else if(allPassed){vCls='pass';vTxt='All mandatory gateways passed — eligible for license';}
+  else if(anyNoPass){vCls='nopass';vTxt='Not all mandatory gateways passed — further attempts required';}
+  else{vCls='pending';vTxt='Assessment in progress — '+passed+'/'+mandatory.length+' mandatory passed';}
 
   const gwRows=all.map(gw=>{
     const v=gwStatus[gw.id]||'pending';
-    const label=v==='pass'?'PASS':v==='nopass'?'NO PASS':'â€”';
+    const label=v==='pass'?'PASS':v==='nopass'?'NO PASS':'—';
     const allAtt=attempts.filter(a=>a.teamId===currentTeamId&&a.gwId===gw.id&&!a.carryover);
     const lastAtt=allAtt.sort((a,b)=>b.timestamp-a.timestamp)[0];
     // Count unique sessions where a real attempt was recorded
     const sessionsAttempted = new Set(allAtt.map(a=>a.sessionId)).size;
-    return '<tr><td style="font-weight:700;white-space:nowrap">'+gw.id+'</td><td>'+gw.name+(gw.mandatory===false?' <span class="pv-optional">(optional)</span>':'')+'</td><td class="pv-'+v+'" style="white-space:nowrap">'+label+'</td><td style="color:#555;font-size:8pt">'+(sessionsAttempted||'â€”')+'</td><td class="pv-notes">'+esc((lastAtt&&lastAtt.notes)||'')+'</td></tr>';
+    return '<tr><td style="font-weight:700;white-space:nowrap">'+gw.id+'</td><td>'+gw.name+(gw.mandatory===false?' <span class="pv-optional">(optional)</span>':'')+'</td><td class="pv-'+v+'" style="white-space:nowrap">'+label+'</td><td style="color:#555;font-size:8pt">'+(sessionsAttempted||'—')+'</td><td class="pv-notes">'+esc((lastAtt&&lastAtt.notes)||'')+'</td></tr>';
   }).join('');
 
   const sessRows=teamSessions.map(sess=>{
     const prog=sessionProgress(sess.id);
     const verd=sessionVerdict(sess.id);
     const vLabel=verd==='pass'?'PASS':verd==='nopass'?'INCOMPLETE':'IN PROGRESS';
-    return '<tr><td style="font-weight:700">'+esc(sess.sessionCode)+'</td><td>'+fmtDate(sess.createdAt)+'</td><td>'+esc(sess.rcOfficer||'â€”')+'</td><td>'+prog.count+'/'+prog.total+' passed</td><td class="pv-'+(verd==='pass'?'pass':verd==='nopass'?'nopass':'pending')+'">'+vLabel+'</td></tr>';
+    return '<tr><td style="font-weight:700">'+esc(sess.sessionCode)+'</td><td>'+fmtDate(sess.createdAt)+'</td><td>'+esc(sess.rcOfficer||'—')+'</td><td>'+prog.count+'/'+prog.total+' passed</td><td class="pv-'+(verd==='pass'?'pass':verd==='nopass'?'nopass':'pending')+'">'+vLabel+'</td></tr>';
   }).join('');
 
   const body=
@@ -1516,7 +1516,7 @@ function printTeamSummary(){
 
   document.getElementById('modalOverlay').classList.remove('show');
   const pw=window.open('','_blank','width=900,height=700');
-  if(!pw){alert('Pop-ups are blocked â€” please allow pop-ups for this page to print.');return;}
+  if(!pw){alert('Pop-ups are blocked — please allow pop-ups for this page to print.');return;}
   pw.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Team Summary '+esc(team.name)+'</title><style>@page{margin:12mm 14mm;size:A4}*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}.ph-logo{font-weight:800;font-size:15pt;letter-spacing:.04em;border-bottom:2px solid #000;padding-bottom:6pt;margin-bottom:6pt}.ph-meta{font-size:8.5pt;color:#444;margin-bottom:6pt;line-height:1.55}.ph-verdict{display:inline-block;margin-bottom:10pt;font-weight:700;font-size:12pt;padding:4pt 12pt;border-radius:3pt}.ph-verdict.pass{background:#dcfce7;color:#166534;border:1px solid #86efac}.ph-verdict.nopass{background:#fee2e2;color:#991b1b;border:1px solid #fca5a5}.ph-verdict.pending{background:#f3f4f6;color:#374151;border:1px solid #d1d5db}.section-head{font-weight:700;font-size:9pt;letter-spacing:.1em;text-transform:uppercase;color:#555;border-top:1px solid #ccc;padding-top:7pt;margin-top:12pt;margin-bottom:4pt}table{width:100%;border-collapse:collapse;font-size:9pt;margin-bottom:4pt}th{font-weight:700;font-size:8pt;letter-spacing:.08em;text-transform:uppercase;border-bottom:1.5px solid #000;padding:4pt 5pt;text-align:left}td{padding:4pt 5pt;border-bottom:1px solid #e5e7eb;vertical-align:top;line-height:1.4}tr:last-child td{border-bottom:none}tr{page-break-inside:avoid}.pv-pass{font-weight:700;color:#166534}.pv-nopass{font-weight:700;color:#991b1b}.pv-pending{color:#6b7280}.pv-optional{font-size:7.5pt;color:#9ca3af}.pv-notes{font-size:8pt;color:#555;font-style:italic}.print-sig{margin-top:28pt;border-top:1px solid #ccc;padding-top:14pt;page-break-inside:avoid}.print-sig-lbl{font-size:7.5pt;color:#555;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10pt}.print-sig-row{display:flex;gap:28pt}.print-sig-field{flex:1}.print-sig-field.narrow{max-width:90pt}.print-sig-line{border-bottom:1px solid #000;height:20pt;margin-bottom:3pt}.print-sig-fieldlabel{font-size:7.5pt;color:#555;text-transform:uppercase;letter-spacing:.05em}</style></head><body>'+body+'</body></html>');
   pw.document.close();
   pw.focus();
@@ -1534,20 +1534,20 @@ function openSummary(){
   const tierLbl=tierLabel(sess.tier).toUpperCase();
 
   document.getElementById('modalMeta').innerHTML=
-    `Team: <strong>${esc(team?team.name:'â€”')}</strong>${team&&team.carNo?' Â· Car #'+esc(team.carNo):''}<br>
-     Session: <strong>${esc(sess.sessionCode)}</strong> Â· ${fmtDate(sess.createdAt)} Â· RC Officer: ${esc(sess.rcOfficer||'â€”')}<br>
-     Category: ${tierLbl} Â· ${prog.count}/${prog.total} mandatory passed`;
+    `Team: <strong>${esc(team?team.name:'—')}</strong>${team&&team.carNo?' · Car #'+esc(team.carNo):''}<br>
+     Session: <strong>${esc(sess.sessionCode)}</strong> · ${fmtDate(sess.createdAt)} · RC Officer: ${esc(sess.rcOfficer||'—')}<br>
+     Category: ${tierLbl} · ${prog.count}/${prog.total} mandatory passed`;
 
   const el=document.getElementById('overallResult');
   if(verd==='pass'){
     el.className='overall-result pass';
-    el.textContent=`âœ… All mandatory gateways passed â€” ${tierLbl}`;
+    el.textContent=`✅ All mandatory gateways passed — ${tierLbl}`;
   } else if(verd==='nopass'){
     el.className='overall-result nopass';
-    el.textContent=`âš  Session incomplete â€” further attempts required`;
+    el.textContent=`⚠ Session incomplete — further attempts required`;
   } else {
     el.className='overall-result pending';
-    el.textContent='â³ Session in progress';
+    el.textContent='⏳ Session in progress';
   }
 
   const all=getAllGateways(sess.tier);
@@ -1598,8 +1598,8 @@ function printSummary(){
   const verd=sessionVerdict(currentSessionId);
   const tierLbl=tierLabel(sess.tier).toUpperCase();
   let vCls='pending',vTxt='Session In Progress';
-  if(verd==='pass'){vCls='pass';vTxt='All mandatory gateways passed â€” '+tierLbl;}
-  else if(verd==='nopass'){vCls='nopass';vTxt='Session Incomplete â€” Further Attempts Required';}
+  if(verd==='pass'){vCls='pass';vTxt='All mandatory gateways passed — '+tierLbl;}
+  else if(verd==='nopass'){vCls='nopass';vTxt='Session Incomplete — Further Attempts Required';}
 
   const all=getAllGateways(sess.tier);
   const tableRows=all.map(gw=>{
@@ -1613,28 +1613,28 @@ function printSummary(){
 
   const body =
     '<div class="ph-logo">A2RL &middot; Race Control &mdash; Session Gateway Summary</div>'+
-    '<div class="ph-meta">Team: <strong>'+esc(team?team.name:'â€”')+'</strong>'+(team&&team.carNo?' &middot; Car #'+esc(team.carNo):'')+' &middot; Session: <strong>'+esc(sess.sessionCode)+'</strong><br>Date: '+fmtDate(sess.createdAt)+' &middot; RC Officer: '+esc(sess.rcOfficer||'â€”')+' &middot; Category: '+tierLbl+'</div>'+
+    '<div class="ph-meta">Team: <strong>'+esc(team?team.name:'—')+'</strong>'+(team&&team.carNo?' &middot; Car #'+esc(team.carNo):'')+' &middot; Session: <strong>'+esc(sess.sessionCode)+'</strong><br>Date: '+fmtDate(sess.createdAt)+' &middot; RC Officer: '+esc(sess.rcOfficer||'—')+' &middot; Category: '+tierLbl+'</div>'+
     '<div class="ph-verdict '+vCls+'">'+vTxt+'</div>'+
     '<table><thead><tr><th>ID</th><th>Gateway</th><th>Verdict</th><th>Notes</th></tr></thead><tbody>'+tableRows+'</tbody></table>'+
     signatureBlock();
 
   document.getElementById('modalOverlay').classList.remove('show');
   const pw=window.open('','_blank','width=900,height=700');
-  if(!pw){alert('Pop-ups are blocked â€” please allow pop-ups for this page to print.');return;}
+  if(!pw){alert('Pop-ups are blocked — please allow pop-ups for this page to print.');return;}
   pw.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Session Summary '+esc(sess.sessionCode)+'</title><style>@page{margin:12mm 14mm;size:A4}*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}.ph-logo{font-weight:800;font-size:15pt;letter-spacing:.04em;border-bottom:2px solid #000;padding-bottom:6pt;margin-bottom:6pt}.ph-meta{font-size:8.5pt;color:#444;margin-bottom:6pt;line-height:1.55}.ph-verdict{display:inline-block;margin-bottom:10pt;font-weight:700;font-size:12pt;padding:4pt 12pt;border-radius:3pt}.ph-verdict.pass{background:#dcfce7;color:#166534;border:1px solid #86efac}.ph-verdict.nopass{background:#fee2e2;color:#991b1b;border:1px solid #fca5a5}.ph-verdict.pending{background:#f3f4f6;color:#374151;border:1px solid #d1d5db}.section-head{font-weight:700;font-size:9pt;letter-spacing:.1em;text-transform:uppercase;color:#555;border-top:1px solid #ccc;padding-top:7pt;margin-top:12pt;margin-bottom:4pt}table{width:100%;border-collapse:collapse;font-size:9pt;margin-bottom:4pt}th{font-weight:700;font-size:8pt;letter-spacing:.08em;text-transform:uppercase;border-bottom:1.5px solid #000;padding:4pt 5pt;text-align:left}td{padding:4pt 5pt;border-bottom:1px solid #e5e7eb;vertical-align:top;line-height:1.4}tr:last-child td{border-bottom:none}tr{page-break-inside:avoid}.pv-pass{font-weight:700;color:#166534}.pv-nopass{font-weight:700;color:#991b1b}.pv-pending{color:#6b7280}.pv-optional{font-size:7.5pt;color:#9ca3af}.pv-notes{font-size:8pt;color:#555;font-style:italic}.print-sig{margin-top:28pt;border-top:1px solid #ccc;padding-top:14pt;page-break-inside:avoid}.print-sig-lbl{font-size:7.5pt;color:#555;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10pt}.print-sig-row{display:flex;gap:28pt}.print-sig-field{flex:1}.print-sig-field.narrow{max-width:90pt}.print-sig-line{border-bottom:1px solid #000;height:20pt;margin-bottom:3pt}.print-sig-fieldlabel{font-size:7.5pt;color:#555;text-transform:uppercase;letter-spacing:.05em}</style></head><body>'+body+'</body></html>');
   pw.document.close();
   pw.focus();
   setTimeout(function(){pw.print();},300);
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ══════════════════════════════════════════════════════════════
 // INIT
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ══════════════════════════════════════════════════════════════
 async function init(){
   const tick=()=>{
     const n=new Date();
     document.getElementById('liveDate').textContent=
-      n.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})+' Â· '+
+      n.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})+' · '+
       n.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
   };
   tick(); setInterval(tick,30000);
@@ -1645,4 +1645,3 @@ init();
 </script>
 </body>
 </html>
-

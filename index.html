@@ -6257,7 +6257,21 @@ function parseLegacyTimestamp(row, map) {
   const dateV = map.date ? (row[map.date] || '') : '';
   const timeV = map.time ? (row[map.time] || '') : '';
   if (dateV) {
-    const composed = new Date(`${dateV}T${timeV || '00:00'}`);
+    const trimmedDate = String(dateV).trim();
+    const trimmedTime = String(timeV || '00:00').trim() || '00:00';
+    const slashMatch = trimmedDate.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    let composed = null;
+    if (slashMatch) {
+      const month = parseInt(slashMatch[1], 10);
+      const day = parseInt(slashMatch[2], 10);
+      const year = parseInt(slashMatch[3], 10);
+      const timeMatch = trimmedTime.match(/^(\d{1,2}):(\d{2})$/);
+      const hour = timeMatch ? parseInt(timeMatch[1], 10) : 0;
+      const minute = timeMatch ? parseInt(timeMatch[2], 10) : 0;
+      composed = new Date(year, month - 1, day, hour, minute, 0, 0);
+    } else {
+      composed = new Date(`${trimmedDate}T${trimmedTime}`);
+    }
     if (!isNaN(composed)) return composed.toISOString();
   }
   return null;

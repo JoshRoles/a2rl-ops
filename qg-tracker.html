@@ -1,0 +1,1648 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A2RL â€” Race Control Â· Quality Gateway Script</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@300;400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#0a0c0f; --surface:#111318; --surface2:#181c23;
+    --border:#252b36; --border-bright:#3a4454;
+    --text:#e8eaf0; --text-muted:#6b7585; --text-dim:#3e4a5c;
+    --rookie:#00c2a8; --rookie-bg:rgba(0,194,168,0.08); --rookie-border:rgba(0,194,168,0.25);
+    --challenger:#f59e0b; --challenger-bg:rgba(245,158,11,0.08); --challenger-border:rgba(245,158,11,0.25);
+    --pro:#ef4444; --pro-bg:rgba(239,68,68,0.08); --pro-border:rgba(239,68,68,0.25);
+    --pass:#22c55e; --pass-bg:rgba(34,197,94,0.1);
+    --nopass:#ef4444; --nopass-bg:rgba(239,68,68,0.1);
+    --accent:#3b82f6;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:'Barlow',sans-serif;font-size:14px;min-height:100vh;}
+
+  /* â”€â”€ HEADER â”€â”€ */
+  .header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:52px;position:sticky;top:0;z-index:100;}
+  .header-left{display:flex;align-items:center;gap:14px;}
+  .logo{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:20px;letter-spacing:0.05em;}
+  .logo span{color:var(--pro);}
+  .header-badge{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;color:var(--text-muted);background:var(--bg);border:1px solid var(--border);padding:3px 8px;border-radius:3px;letter-spacing:0.08em;text-transform:uppercase;}
+  .header-date{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-muted);}
+
+  /* â”€â”€ NAV â”€â”€ */
+  .nav-strip{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;gap:4px;height:44px;}
+  .nav-btn{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;padding:10px 16px;border:none;background:none;cursor:pointer;border-bottom:3px solid transparent;color:var(--text-muted);transition:all 0.15s;position:relative;bottom:-1px;}
+  .nav-btn:hover{color:var(--text);}
+  .nav-btn.active{color:var(--accent);border-bottom-color:var(--accent);}
+  .summary-btn{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;padding:6px 14px;background:var(--surface);border:1px solid var(--border);color:var(--text-muted);border-radius:4px;cursor:pointer;transition:all 0.15s;}
+  .summary-btn:hover{border-color:var(--accent);color:var(--accent);}
+
+  /* â”€â”€ SESSION BREADCRUMB â”€â”€ */
+  .session-breadcrumb{background:var(--surface2);border-bottom:1px solid var(--border);padding:7px 24px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-height:36px;}
+  .back-btn-sm{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;padding:3px 8px;background:none;border:none;color:var(--text-muted);cursor:pointer;transition:color 0.15s;}
+  .back-btn-sm:hover{color:var(--text);}
+  .sess-rc-label{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-muted);margin-left:8px;}
+  .sess-date-label{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-dim);}
+
+  /* â”€â”€ TIER BAR â”€â”€ */
+  .tier-bar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;gap:4px;}
+  .tier-btn{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:0.1em;text-transform:uppercase;padding:11px 18px;border:none;background:none;cursor:pointer;border-bottom:3px solid transparent;color:var(--text-muted);transition:all 0.15s;position:relative;bottom:-1px;}
+  .tier-btn:hover{color:var(--text);}
+  .tier-btn.rookie.active{color:var(--rookie);border-bottom-color:var(--rookie);}
+  .tier-btn.challenger.active{color:var(--challenger);border-bottom-color:var(--challenger);}
+  .tier-btn.pro.active{color:var(--pro);border-bottom-color:var(--pro);}
+  .tier-dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:6px;vertical-align:middle;}
+  .tier-btn.rookie .tier-dot{background:var(--rookie);}
+  .tier-btn.challenger .tier-dot{background:var(--challenger);}
+  .tier-btn.pro .tier-dot{background:var(--pro);}
+
+  /* â”€â”€ PROGRESS â”€â”€ */
+  .progress-strip{background:var(--surface2);border-bottom:1px solid var(--border);padding:6px 24px;display:flex;align-items:center;gap:12px;height:33px;}
+  .progress-label{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-muted);white-space:nowrap;}
+  .progress-bar-track{flex:1;height:5px;background:var(--border);border-radius:3px;overflow:hidden;}
+  .progress-bar-fill{height:100%;border-radius:3px;transition:width 0.3s ease;}
+  .progress-bar-fill.rookie{background:var(--rookie);}
+  .progress-bar-fill.challenger{background:var(--challenger);}
+  .progress-bar-fill.pro{background:var(--pro);}
+  .progress-count{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:var(--text);white-space:nowrap;}
+
+  /* â”€â”€ MAIN LAYOUT â”€â”€ */
+  .main{display:flex;}
+  .sidebar{width:256px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);overflow-y:auto;padding:10px 0;}
+  .content{flex:1;overflow-y:auto;background:var(--bg);}
+
+  /* â”€â”€ SIDEBAR â”€â”€ */
+  .sidebar-section-label{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:0.15em;color:var(--text-dim);padding:10px 16px 5px;}
+  .gw-item{padding:8px 16px;cursor:pointer;border-left:3px solid transparent;transition:all 0.1s;display:flex;align-items:center;gap:10px;}
+  .gw-item:hover{background:var(--surface2);}
+  .gw-item.active-rookie{background:var(--rookie-bg);border-left-color:var(--rookie);}
+  .gw-item.active-challenger{background:var(--challenger-bg);border-left-color:var(--challenger);}
+  .gw-item.active-pro{background:var(--pro-bg);border-left-color:var(--pro);}
+  .gw-code{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:0.05em;min-width:36px;}
+  .gw-code.rookie{color:var(--rookie);}
+  .gw-code.challenger{color:var(--challenger);}
+  .gw-code.pro{color:var(--pro);}
+  .gw-title-short{font-size:12px;color:var(--text);line-height:1.3;flex:1;}
+  .gw-status-dot{width:8px;height:8px;border-radius:50%;background:var(--border-bright);flex-shrink:0;transition:background 0.2s;}
+  .gw-status-dot.pass{background:var(--pass);}
+  .gw-status-dot.nopass{background:var(--nopass);}
+  .att-count{font-family:'JetBrains Mono',monospace;font-size:9px;background:var(--accent);color:#fff;padding:1px 5px;border-radius:8px;font-weight:600;}
+  .carryover-tag{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text-muted);opacity:0.7;margin-left:3px;}
+
+  /* â”€â”€ GATEWAY CARD â”€â”€ */
+  .content-pad{padding:22px;}
+  .gw-card{max-width:860px;}
+  .gw-header{display:flex;align-items:flex-start;gap:16px;margin-bottom:18px;}
+  .gw-id-badge{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:28px;letter-spacing:0.05em;line-height:1;padding:8px 14px;border-radius:6px;flex-shrink:0;}
+  .gw-id-badge.rookie{color:var(--rookie);background:var(--rookie-bg);border:1px solid var(--rookie-border);}
+  .gw-id-badge.challenger{color:var(--challenger);background:var(--challenger-bg);border:1px solid var(--challenger-border);}
+  .gw-id-badge.pro{color:var(--pro);background:var(--pro-bg);border:1px solid var(--pro-border);}
+  .gw-header-text{flex:1;}
+  .gw-name{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:22px;letter-spacing:0.02em;color:var(--text);margin-bottom:4px;}
+  .gw-objective{font-size:13px;color:var(--text-muted);line-height:1.55;}
+  .section{background:var(--surface);border:1px solid var(--border);border-radius:6px;margin-bottom:10px;overflow:hidden;}
+  .section-header{padding:8px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;}
+  .section-icon{font-size:13px;opacity:0.7;}
+  .section-title{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:0.12em;color:var(--text-muted);}
+  .section-body{padding:10px 14px;}
+  .condition-line{font-size:13px;color:var(--text);line-height:1.5;margin-bottom:5px;}
+  .condition-line:last-child{margin-bottom:0;}
+  .metric-row{display:flex;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);align-items:flex-start;}
+  .metric-row:last-child{border-bottom:none;}
+  .metric-icon{font-size:12px;margin-top:1px;flex-shrink:0;}
+  .metric-text{font-size:13px;color:var(--text);line-height:1.5;flex:1;}
+  .metric-value{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;background:var(--surface2);border:1px solid var(--border);padding:2px 7px;border-radius:3px;color:var(--accent);white-space:nowrap;flex-shrink:0;margin-top:1px;}
+  .verdict-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .verdict-col{border-radius:5px;padding:10px 12px;}
+  .verdict-col.pass-col{background:var(--pass-bg);border:1px solid rgba(34,197,94,0.2);}
+  .verdict-col.nopass-col{background:var(--nopass-bg);border:1px solid rgba(239,68,68,0.2);}
+  .verdict-label{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;letter-spacing:0.15em;text-transform:uppercase;margin-bottom:7px;display:flex;align-items:center;gap:6px;}
+  .verdict-label.pass-label{color:var(--pass);}
+  .verdict-label.nopass-label{color:var(--nopass);}
+  .verdict-item{font-size:12px;color:var(--text);line-height:1.5;padding:2px 0 2px 12px;position:relative;}
+  .verdict-item::before{position:absolute;left:0;top:4px;font-size:10px;}
+  .pass-col .verdict-item::before{content:'âœ“';color:var(--pass);}
+  .nopass-col .verdict-item::before{content:'âœ—';color:var(--nopass);}
+  .decision-panel{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:14px;margin-bottom:10px;}
+  .decision-label{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;letter-spacing:0.15em;text-transform:uppercase;color:var(--text-muted);margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+  .decision-label::after{content:'';flex:1;height:1px;background:var(--border);}
+  .decision-btns{display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;}
+  .decision-btn{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px;letter-spacing:0.08em;text-transform:uppercase;padding:8px 20px;border:2px solid;border-radius:4px;cursor:pointer;transition:all 0.15s;background:none;}
+  .decision-btn.pass-btn{color:var(--pass);border-color:var(--pass);}
+  .decision-btn.pass-btn:hover,.decision-btn.pass-btn.selected{background:var(--pass);color:#0a0c0f;}
+  .decision-btn.nopass-btn{color:var(--nopass);border-color:var(--nopass);}
+  .decision-btn.nopass-btn:hover,.decision-btn.nopass-btn.selected{background:var(--nopass);color:#fff;}
+  .decision-btn.pending-btn{color:var(--text-muted);border-color:var(--border-bright);}
+  .decision-btn.pending-btn.selected{background:var(--border-bright);color:var(--text);}
+  .notes-input{width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:'Barlow',sans-serif;font-size:13px;padding:8px 12px;border-radius:4px;resize:vertical;min-height:52px;outline:none;}
+  .notes-input:focus{border-color:var(--accent);}
+  .notes-input::placeholder{color:var(--text-dim);}
+  .result-banner{display:none;align-items:center;gap:12px;padding:9px 14px;border-radius:5px;margin-top:9px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;letter-spacing:0.05em;text-transform:uppercase;}
+  .result-banner.show{display:flex;}
+  .result-banner.pass{background:var(--pass-bg);border:1px solid rgba(34,197,94,0.3);color:var(--pass);}
+  .result-banner.nopass{background:var(--nopass-bg);border:1px solid rgba(239,68,68,0.3);color:var(--nopass);}
+
+  /* â”€â”€ TAGS â”€â”€ */
+  .tag-mandatory{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;padding:2px 6px;border-radius:2px;background:rgba(239,68,68,0.1);color:var(--nopass);border:1px solid rgba(239,68,68,0.2);}
+  .tag-bridge{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;padding:2px 6px;border-radius:2px;background:rgba(99,102,241,0.1);color:#818cf8;border:1px solid rgba(99,102,241,0.2);}
+  .tag-prereq{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;padding:2px 6px;border-radius:2px;background:rgba(234,179,8,0.1);color:#fbbf24;border:1px solid rgba(234,179,8,0.2);}
+
+  /* â”€â”€ ATTEMPT HISTORY â”€â”€ */
+  .attempt-history{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:14px;margin-top:12px;}
+  .attempt-history-title{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+  .att-count-badge{font-family:'JetBrains Mono',monospace;font-size:10px;background:var(--surface2);border:1px solid var(--border);padding:1px 6px;border-radius:10px;color:var(--text-muted);}
+  .attempt-row{display:grid;grid-template-columns:28px 110px 150px 1fr;gap:10px;align-items:start;padding:8px 0;border-bottom:1px solid var(--border);}
+  .attempt-row:last-child{border-bottom:none;}
+  .attempt-num{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-dim);font-weight:600;}
+  .attempt-verdict{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:0.06em;text-transform:uppercase;}
+  .attempt-verdict.pass{color:var(--pass);}
+  .attempt-verdict.nopass{color:var(--nopass);}
+  .attempt-verdict.pending{color:var(--text-muted);}
+  .attempt-time{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-muted);}
+  .attempt-notes{font-size:12px;color:var(--text);line-height:1.4;}
+
+  /* â”€â”€ WELCOME â”€â”€ */
+  .welcome-pane{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--text-muted);text-align:center;padding:40px;}
+  .welcome-icon{font-size:48px;margin-bottom:16px;opacity:0.4;}
+  .welcome-title{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:20px;letter-spacing:0.05em;color:var(--text-dim);margin-bottom:8px;text-transform:uppercase;}
+  .welcome-sub{font-size:13px;color:var(--text-dim);max-width:320px;line-height:1.6;}
+
+  /* â”€â”€ MODALS â”€â”€ */
+  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:200;align-items:center;justify-content:center;}
+  .modal-overlay.show{display:flex;}
+  .modal{background:var(--surface);border:1px solid var(--border);border-radius:8px;width:90%;max-width:680px;max-height:85vh;overflow-y:auto;padding:24px;}
+  .modal-title{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:20px;letter-spacing:0.05em;margin-bottom:4px;}
+  .modal-sub{font-size:12px;color:var(--text-muted);margin-bottom:14px;font-family:'JetBrains Mono',monospace;line-height:1.65;}
+  .summary-row{display:flex;align-items:center;gap:12px;padding:7px 0;border-bottom:1px solid var(--border);}
+  .summary-row:last-child{border-bottom:none;}
+  .summary-code{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px;min-width:44px;}
+  .summary-name{flex:1;font-size:13px;}
+  .summary-verdict{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:0.08em;padding:3px 10px;border-radius:3px;text-transform:uppercase;}
+  .summary-verdict.pass{background:var(--pass-bg);color:var(--pass);}
+  .summary-verdict.nopass{background:var(--nopass-bg);color:var(--nopass);}
+  .summary-verdict.pending{background:var(--surface2);color:var(--text-muted);}
+  .modal-footer{display:flex;gap:10px;margin-top:18px;padding-top:14px;border-top:1px solid var(--border);}
+  .modal-btn{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:0.1em;text-transform:uppercase;padding:9px 18px;border-radius:4px;cursor:pointer;border:1px solid;transition:all 0.15s;}
+  .modal-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .modal-btn.secondary{background:none;border-color:var(--border);color:var(--text-muted);}
+  .modal-btn:hover{opacity:0.85;}
+  .overall-result{padding:12px 16px;border-radius:5px;margin-bottom:14px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;letter-spacing:0.05em;text-align:center;}
+  .overall-result.pass{background:var(--pass-bg);border:1px solid rgba(34,197,94,0.3);color:var(--pass);}
+  .overall-result.nopass{background:var(--nopass-bg);border:1px solid rgba(239,68,68,0.3);color:var(--nopass);}
+  .overall-result.pending{background:var(--surface2);border:1px solid var(--border);color:var(--text-muted);}
+  .add-team-form,.new-sess-form{background:var(--surface);border:1px solid var(--border);border-radius:8px;width:90%;max-width:440px;padding:24px;}
+  .add-team-form h3,.new-sess-form h3{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;letter-spacing:0.05em;margin-bottom:3px;}
+  .add-team-form p,.new-sess-form p{font-size:12px;color:var(--text-muted);margin-bottom:16px;}
+  .field-row{display:flex;flex-direction:column;gap:4px;margin-bottom:12px;}
+  .field-row-inline{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .field-label{font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);}
+  .field-input{background:var(--bg);border:1px solid var(--border);color:var(--text);font-family:'Barlow',sans-serif;font-size:13px;padding:7px 10px;border-radius:4px;outline:none;width:100%;}
+  .field-input:focus{border-color:var(--accent);}
+
+  /* â”€â”€ DASHBOARD â”€â”€ */
+  .dash-wrap{padding:24px;max-width:1100px;}
+  .dash-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;}
+  .dash-title{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:22px;letter-spacing:0.04em;text-transform:uppercase;}
+  .dash-add-btn{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;padding:8px 18px;background:var(--accent);border:none;color:#fff;border-radius:4px;cursor:pointer;transition:opacity 0.15s;}
+  .dash-add-btn:hover{opacity:0.85;}
+  .dash-empty{text-align:center;padding:60px 0;}
+  .dash-tier-group{margin-bottom:28px;}
+  .dash-tier-label{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;margin-bottom:10px;}
+  .dash-team-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;}
+  .dash-team-card{background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:14px 16px;cursor:pointer;transition:border-color 0.15s,background 0.15s;}
+  .dash-team-card:hover{border-color:var(--border-bright);background:var(--surface2);}
+  .dash-card-top{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;}
+  .dash-card-name{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;letter-spacing:0.02em;}
+  .dash-car-no{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-muted);font-weight:400;}
+  .dash-card-sessions{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-dim);}
+  .dash-prog-bar-track{height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:4px;}
+  .dash-prog-bar-fill{height:100%;border-radius:2px;transition:width 0.3s;}
+  .dash-prog-label{font-size:11px;color:var(--text-muted);}
+  .dash-card-footer{display:flex;align-items:center;justify-content:space-between;margin-top:10px;}
+  .dash-gw-dots{display:flex;flex-wrap:wrap;gap:3px;}
+  .dash-gw-dot{width:8px;height:8px;border-radius:2px;background:var(--border-bright);}
+  .dash-gw-dot.pass{background:var(--pass);}
+  .dash-gw-dot.nopass{background:var(--nopass);}
+  .dash-last-session{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-dim);}
+
+  /* â”€â”€ TEAM PROFILE â”€â”€ */
+  .profile-wrap{padding:24px;max-width:960px;}
+  .profile-header{margin-bottom:20px;}
+  .back-btn{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;padding:5px 12px;background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:4px;cursor:pointer;transition:all 0.15s;margin-bottom:12px;display:inline-block;}
+  .back-btn:hover{color:var(--text);border-color:var(--border-bright);}
+  .profile-title-row{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;}
+  .profile-name{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:28px;letter-spacing:0.03em;margin-bottom:6px;}
+  .profile-meta{display:flex;align-items:center;gap:10px;}
+  .tier-badge{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;padding:3px 8px;border-radius:3px;}
+  .action-btn{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;padding:6px 14px;background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:4px;cursor:pointer;transition:all 0.15s;}
+  .action-btn:hover{color:var(--text);border-color:var(--border-bright);}
+  .action-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .action-btn.primary:hover{opacity:0.85;}
+  .action-btn.danger:hover{color:var(--nopass);border-color:var(--nopass);}
+  .profile-stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px;}
+  .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px 14px;}
+  .stat-val{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:20px;letter-spacing:0.02em;margin-bottom:2px;}
+  .stat-lbl{font-size:11px;color:var(--text-muted);}
+  .profile-gw-overview{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:14px 16px;margin-bottom:16px;}
+  .gw-overview-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;}
+  .gw-overview-item{padding:8px 10px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);}
+  .gw-overview-item.pass{border-color:rgba(34,197,94,0.3);background:rgba(34,197,94,0.06);}
+  .gw-overview-item.nopass{border-color:rgba(239,68,68,0.3);background:rgba(239,68,68,0.06);}
+  .gw-ov-code{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;color:var(--text-muted);margin-bottom:2px;}
+  .gw-overview-item.pass .gw-ov-code{color:var(--pass);}
+  .gw-overview-item.nopass .gw-ov-code{color:var(--nopass);}
+  .gw-ov-name{font-size:12px;color:var(--text);margin-bottom:3px;line-height:1.3;}
+  .gw-ov-meta{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-muted);}
+  .profile-sessions{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:14px 16px;}
+  .session-row{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-radius:5px;cursor:pointer;transition:background 0.12s;border:1px solid transparent;margin-bottom:6px;gap:12px;}
+  .session-row:hover{background:var(--surface2);border-color:var(--border);}
+  .session-row:last-child{margin-bottom:0;}
+  .sess-row-left{flex:1;}
+  .sess-code{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;letter-spacing:0.04em;margin-bottom:2px;}
+  .sess-meta{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-muted);}
+  .sess-notes-preview{font-size:11px;color:var(--text-muted);font-style:italic;margin-top:3px;}
+  .sess-row-right{display:flex;align-items:center;gap:10px;flex-shrink:0;}
+  .sess-dots{display:flex;flex-wrap:wrap;gap:3px;max-width:120px;}
+  .sess-progress{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-muted);white-space:nowrap;}
+  .sess-verdict{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;letter-spacing:0.08em;padding:3px 9px;border-radius:3px;text-transform:uppercase;white-space:nowrap;}
+  .sess-verdict.pass{background:var(--pass-bg);color:var(--pass);}
+  .sess-verdict.nopass{background:var(--nopass-bg);color:var(--nopass);}
+  .sess-verdict.pending{background:var(--surface2);color:var(--text-muted);}
+
+  /* â”€â”€ LICENSE PANEL â”€â”€ */
+  .license-panel{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:16px 18px;margin-bottom:16px;}
+  .license-panel-title{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-muted);margin-bottom:12px;display:flex;align-items:center;gap:8px;}
+  .license-panel-title::after{content:'';flex:1;height:1px;background:var(--border);}
+  .license-status-badge{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:16px;letter-spacing:0.06em;text-transform:uppercase;padding:6px 16px;border-radius:5px;display:inline-block;margin-bottom:8px;}
+  .license-status-badge.granted{background:rgba(34,197,94,0.12);color:var(--pass);border:1px solid rgba(34,197,94,0.3);}
+  .license-status-badge.denied{background:var(--nopass-bg);color:var(--nopass);border:1px solid rgba(239,68,68,0.3);}
+  .license-status-badge.eligible{background:rgba(59,130,246,0.1);color:#60a5fa;border:1px solid rgba(59,130,246,0.25);}
+  .license-status-badge.incomplete{background:var(--surface2);color:var(--text-muted);border:1px solid var(--border);}
+  .license-sub{font-size:12px;color:var(--text-muted);line-height:1.5;margin-bottom:10px;}
+  .license-checklist{border:1px solid var(--border);border-radius:4px;padding:8px 12px;margin-bottom:12px;}
+  .license-gw-check{display:flex;align-items:center;gap:8px;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border);}
+  .license-gw-check:last-child{border-bottom:none;}
+  .license-gw-check-id{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;min-width:44px;}
+  .license-gw-check-name{flex:1;color:var(--text);}
+  .license-gw-check-status{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;white-space:nowrap;}
+  .license-gw-check-status.pass{color:var(--pass);}
+  .license-gw-check-status.nopass{color:var(--nopass);}
+  .license-gw-check-status.pending{color:var(--text-dim);}
+  .license-btns{display:flex;gap:10px;flex-wrap:wrap;}
+  .license-btn{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;padding:9px 20px;border-radius:4px;cursor:pointer;border:2px solid;transition:all 0.15s;background:none;}
+  .license-btn.grant{color:var(--pass);border-color:var(--pass);}
+  .license-btn.grant:hover,.license-btn.grant.active{background:var(--pass);color:#0a0c0f;}
+  .license-btn.deny{color:var(--nopass);border-color:var(--nopass);}
+  .license-btn.deny:hover,.license-btn.deny.active{background:var(--nopass);color:#fff;}
+  .license-btn.revoke{color:var(--text-muted);border-color:var(--border-bright);}
+  .license-btn.revoke:hover{color:var(--text);border-color:var(--text-muted);}
+
+  /* â”€â”€ SCROLLBAR â”€â”€ */
+  .scrollbar-thin::-webkit-scrollbar{width:5px;}
+  .scrollbar-thin::-webkit-scrollbar-track{background:transparent;}
+  .scrollbar-thin::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-left">
+    <div class="logo">A2RL<span>Â·</span>RC</div>
+    <div class="header-badge">Race Control</div>
+    <div class="header-badge">Quality Gateway Script</div>
+  </div>
+  <div class="header-date" id="liveDate"></div>
+</div>
+
+<!-- NAV -->
+<div class="nav-strip">
+  <button class="nav-btn active" id="navDashboard" onclick="showView('dashboard')">ðŸ  Teams</button>
+  <div style="flex:1"></div>
+  <button class="summary-btn" id="summaryBtn" onclick="openSummary()">ðŸ“‹ Session Summary</button>
+</div>
+
+<!-- SESSION BREADCRUMB (shown in session view) -->
+<div class="session-breadcrumb" id="sessionBreadcrumb" style="display:none"></div>
+
+<!-- TIER BAR (shown in session view) -->
+<div class="tier-bar" id="tierBar" style="display:none">
+  <button class="tier-btn rookie" onclick="setTier('rookie')"><span class="tier-dot"></span>Rookie</button>
+  <button class="tier-btn challenger" onclick="setTier('challenger')"><span class="tier-dot"></span>Challenger</button>
+  <button class="tier-btn pro" onclick="setTier('pro')"><span class="tier-dot"></span>PRO</button>
+</div>
+
+<!-- SESSION CONTROLS (shown in session view) -->
+<div id="sessionControls" style="display:none">
+  <div class="progress-strip">
+    <span class="progress-label">GATEWAY PROGRESS</span>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill rookie" id="progressFill" style="width:0%"></div>
+    </div>
+    <span class="progress-count" id="progressCount">0 / 0</span>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main" id="mainArea" style="height:calc(100vh - 96px)">
+  <div class="sidebar scrollbar-thin" id="sidebar" style="display:none"></div>
+  <div class="content scrollbar-thin" id="content"></div>
+</div>
+
+<!-- SUMMARY MODAL -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeSummary(event)">
+  <div class="modal">
+    <div class="modal-title">Session Summary</div>
+    <div class="modal-sub" id="modalMeta"></div>
+    <div id="overallResult" class="overall-result pending">â³ Assessment In Progress</div>
+    <div id="summaryRows"></div>
+    <div class="modal-footer">
+      <button class="modal-btn primary" onclick="printCurrentSummary()">ðŸ–¨ Print / Export</button>
+      <button class="modal-btn secondary" onclick="closeSummary()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD/EDIT TEAM MODAL -->
+<div class="modal-overlay" id="addTeamOverlay" onclick="closeAddTeam(event)">
+  <div class="add-team-form">
+    <h3 id="addTeamTitle">Register Team</h3>
+    <p>Team profiles store all sessions and attempt history separately.</p>
+    <input type="hidden" id="editTeamId">
+    <div class="field-row">
+      <label class="field-label">Team Name</label>
+      <input class="field-input" id="newTeamName" placeholder="e.g. TU Munich">
+    </div>
+    <div class="field-row-inline">
+      <div class="field-row">
+        <label class="field-label">Car Number</label>
+        <input class="field-input" id="newCarNo" placeholder="e.g. 17">
+      </div>
+      <div class="field-row">
+        <label class="field-label">Category</label>
+        <select class="field-input" id="newTeamTier">
+          <option value="rookie">Rookie</option>
+          <option value="challenger">Challenger</option>
+          <option value="pro">PRO</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:16px">
+      <button class="modal-btn primary" onclick="confirmAddTeam()">Save</button>
+      <button class="modal-btn secondary" onclick="closeAddTeam()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- NEW SESSION MODAL -->
+<div class="modal-overlay" id="newSessionOverlay" onclick="closeNewSession(event)">
+  <div class="new-sess-form">
+    <h3>New Session</h3>
+    <p>A session auto-generates a unique ID and tracks all gateway attempts independently.</p>
+    <input type="hidden" id="nsTeamId">
+    <div class="field-row">
+      <label class="field-label">Session ID (auto-generated)</label>
+      <input class="field-input" id="nsCode" placeholder="QG-TUM-001" style="font-family:'JetBrains Mono',monospace">
+    </div>
+    <div class="field-row-inline">
+      <div class="field-row">
+        <label class="field-label">RC Officer</label>
+        <input class="field-input" id="nsRcOfficer" placeholder="Officer name">
+      </div>
+      <div class="field-row">
+        <label class="field-label">Date</label>
+        <input class="field-input" id="nsDate" type="date">
+      </div>
+    </div>
+    <div class="field-row">
+      <label class="field-label">Category</label>
+      <select class="field-input" id="nsTier">
+        <option value="rookie">Rookie</option>
+        <option value="challenger">Challenger</option>
+        <option value="pro">PRO</option>
+      </select>
+    </div>
+    <div class="field-row">
+      <label class="field-label">Session Notes (optional)</label>
+      <textarea class="field-input" id="nsNotes" placeholder="e.g. Morning session, dry conditionsâ€¦" style="min-height:52px;resize:vertical"></textarea>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:16px">
+      <button class="modal-btn primary" onclick="confirmNewSession()">Start Session</button>
+      <button class="modal-btn secondary" onclick="closeNewSession()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// GATEWAY DATA
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+const gateways = {
+  rookie:{
+    label:'Rookie',licenseOutcome:'Rookie License â€” Single-car time trial',failConsequence:'Restricted to Digital Championship only',
+    static:[
+      {id:'S1',name:'Static System Readiness',mandatory:true,
+        objective:'Ensure the vehicle and autonomous software stack are safe to activate and enter operational states. The 60-second startup limit is an A2RL operational benchmark ensuring track sessions run to schedule.',
+        conditions:['Car powered on in pitlane or garage with engine off.','All items from A2RL Operational and Safety Checklist General Safety 1 must be completed first.'],
+        metrics:[{text:'System start time',value:'â‰¤ 60 s'},{text:'All critical CAN/ROS nodes confirmed healthy',value:'Nominal'},{text:'Safety bits (E-stop circuits, BSU status, power supplies)',value:'Nominal'},{text:'Redundancy confirmed for heading, car speed, positioning sensors',value:'Confirmed'}],
+        pass:['Autonomous stack launches correctly without errors within 60 s.','All safety systems armed and reporting nominal status.','No critical faults in system diagnostics.','Emergency stop validated per Operational Checklist General Safety 2.'],
+        nopass:['Stack fails to launch within 60 seconds.','Any safety system fault preventing arming or activation.','Emergency stop procedure not validated.']},
+      {id:'S2',name:'Static Safety Checks',mandatory:true,
+        objective:'Successfully complete the full A2RL static safety inspection whilst the vehicle is stationary. A2RL provides the vehicle â€” teams are responsible only for software integration and any hardware modifications.',
+        conditions:['Car Receipt and Risk Assumption Confirmation must be signed before this check commences.','All checks carried out by A2RL Technical team.'],
+        metrics:[{text:'All safety checks passed to satisfaction of A2RL Technical team',value:'Pass'}],
+        pass:['All safety checks passed to the satisfaction of the A2RL Technical team.'],
+        nopass:['Safety checks not completed.','Safety checks not satisfactory.']}
+    ],
+    track:[
+      {id:'T1',name:'Autonomous Pitlane Exit',mandatory:true,
+        objective:'Ensure the vehicle can safely and autonomously exit the pitlane and merge onto the circuit while respecting pit speed limits, lane discipline, and Race Control procedures.',
+        conditions:['Vehicle stationary in holding zone 2.','Race Control authorisation required before vehicle moves.','Vehicle accelerates to pitlane speed limit and merges onto circuit.'],
+        metrics:[{text:'Pitlane speed (min/max enforced)',value:'25â€“30 km/h'},{text:'Vehicle remains within pitlane boundaries (white lines)',value:'Required'},{text:'Smooth and stable merge onto track',value:'Observable'},{text:'Manual or remote intervention',value:'None'}],
+        pass:['Vehicle initiates pit exit only after RC authorisation.','Speed maintained between 25 km/h (min) and 30 km/h (max) throughout pitlane.','Vehicle remains within pitlane boundaries.','Smooth, stable merge onto track.','No manual or remote intervention confirmed at TSMU.'],
+        nopass:['Speed below 25 km/h or above 30 km/h.','Visible boundary violation within pitlane.','Unsafe or hesitant merge.','Manual and/or remote intervention.']},
+      {id:'T2',name:'Sensor Redundancy & Localisation Integrity',mandatory:true,
+        objective:'Confirm the vehicle can reliably localise using multiple sensor types and continue operating safely if any single sensor fails. Two sub-tests: one lap with one LiDAR disabled, one lap with GNSS disabled.',
+        conditions:['Baseline: one full lap of YMC North at >60 km/h with all sensors active.','Sub-test A: one lap with one of the three LiDARs disabled.','Sub-test B: one lap with GNSS disabled.','Sub-tests run independently, not simultaneously.'],
+        metrics:[{text:'Baseline + both sub-test laps without unsafe behaviour',value:'Required'},{text:'Sub-test A (LiDAR off): stable localisation and raceline',value:'Confirmed'},{text:'Sub-test B (GNSS off): lap using LiDAR/Radar/Camera only',value:'â‰¤ 2:30 (YMC N)'},{text:'No sensor dropouts causing unsafe behaviour',value:'None'}],
+        pass:['Vehicle completes both sub-test laps without unsafe behaviour or intervention.','Stable localisation maintained throughout each sub-test.','No perception failures requiring manual intervention.'],
+        nopass:['Unsafe behaviour or intervention required during any sub-test.','Failure to demonstrate functional localisation with one sensor type disabled.']},
+      {id:'T3',name:'Low-Speed Vehicle Control',mandatory:true,
+        objective:'Validate basic physical vehicle control at low speeds. Isolates control quality without aero loads â€” oscillation, overcorrection, and throttle/brake calibration errors are most visible at 10â€“30 km/h.',
+        conditions:['Two passes of the main straight at 10â€“30 km/h.'],
+        metrics:[{text:'Lateral behaviour â€” observable on CCTV',value:'Stable'},{text:'Commanded vs measured speed (team supporting data)',value:'Matched'},{text:'Throttle and braking commands executed predictably',value:'Stable'}],
+        pass:['Both passes completed with no manual intervention.','Throttle and braking executed predictably and stably.','Steering stable â€” no oscillation or overcorrection.','Consistent trajectory maintained throughout.'],
+        nopass:['Visible oscillatory control behaviour.','Any manual intervention.']},
+      {id:'T4',name:'Single-Vehicle YMC North Autonomy',mandatory:true,
+        objective:'Demonstrate safe, uninterrupted autonomous operation during solo running. The 80-second lap time threshold was validated as the correct Rookie benchmark during the 2025 season.',
+        conditions:['Five (5) full autonomous laps of YMC North configuration.','Single vehicle only.'],
+        metrics:[{text:'Off-track events (no wheels beyond white line)',value:'Zero'},{text:'Manual interventions or emergency stops',value:'Zero'},{text:'Lap time per lap',value:'â‰¤ 80 s'}],
+        pass:['Completion of 5 clean laps without intervention.','Vehicle remains within track limits at all times.','No emergency stops or safety-critical events.','All lap times â‰¤ 80 seconds.'],
+        nopass:['Track limits violations.','Emergency stop activation.','Any manual or remote intervention.','Lap time exceeding 80 seconds.']},
+      {id:'T5',name:'Flag Compliance (Solo)',mandatory:true,
+        objective:'Validate correct and timely response to Race Control flag commands. EM Marshalling system logs exact timestamp of signal transmission and reception, cross-referenced with CCTV.',
+        conditions:['Single-vehicle operation.','RC issues Code 60, FCY, Red Flag, and Emergency Stop commands at various points on circuit.'],
+        metrics:[{text:'Speed reaches Code 60 zone (60 km/h) or FCY zone (80 km/h)',value:'â‰¤ 5 s'},{text:'Speed maintained at commanded zone once reached',value:'Required'},{text:'Red Flag / Emergency Stop deceleration',value:'â‰¥ 7 m/sÂ²'},{text:'EM Marshalling system confirms receipt + state transition',value:'Logged'}],
+        pass:['Deterministic and correct response to all flag commands.','Vehicle reaches and maintains commanded speed zone.','Deceleration of â‰¥ 7 m/sÂ² achieved on Red Flag / Emergency Stop.','EM Marshalling system confirms signal receipt and correct state transition.'],
+        nopass:['Missed, delayed, or incorrect response to any flag command.','Failure to reach commanded speed zone within 5 seconds.','Insufficient deceleration on flag commands.']},
+      {id:'T6',name:'Stop and Restart (Solo)',mandatory:true,
+        objective:'Ensure safe and reliable transitions between stopped and driving states. The critical safety element is the deceleration profile â€” the car must stop predictably at â‰¥ 7 m/sÂ² when commanded.',
+        conditions:['Vehicle commanded to stop and restart at various track locations under Race Control supervision.'],
+        metrics:[{text:'Controlled stop deceleration',value:'â‰¥ 7 m/sÂ²'},{text:'Restart: smooth and controlled, no dangerous lurch',value:'Observable'},{text:'Manual or remote intervention',value:'None'}],
+        pass:['Clean, controlled stop at â‰¥ 7 m/sÂ² deceleration.','Safe and controlled restart.','No hesitation or unsafe behaviour during restart.'],
+        nopass:['Insufficient deceleration on stop command (< 7 m/sÂ²).','Unsafe acceleration or lurch during restart.','Any manual or remote intervention required.']},
+      {id:'T7',name:'Foam Car Avoidance',mandatory:false,bridge:true,
+        objective:'Baseline assurance that the perception stack can detect a vehicle-shaped object on track. NOT mandatory for standard Rookie license. MANDATORY when applying for Challenger gateways â€” minimum perception prerequisite.',
+        conditions:['Foam car positioned statically in and perpendicular to the vehicle path.','Ego vehicle approach speed â‰¥ 100 km/h.'],
+        metrics:[{text:'Obstacle detected in time to execute safe response (CCTV + onboard)',value:'Confirmed'},{text:'Safe response: controlled stop or safe avoidance',value:'Required'},{text:'Contact with foam car',value:'None'}],
+        pass:['Vehicle detects foam car in time.','Safe response executed (controlled stop or avoidance).','No contact.'],
+        nopass:['Collision with foam car.','Missed or late detection leading to unsafe proximity.','No demonstrable perception output for the obstacle.']},
+      {id:'T8',name:'Autonomous Pitlane Entry',mandatory:true,
+        objective:'Ensure the vehicle can safely and autonomously enter the pitlane under Race Control instruction. Stopping position tolerance Â± 1 m. Speed compliance strictly enforced.',
+        conditions:['Vehicle travelling at race speed.','Upon PIT-IN instruction: vehicle decelerates, moves to pit entry line, enters pitlane, proceeds to designated stopping point.'],
+        metrics:[{text:'Speed before pit speed limiter line',value:'â‰¤ 30 km/h'},{text:'Pitlane speed limit respected immediately upon crossing entry line',value:'Required'},{text:'Vehicle remains within pitlane boundaries',value:'Required'},{text:'Stop position at designated pit box',value:'Â± 1 m'},{text:'Deceleration prior to pit entry (team supporting data)',value:'â‰¤ 8 m/sÂ²'}],
+        pass:['Vehicle responds correctly to PIT-IN instruction.','Speed â‰¤ 30 km/h achieved before pit speed limiter line.','Pitlane speed limit respected throughout.','Vehicle stops within Â± 1 m of designated position.','No manual or remote intervention.'],
+        nopass:['Speed above 30 km/h at pit speed limiter line.','Pitlane speed limit exceeded.','Stop outside Â± 1 m of designated position.','Boundary violations.','Manual intervention.']}
+    ]
+  },
+  challenger:{
+    label:'Challenger',licenseOutcome:'Challenger License â€” Multi-car Silver Race',failConsequence:'Downgraded to Rookie classification for physical on-track participation',
+    track:[
+      {id:'CH-1',name:'Emergency Braking and Car Following',mandatory:true,
+        objective:'Ensure the vehicle can respond safely and promptly to unexpected deceleration or stopping of a leading vehicle. Verifies emergency responsiveness, braking authority, and collision avoidance under realistic traffic scenarios.',
+        conditions:['Following a lead vehicle at 130 km/h (formation lap speed) in parallel line configuration.','Lead vehicle brakes to zero.','Both cars in designated lanes.'],
+        metrics:[{text:'Braking initiated promptly after lead vehicle deceleration (team data)',value:'Timely'},{text:'Minimum gap to lead car maintained',value:'â‰¥ 30 m'},{text:'Contact or unsafe proximity',value:'None'}],
+        pass:['Controlled braking initiated promptly.','Safe gap of â‰¥ 30 m maintained throughout.','No contact.'],
+        nopass:['Late or delayed reaction.','Contact or unsafe proximity.']},
+      {id:'CH-2',name:'Adaptive Cruise Control and Following Distance',mandatory:true,
+        objective:'Validate disciplined longitudinal control when operating behind another autonomous vehicle at 80 km/h â€” the challenge is precision of distance control during speed changes and in corners.',
+        conditions:['Follow a lead vehicle at 80 km/h for 1 km.','Lead car performs three Â±10 km/h speed changes and one sudden deceleration to 50 km/h.'],
+        metrics:[{text:'Headway maintained within 15â€“25 m for',value:'â‰¥ 95% of test'},{text:'Reaction to lead car deceleration (PTP-synchronised team data)',value:'Timely'},{text:'Maximum longitudinal jerk',value:'< 30 m/sÂ³'},{text:'Accordion braking or collapse of following distance',value:'None'}],
+        pass:['Stable following distance maintained throughout.','Braking smooth, anticipatory, proportional.','No oscillatory or abrupt longitudinal control.'],
+        nopass:['Collapse of following distance.','Accordion braking or unstable longitudinal control.']},
+      {id:'CH-3',name:'Performing an Overtake Safely',mandatory:true,
+        objective:'Demonstrate safe, autonomous overtaking against another car at comparable speed, maintaining disciplined behaviour and respecting shared track space.',
+        conditions:['Overtake a slower vehicle on a straight and in a corner (both cars on same raceline).','Test entry speed confirmed with RC prior to test. Defender restricted to 1:10 lap pace; attacker unrestricted.'],
+        metrics:[{text:'Minimum distance to lead car at overtake initiation (engagement zone and right-of-way trigger)',value:'â‰¥ 15 m'},{text:'Lead car correctly tracked with stable perception',value:'Confirmed'},{text:'Peak lateral acceleration on a straight',value:'< 1 g'},{text:'Minimum lateral clearance (real-world)',value:'â‰¥ 2 m'},{text:'Overtake completed within',value:'10 s'},{text:'Vehicle returns to line with gap behind',value:'â‰¥ 5 m'}],
+        pass:['Overtake initiated when safe gap available and target correctly tracked.','Stable departure from reference line.','Lateral clearance maintained.','Clean completion within 10 s.','Vehicle remains within track limits. No intervention.'],
+        nopass:['Aborted, incomplete, or contact.','Unstable or erratic execution.','Track limits exceeded.','Manual intervention.']},
+      {id:'CH-4',name:'Parallel Running Discipline',mandatory:true,
+        objective:"Validate safe operation alongside another autonomous vehicle in close lateral proximity â€” including corners. Minimum distance: the run must cover at least one full lap of YMC North to ensure the test includes both straight and cornering discipline. Two cars in designated parallel lanes.",
+        conditions:['Two vehicles run side-by-side for the entirety of YMC North at a constant 80 km/h.','Both cars in designated lanes on same raceline.'],
+        metrics:[{text:'Lateral separation (observable from CCTV overhead)',value:'2â€“4 m'},{text:'Speed difference throughout',value:'< 6 km/h'},{text:'Contact or unsafe crowding',value:'None'},{text:'Both cars maintain designated lane throughout the circuit',value:'Required'}],
+        pass:['Safe lateral spacing maintained at all times including through corners.','Stable lane discipline â€” no crowding.'],
+        nopass:['Lateral crowding reducing safety margins.','Instability or loss of parallel trajectory through corners.']},
+      {id:'CH-5',name:'Being Safely Overtaken',mandatory:true,
+        objective:"Demonstrate predictable, safe behaviour when being overtaken. Yield convention: attacker's front wheel level with defender's rear wheel. Includes online raceline switching without stopping.",
+        conditions:['Faster vehicle overtakes the test vehicle at multiple track sections.','Vehicle must demonstrate raceline switching in simulation (left to right of centreline) at 120% of main raceline performance, without stopping.'],
+        metrics:[{text:"Vehicle yields correctly once attacker is within the engagement zone (15 m)",value:'Required'},{text:'Stable, predictable position appropriate to track section',value:'Maintained'},{text:'Reactive steering or braking',value:'None observed'},{text:'Raceline switch demonstrated without stopping',value:'Required'}],
+        pass:['Correct and timely yield when attacker reaches yield trigger point.','Stable position throughout.','No reactive behaviour.','Clean raceline switch without stopping.'],
+        nopass:['Blocking or impedance.','Reactive/evasive steering.','Failure to yield at correct point.','Inability to switch racelines without stopping.']},
+      {id:'CH-6',name:'Stop and Restart in Traffic',mandatory:true,
+        objective:'Ensure safe and predictable stop/restart transitions while other vehicles are present. Stop triggered while vehicle travelling at â‰¥ 150 km/h â€” representative of Challenger race conditions.',
+        conditions:['Vehicle travelling at â‰¥ 150 km/h.','Restart executed with following car at 20 m.','Teams must be notified in advance if stopping at a specific grid box position is required.'],
+        metrics:[{text:'Controlled stop deceleration',value:'â‰¥ 7 m/sÂ²'},{text:'Restart within',value:'3 s of command'},{text:'Following car headway during restart',value:'â‰¥ 15 m'},{text:'Restart',value:'Smooth & controlled'}],
+        pass:['Controlled stop at â‰¥ 7 m/sÂ² deceleration.','Safe restart with â‰¥ 15 m follower headway.','Smooth, predictable restart.'],
+        nopass:['Insufficient deceleration on stop.','Unsafe proximity during restart.','Unpredictable or aggressive restart.']},
+      {id:'CH-7',name:'Flag Compliance in Traffic',mandatory:true,
+        objective:'Validate correct and deterministic response to RC commands in traffic. Includes Lapping Flag (Drive-Through): car must move within 1 m of right track boundary and cap speed at â‰¤ 200 km/h.',
+        conditions:['RC issues Code 60, FCY, Red Flag, and Lapping Flag (Drive-Through) commands during a two-car run.'],
+        metrics:[{text:'Speed reduction to commanded values (EM log + CCTV)',value:'â‰¤ 5 s'},{text:'Speed maintained at commanded value',value:'Â± 2 km/h'},{text:'Overtaking when prohibited',value:'None'},{text:'Lapping Flag: right track boundary',value:'â‰¤ 1 m'},{text:'Lapping Flag: speed cap',value:'â‰¤ 200 km/h'}],
+        pass:['All flag commands correctly interpreted.','Correct state transitions executed.','Lapping Flag: right boundary achieved and speed capped â‰¤ 200 km/h.'],
+        nopass:['Missed, delayed, or incorrect response to any command.','Non-deterministic behaviour.','Failure to comply with Lapping Flag requirements.']},
+      {id:'CH-8',name:'Foam Car Avoidance (Advanced)',mandatory:true,
+        objective:'Stress-test perception, decision-making, and braking at Challenger race pace. Foam car placement priority: T1 and T6 (primary), T3 and T5 (secondary). One foam car available.',
+        conditions:['Foam car placed at high-priority corner positions (T1 and T6 prioritised; T3 and T5 secondary).','Approach speed â‰¥ 150 km/h â€” reflecting Challenger race pace.'],
+        metrics:[{text:'Obstacle detected in time to execute safe response (CCTV observable)',value:'Confirmed'},{text:'Safe avoidance manoeuvre or controlled stop executed',value:'Required'},{text:'Contact with foam car',value:'None'},{text:'Controlled stop (real-world)',value:'â‰¥ 5 m before obstacle'}],
+        pass:['Foam car correctly detected.','Safe avoidance or controlled stop executed.','No contact.'],
+        nopass:['Collision with foam car.','Missed or late detection leading to unsafe proximity.']},
+      {id:'CH-9',name:'Lap Time Benchmark (YMC North)',mandatory:true,
+        objective:'Confirm Challenger-level baseline performance sufficient for safe multi-car operation. Real-world target from 2025 reference data. Simulation lap time benchmarks not applied.',
+        conditions:['Solo qualifying lap on YMC North configuration â€” real-world only.'],
+        metrics:[{text:'Reference lap (fastest Challenger 2025)',value:'64.45 s'},{text:'Maximum permitted lap time (110% of reference)',value:'â‰¤ 70.9 s'},{text:'Minimum consecutive laps at or under threshold',value:'5 laps'}],
+        pass:['Lap time â‰¤ 70.9 s for minimum 5 consecutive laps.'],
+        nopass:['Lap time slower than 70.9 s.','Inability to demonstrate repeated compliance with threshold.']}
+    ]
+  },
+  pro:{
+    label:'PRO',licenseOutcome:'PRO License â€” Grand Final eligible',failConsequence:'Downgraded to Challenger classification for physical on-track participation',
+    track:[
+      {id:'P1',name:'Robust Overtaking Execution',mandatory:true,
+        objective:'Validate that the vehicle can decisively and safely execute overtaking manoeuvres at race pace. Three overtakes required at â‰¥ 150 km/h across different track sections.',
+        conditions:['Three overtakes at speeds â‰¥ 150 km/h: one on main straight, one on South straight, one in braking zone or corner.','Attacker at full potential; defender restricted to 70% lateral/longitudinal limits.'],
+        metrics:[{text:'Minimum distance to target car at overtake initiation',value:'â‰¥ 30 m'},{text:'Minimum lateral clearance',value:'â‰¥ 1 m'},{text:'Contact or forced evasive action',value:'None'}],
+        pass:['Overtakes initiated decisively when opportunities arise.','Executed cleanly without hesitation.','Lateral and longitudinal separation maintained.','No contact or forced evasive action.'],
+        nopass:['Hesitation, indecision, or aborted attempts.','Contact or unsafe proximity.']},
+      {id:'P2',name:'Being Overtaken Anywhere on Track',mandatory:true,
+        objective:"Ensure defensive stability and predictability when being overtaken in any track context. The vehicle must not exhibit reactive, blocking, or destabilising behaviour. Assessment is primarily behavioural. A clear pass/fail distinction is maintained: the car must give space once the attacker enters the engagement zone. Any behaviour that forces the attacking car to react is a No Pass.",
+        conditions:['Faster vehicle (full pace) overtakes the test vehicle (at 80% lateral/longitudinal limits) in various sections â€” straight, braking zone, and corner.'],
+        metrics:[{text:'Vehicle yields space once attacker is within the engagement zone',value:'Required'},{text:'Minimum lateral clearance provided to overtaking vehicle',value:'â‰¥ 1 m'},{text:'Reactive steering, braking, or trajectory changes',value:'None'},{text:'Behaviour forcing evasive action by overtaking car',value:'None'}],
+        pass:['Calm, predictable behaviour throughout.','Adequate space given at correct trigger point.','No reactive behaviour.'],
+        nopass:['Blocking or impedance.','Insufficient space given.','Reactive behaviour forcing evasive action by overtaking car.']},
+      {id:'P3',name:'Multi-Car Interaction (>2 Vehicles)',mandatory:true,
+        objective:'Validate safe, effective operation in complex traffic scenarios with more than two autonomous cars. System must reason about a dense multi-agent environment without deadlocks or unsafe behaviour.',
+        conditions:['Dense traffic scenario: at least three cars on track simultaneously, all within 300 m of one another (nose of first to tail of third).','Minimum pace: 80% of race pace.'],
+        metrics:[{text:'All cars within 300 m of one another for duration of scenario',value:'Required'},{text:'Stop on track (unless commanded)',value:'< 1 s'},{text:'Contact events',value:'None'},{text:'Minimum gap between any two cars at all times',value:'â‰¥ 20 m'},{text:'Planning horizon update rate',value:'â‰¥ 10 Hz'}],
+        pass:['Continuous motion and situational awareness in 3+ car scenario.','No deadlocks, indecision, or unsafe stops.','Interactions predictable and stable for all surrounding cars.'],
+        nopass:['Vehicle stops due to indecision or interaction failure.','Contact with any vehicle.','Unsafe or non-deterministic behaviour.']},
+      {id:'P4',name:'Flag Handling Under Pressure',mandatory:true,
+        objective:'Validate immediate, correct, deterministic response to RC commands under race-like pressure and in traffic. Full execution verified on CCTV. Pit In at latest possible point (T6â€“T7) included.',
+        conditions:['Sequence of Code 60, FCY, Red Flag, and Lapping Flag (Drive-Through) commands during multi-car running.','Pit In request included â€” must include Pit In issued at latest possible point between T6 and T7.'],
+        metrics:[{text:'Speed reduction to commanded values (EM log + team telemetry verification)',value:'â‰¤ 5 s'},{text:'Speed compliance',value:'Â± 2 km/h'},{text:'Lapping Flag: within 1 m of right track boundary, speed cap',value:'â‰¤ 200 km/h'},{text:'Pit entry executed correctly (including late-corner scenario)',value:'Required'},{text:'Full execution verified on CCTV',value:'Required'}],
+        pass:['All track flag commands correctly interpreted and acted upon.','Correct and full state transitions executed.','Lapping Flag: right boundary and speed cap achieved.','Pit entry executed correctly at all test points including late-corner.'],
+        nopass:['Incorrect or delayed response to any command.','Non-deterministic behaviour.','Failure to execute full commanded action.']},
+      {id:'P5',name:'Lap Time Benchmark (YMC North)',mandatory:true,prereq:true,
+        objective:'Confirm eligibility for PRO-level race pace. MUST be passed before P6 (Consistency Over Sessions) and P8 (High-Speed Stability) â€” establishes the pace reference that both subsequent gateways build upon.',
+        conditions:['Solo benchmark lap(s) on YMC North configuration.'],
+        metrics:[{text:'Reference lap',value:'58.18 s'},{text:'Maximum permitted lap time (105% of reference)',value:'â‰¤ 61.1 s'},{text:'Track limits',value:'Respected'},{text:'Manual intervention',value:'None'}],
+        pass:['Solo lap(s) within â‰¤ 105% of reference lap time (â‰¤ 61.1 s).'],
+        nopass:['Lap time slower than 61.1 s.','Track limits violations.','Manual intervention.']},
+      {id:'P6',name:'Consistency Over Sessions',mandatory:true,
+        objective:'Ensure sustained reliability and performance stability over extended running at PRO pace. Requires prior passing of P5 (Lap Time Benchmark) â€” lap times must be within 103% of the P5 reference pace, not just of the session median.',
+        conditions:['Ten (10) consecutive laps at race pace within the P5 Lap Time Benchmark.','Requires P5 to be passed first.'],
+        metrics:[{text:'All 10 lap times within 103% of P5 reference pace',value:'â‰¤ 61.1 s'},{text:'Manual interventions',value:'None'},{text:'Degradation in control or decision-making across session',value:'None'},{text:'Actuator command ranges (team supporting data)',value:'Submitted'},{text:'Perception latency scope (team supporting data)',value:'Submitted'}],
+        pass:['10 laps completed without intervention at â‰¤ 61.1 s (P5 reference).','Lap times stable within 103% band.','No observable degradation.'],
+        nopass:['Vehicle stops on track due to instability.','Significant lap time degradation across session.','Manual intervention.']},
+      {id:'P7',name:'Foam Car Validation (All Configurations)',mandatory:true,
+        objective:'Confirm perception robustness at full race speed (> 180 km/h). Foam car placement priority: T1 and T6 (primary), T3 and T5 (secondary). One foam car available â€” test efficiency is critical.',
+        conditions:['Single car on track at > 180 km/h.','Foam car placed at high-priority positions: T1 and T6 first, T3 and T5 if time allows.'],
+        metrics:[{text:'Obstacle detected ahead (team supporting data)',value:'â‰¥ 80 m'},{text:'Avoidance or controlled stop initiated within',value:'40 m'},{text:'Controlled stop before obstacle or lateral clearance',value:'â‰¥ 2 m / â‰¥ 1â€“2 m'},{text:'Contact',value:'None'}],
+        pass:['Foam car consistently detected.','Safe avoidance or controlled stop executed.','No contact under any configuration.'],
+        nopass:['Collision with foam car.','Failure to detect or respond appropriately.']}
+    ]
+  }
+};
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// STATE
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// DATA MODEL
+// teams:    [{id, name, carNo, tier, createdAt}]
+// sessions: [{id, teamId, sessionCode, rcOfficer, date, tier, notes}]
+//           id auto-generated, sessionCode = QG-[ABBR]-001
+// attempts: [{id, sessionId, teamId, gwId, verdict, notes, timestamp}]
+//           full history, latest attempt drives current status
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+let teams    = [];
+let sessions = [];
+let attempts = [];
+let licenses = {}; // {teamId: {verdict:'granted'|'denied'|null, issuedBy:'', issuedAt:0, notes:''}}
+
+let currentView      = 'dashboard'; // 'dashboard' | 'team' | 'session'
+let currentTeamId    = null;
+let currentSessionId = null;
+let currentGatewayId = null;
+let currentTier      = 'rookie';
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// STORAGE
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// Storage: uses window.storage (Claude artifact) when available, falls back to localStorage
+function hasArtifactStorage(){
+  return typeof window.storage !== 'undefined' && window.storage !== null;
+}
+
+function lsGet(key){
+  try{ const v=localStorage.getItem(key); return v?JSON.parse(v):null; }catch(e){ return null; }
+}
+function lsSet(key, val){
+  try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){}
+}
+
+async function loadFromStorage(){
+  if(hasArtifactStorage()){
+    try{ const r=await window.storage.get('a2rl-qg-teams');    if(r) teams=JSON.parse(r.value);    }catch(e){}
+    try{ const r=await window.storage.get('a2rl-qg-sessions'); if(r) sessions=JSON.parse(r.value); }catch(e){}
+    try{ const r=await window.storage.get('a2rl-qg-attempts'); if(r) attempts=JSON.parse(r.value); }catch(e){}
+    try{ const r=await window.storage.get('a2rl-qg-licenses'); if(r) licenses=JSON.parse(r.value); }catch(e){}
+  } else {
+    teams    = lsGet('a2rl-qg-teams')    || [];
+    sessions = lsGet('a2rl-qg-sessions') || [];
+    attempts = lsGet('a2rl-qg-attempts') || [];
+    licenses = lsGet('a2rl-qg-licenses') || {};
+  }
+}
+
+async function saveToStorage(){
+  if(hasArtifactStorage()){
+    try{
+      await window.storage.set('a2rl-qg-teams',    JSON.stringify(teams));
+      await window.storage.set('a2rl-qg-sessions', JSON.stringify(sessions));
+      await window.storage.set('a2rl-qg-attempts', JSON.stringify(attempts));
+      await window.storage.set('a2rl-qg-licenses', JSON.stringify(licenses));
+    }catch(e){}
+  } else {
+    lsSet('a2rl-qg-teams',    teams);
+    lsSet('a2rl-qg-sessions', sessions);
+    lsSet('a2rl-qg-attempts', attempts);
+    lsSet('a2rl-qg-licenses', licenses);
+  }
+}
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// HELPERS
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function fmtDate(ts){ return ts?new Date(ts).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):'â€”'; }
+function fmtDateTime(ts){ return ts?new Date(ts).toLocaleString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'â€”'; }
+
+function teamAbbr(name){
+  // Generate 3-letter abbreviation from team name
+  const words = name.trim().toUpperCase().split(/\s+/);
+  if(words.length>=3) return words.slice(0,3).map(w=>w[0]).join('');
+  if(words.length===2) return (words[0].slice(0,2)+words[1][0]).slice(0,3);
+  return (words[0]+'XXX').slice(0,3);
+}
+
+function nextSessionCode(teamId){
+  const team = teams.find(t=>t.id===teamId);
+  if(!team) return 'QG-XXX-001';
+  const abbr = teamAbbr(team.name);
+  const existing = sessions.filter(s=>s.teamId===teamId);
+  const num = String(existing.length+1).padStart(3,'0');
+  return `QG-${abbr}-${num}`;
+}
+
+function getAllGateways(tier){
+  const t=gateways[tier],all=[];
+  if(t.static) all.push(...t.static.map(g=>({...g,section:'static'})));
+  if(t.track)  all.push(...t.track.map(g=>({...g,section:'track'})));
+  return all;
+}
+
+function tierColor(tier){
+  return tier==='rookie'?'#00c2a8':tier==='challenger'?'#f59e0b':'#ef4444';
+}
+function tierLabel(tier){
+  return tier==='rookie'?'Rookie':tier==='challenger'?'Challenger':'PRO';
+}
+
+// Get the latest attempt for a gwId within a session
+function latestAttempt(sessionId, gwId){
+  const all = attempts.filter(a=>a.sessionId===sessionId && a.gwId===gwId);
+  return all.length ? all.reduce((a,b)=>a.timestamp>b.timestamp?a:b) : null;
+}
+
+// Get all attempts for a gwId within a session, newest first
+function gwAttempts(sessionId, gwId){
+  return attempts.filter(a=>a.sessionId===sessionId && a.gwId===gwId)
+    .sort((a,b)=>b.timestamp-a.timestamp);
+}
+
+// Overall verdict for a session: latest attempt per mandatory gateway
+function sessionVerdict(sessionId){
+  const sess = sessions.find(s=>s.id===sessionId);
+  if(!sess) return 'pending';
+  const all = getAllGateways(sess.tier);
+  const mandatory = all.filter(g=>g.mandatory!==false);
+  const anyNoPass = mandatory.some(g=>(latestAttempt(sessionId,g.id)||{}).verdict==='nopass');
+  const allPassed = mandatory.every(g=>(latestAttempt(sessionId,g.id)||{}).verdict==='pass');
+  if(allPassed) return 'pass';
+  if(anyNoPass) return 'nopass';
+  return 'pending';
+}
+
+function sessionProgress(sessionId){
+  const sess = sessions.find(s=>s.id===sessionId);
+  if(!sess) return {count:0,total:0};
+  const all = getAllGateways(sess.tier);
+  const mandatory = all.filter(g=>g.mandatory!==false);
+  const count = mandatory.filter(g=>(latestAttempt(sessionId,g.id)||{}).verdict==='pass').length;
+  return {count, total:mandatory.length};
+}
+
+// Team's current overall gateway status (best result across all sessions per gateway)
+function teamGatewayStatus(teamId, tier){
+  const teamSessions = sessions.filter(s=>s.teamId===teamId && s.tier===tier);
+  const all = getAllGateways(tier);
+  const status = {};
+  all.forEach(gw=>{
+    // Best result across all sessions: pass > nopass > pending
+    let best = 'pending';
+    teamSessions.forEach(sess=>{
+      const a = latestAttempt(sess.id, gw.id);
+      if(a && a.verdict==='pass') best='pass';
+      else if(a && a.verdict==='nopass' && best!=='pass') best='nopass';
+    });
+    status[gw.id] = best;
+  });
+  return status;
+}
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// VIEWS
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+function showView(view, teamId=null, sessionId=null){
+  currentView=view;
+  currentTeamId=teamId;
+  currentSessionId=sessionId;
+
+  // Update nav state
+  document.getElementById('navDashboard').classList.toggle('active', view==='dashboard');
+  // Context-aware summary button label
+  const summaryBtn = document.getElementById('summaryBtn');
+  if(summaryBtn){
+    if(view==='session'){
+      summaryBtn.textContent='ðŸ“‹ Session Summary';
+    } else if(view==='team'){
+      summaryBtn.textContent='ðŸ“‹ Team Summary';
+    } else {
+      summaryBtn.textContent='ðŸ“‹ Summary';
+    }
+  }
+
+  if(view==='dashboard'){
+    renderDashboard();
+    setMainLayout('full');
+  } else if(view==='team'){
+    currentTier = (teams.find(t=>t.id===teamId)||{}).tier||'rookie';
+    renderTeamProfile();
+    setMainLayout('full');
+  } else if(view==='session'){
+    const sess = sessions.find(s=>s.id===sessionId);
+    currentTier = sess ? sess.tier : 'rookie';
+    currentGatewayId = null;
+    setTierUI(currentTier);
+    setMainLayout('split');
+    renderSessionSidebar();
+    renderSessionWelcome();
+    updateSessionProgress();
+  }
+}
+
+function setMainLayout(mode){
+  const sidebar     = document.getElementById('sidebar');
+  const content     = document.getElementById('content');
+  const sessionCtrl = document.getElementById('sessionControls');
+  const breadcrumb  = document.getElementById('sessionBreadcrumb');
+  const tierBar     = document.getElementById('tierBar');
+
+  const isSession = (mode === 'split');
+  sidebar.style.display     = isSession ? '' : 'none';
+  sessionCtrl.style.display = isSession ? '' : 'none';
+  breadcrumb.style.display  = isSession ? '' : 'none';
+  tierBar.style.display     = 'none'; // tier is locked per session; bar hidden
+  content.style.padding     = isSession ? '22px' : '0';
+
+  // Adjust main height based on visible chrome
+  // Header 52px + nav 44px + (breadcrumb 36px + progress 33px when session)
+  const mainArea = document.getElementById('mainArea');
+  mainArea.style.height = isSession
+    ? 'calc(100vh - 165px)'
+    : 'calc(100vh - 96px)';
+}
+
+function setTierUI(tier){
+  currentTier=tier;
+  document.querySelectorAll('.tier-btn').forEach(b=>b.classList.remove('active'));
+  const btn = document.querySelector('.tier-btn.'+tier);
+  if(btn) btn.classList.add('active');
+  const fill = document.getElementById('progressFill');
+  if(fill) fill.className='progress-bar-fill '+tier;
+}
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// DASHBOARD
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+function renderDashboard(){
+  const tierOrder = ['rookie','challenger','pro'];
+  let html = `<div class="dash-wrap">
+    <div class="dash-header">
+      <div class="dash-title">Team Overview</div>
+      <button class="dash-add-btn" onclick="openAddTeam()">+ Register Team</button>
+    </div>`;
+
+  if(teams.length===0){
+    html += `<div class="dash-empty">
+      <div class="welcome-icon" style="font-size:40px;opacity:0.3;margin-bottom:14px">ðŸ</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em">No Teams Registered</div>
+      <div style="font-size:13px;color:var(--text-dim);margin-top:6px">Click "Register Team" to add the first team.</div>
+    </div>`;
+  } else {
+    // Group by tier
+    tierOrder.forEach(tier=>{
+      const tierTeams = teams.filter(t=>t.tier===tier);
+      if(!tierTeams.length) return;
+      html += `<div class="dash-tier-group">
+        <div class="dash-tier-label" style="color:${tierColor(tier)}">${tierLabel(tier).toUpperCase()}</div>
+        <div class="dash-team-grid">`;
+      tierTeams.forEach(team=>{
+        const teamSessions = sessions.filter(s=>s.teamId===team.id);
+        const lastSess = teamSessions.length ? teamSessions.reduce((a,b)=>a.createdAt>b.createdAt?a:b) : null;
+        const gwStatus = teamGatewayStatus(team.id, team.tier);
+        const all = getAllGateways(team.tier).filter(g=>g.mandatory!==false);
+        const passed = all.filter(g=>gwStatus[g.id]==='pass').length;
+        const nopass = all.filter(g=>gwStatus[g.id]==='nopass').length;
+        const total = all.length;
+        const pct = total>0?Math.round(passed/total*100):0;
+
+        const lic = licenses[team.id];
+        const licBadge = lic
+          ? (lic.verdict==='granted'
+              ? `<span style="font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:600;letter-spacing:0.08em;padding:2px 7px;border-radius:3px;background:rgba(34,197,94,0.12);color:var(--pass);border:1px solid rgba(34,197,94,0.3);margin-left:6px">âœ“ LICENSE GRANTED</span>`
+              : `<span style="font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:600;letter-spacing:0.08em;padding:2px 7px;border-radius:3px;background:var(--nopass-bg);color:var(--nopass);border:1px solid rgba(239,68,68,0.3);margin-left:6px">âœ— DENIED</span>`)
+          : '';
+        html += `<div class="dash-team-card" onclick="showView('team','${team.id}')">
+          <div class="dash-card-top">
+            <div class="dash-card-name">${esc(team.name)}${team.carNo?` <span class="dash-car-no">#${esc(team.carNo)}</span>`:''}${licBadge}</div>
+            <div class="dash-card-sessions">${teamSessions.length} session${teamSessions.length!==1?'s':''}</div>
+          </div>
+          <div class="dash-card-progress">
+            <div class="dash-prog-bar-track">
+              <div class="dash-prog-bar-fill" style="width:${pct}%;background:${tierColor(team.tier)}"></div>
+            </div>
+            <div class="dash-prog-label"><span style="color:var(--pass)">${passed} passed</span>${nopass>0?` Â· <span style="color:var(--nopass)">${nopass} failed</span>`:''} Â· ${total} mandatory</div>
+          </div>
+          <div class="dash-card-footer">
+            <div class="dash-gw-dots">${all.map(g=>{
+              const v=gwStatus[g.id]||'pending';
+              return `<div class="dash-gw-dot ${v}" title="${g.id}: ${v}"></div>`;
+            }).join('')}</div>
+            <div class="dash-last-session">${lastSess?fmtDate(lastSess.createdAt):'No sessions yet'}</div>
+          </div>
+        </div>`;
+      });
+      html += `</div></div>`;
+    });
+  }
+  html += `</div>`;
+  document.getElementById('content').innerHTML = html;
+}
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// TEAM PROFILE
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+function issueLicense(teamId, verdict, rcOfficer, notes){
+  licenses[teamId] = {verdict, issuedBy: rcOfficer, issuedAt: Date.now(), notes: notes||''};
+  saveToStorage();
+  renderTeamProfile();
+}
+
+function revokeLicense(teamId){
+  if(!confirm('Revoke this license decision? The team will return to eligible/incomplete status.')) return;
+  delete licenses[teamId];
+  saveToStorage();
+  renderTeamProfile();
+}
+
+function renderLicensePanel(team, gwStatus){
+  const lic = licenses[team.id] || null;
+  const all = getAllGateways(team.tier);
+  const mandatory = all.filter(g=>g.mandatory!==false);
+  const allPassed = mandatory.every(g=>gwStatus[g.id]==='pass');
+  const anyFailed = mandatory.some(g=>gwStatus[g.id]==='nopass');
+  const col = tierColor(team.tier);
+  const tierLbl = tierLabel(team.tier).toUpperCase();
+
+  // Determine eligibility state
+  let eligState, eligLabel, eligSub;
+  if(lic && lic.verdict==='granted'){
+    eligState='granted';
+    eligLabel=`âœ… ${tierLbl} LICENSE GRANTED`;
+    eligSub=`Issued by ${esc(lic.issuedBy||'â€”')} on ${fmtDateTime(lic.issuedAt)}${lic.notes?'<br>Notes: '+esc(lic.notes):''}`;
+  } else if(lic && lic.verdict==='denied'){
+    eligState='denied';
+    eligLabel=`âŒ LICENSE DENIED`;
+    eligSub=`Denied by ${esc(lic.issuedBy||'â€”')} on ${fmtDateTime(lic.issuedAt)}${lic.notes?'<br>Notes: '+esc(lic.notes):''}`;
+  } else if(allPassed){
+    eligState='eligible';
+    eligLabel=`âœ“ ELIGIBLE â€” All mandatory gateways passed`;
+    eligSub='All mandatory gateways have been passed across completed sessions. A license decision can now be issued.';
+  } else {
+    eligState='incomplete';
+    const passed = mandatory.filter(g=>gwStatus[g.id]==='pass').length;
+    eligLabel=`â³ INCOMPLETE â€” ${passed}/${mandatory.length} mandatory passed`;
+    eligSub='All mandatory gateways must be passed before a license can be issued.';
+  }
+
+  // Gateway checklist
+  const checkRows = mandatory.map(gw=>{
+    const v = gwStatus[gw.id]||'pending';
+    const icon = v==='pass'?'âœ“':v==='nopass'?'âœ—':'â—‹';
+    return `<div class="license-gw-check">
+      <span class="license-gw-check-id ${team.tier}">${gw.id}</span>
+      <span class="license-gw-check-name">${gw.name}</span>
+      <span class="license-gw-check-status ${v}">${icon} ${v==='pass'?'Passed':v==='nopass'?'No Pass':'Pending'}</span>
+    </div>`;
+  }).join('');
+
+  // Action buttons
+  let btns = '';
+  if(lic){
+    btns = `<button class="license-btn revoke" onclick="revokeLicense('${team.id}')">â†º Revoke Decision</button>`;
+  } else if(allPassed){
+    btns = `
+      <div style="display:flex;flex-direction:column;gap:8px;width:100%">
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <input class="field-input" id="licOfficer-${team.id}" placeholder="Issuing RC Officer" style="width:180px">
+          <input class="field-input" id="licNotes-${team.id}" placeholder="Notes (optional)" style="flex:1;min-width:160px">
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="license-btn grant" onclick="issueLicense('${team.id}','granted',document.getElementById('licOfficer-${team.id}').value,document.getElementById('licNotes-${team.id}').value)">âœ“ Issue License</button>
+          <button class="license-btn deny" onclick="issueLicense('${team.id}','denied',document.getElementById('licOfficer-${team.id}').value,document.getElementById('licNotes-${team.id}').value)">âœ— Deny License</button>
+        </div>
+      </div>`;
+  } else if(anyFailed && !allPassed){
+    btns = `
+      <div style="display:flex;flex-direction:column;gap:8px;width:100%">
+        <div style="font-size:12px;color:var(--text-muted)">A denial can be issued even if not all gateways have been attempted.</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <input class="field-input" id="licOfficer-${team.id}" placeholder="Issuing RC Officer" style="width:180px">
+          <input class="field-input" id="licNotes-${team.id}" placeholder="Notes (optional)" style="flex:1;min-width:160px">
+        </div>
+        <button class="license-btn deny" style="width:fit-content" onclick="issueLicense('${team.id}','denied',document.getElementById('licOfficer-${team.id}').value,document.getElementById('licNotes-${team.id}').value)">âœ— Deny License</button>
+      </div>`;
+  }
+
+  return `<div class="license-panel">
+    <div class="license-panel-title">QG License Decision</div>
+    <div class="license-status-row">
+      <div class="license-status-badge ${eligState}">${eligLabel}</div>
+    </div>
+    <div class="license-sub">${eligSub}</div>
+    <div class="license-checklist">${checkRows}</div>
+    ${btns ? `<div class="license-btns">${btns}</div>` : ''}
+  </div>`;
+}
+
+function renderTeamProfile(){
+  const team = teams.find(t=>t.id===currentTeamId);
+  if(!team){ renderDashboard(); return; }
+
+  const teamSessions = sessions.filter(s=>s.teamId===currentTeamId).sort((a,b)=>b.createdAt-a.createdAt);
+  const gwStatus = teamGatewayStatus(currentTeamId, team.tier);
+  const all = getAllGateways(team.tier);
+  const mandatory = all.filter(g=>g.mandatory!==false);
+  const passed = mandatory.filter(g=>gwStatus[g.id]==='pass').length;
+  const col = tierColor(team.tier);
+
+  let html = `<div class="profile-wrap">
+    <div class="profile-header">
+      <button class="back-btn" onclick="showView('dashboard')">â† All Teams</button>
+      <div class="profile-title-row">
+        <div>
+          <div class="profile-name">${esc(team.name)}${team.carNo?` <span class="dash-car-no">#${esc(team.carNo)}</span>`:''}</div>
+          <div class="profile-meta">
+            <span class="tier-badge" style="background:${col}20;color:${col};border:1px solid ${col}40">${tierLabel(team.tier).toUpperCase()}</span>
+            <span style="color:var(--text-muted);font-size:12px">Registered ${fmtDate(team.createdAt)}</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="action-btn" onclick="openEditTeam('${team.id}')">âœ Edit</button>
+          <button class="action-btn danger" onclick="confirmRemoveTeam('${team.id}')">âœ• Remove</button>
+          <button class="action-btn primary" onclick="openNewSession('${team.id}')">+ New Session</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="profile-stats-row">
+      <div class="stat-card"><div class="stat-val" style="color:${col}">${passed}/${mandatory.length}</div><div class="stat-lbl">Mandatory Passed</div></div>
+      <div class="stat-card"><div class="stat-val">${teamSessions.length}</div><div class="stat-lbl">Sessions</div></div>
+      <div class="stat-card"><div class="stat-val">${attempts.filter(a=>a.teamId===currentTeamId).length}</div><div class="stat-lbl">Total Attempts</div></div>
+      <div class="stat-card"><div class="stat-val">${teamSessions.length?fmtDate(teamSessions[0].createdAt):'â€”'}</div><div class="stat-lbl">Last Session</div></div>
+    </div>
+
+    ${renderLicensePanel(team, gwStatus)}
+
+    <div class="profile-gw-overview">
+      <div class="section-title" style="padding:0 0 10px;font-family:'Barlow Condensed',sans-serif;font-size:12px;letter-spacing:0.12em;color:var(--text-muted);text-transform:uppercase">Gateway Status Overview</div>
+      <div class="gw-overview-grid">`;
+
+  all.forEach(gw=>{
+    const v = gwStatus[gw.id]||'pending';
+    const realAttempts = attempts.filter(a=>a.teamId===currentTeamId&&a.gwId===gw.id&&!a.carryover);
+    const sessionsAttempted = new Set(realAttempts.map(a=>a.sessionId)).size;
+    html += `<div class="gw-overview-item ${v}">
+      <div class="gw-ov-code">${gw.id}</div>
+      <div class="gw-ov-name">${gw.name}</div>
+      <div class="gw-ov-meta">${sessionsAttempted} session${sessionsAttempted!==1?'s':''} Â· ${v==='pass'?'âœ“ Passed':v==='nopass'?'âœ— No Pass':'Pending'}</div>
+    </div>`;
+  });
+
+  html += `</div></div>
+
+    <div class="profile-sessions">
+      <div class="section-title" style="padding:0 0 10px;font-family:'Barlow Condensed',sans-serif;font-size:12px;letter-spacing:0.12em;color:var(--text-muted);text-transform:uppercase">Sessions</div>`;
+
+  if(teamSessions.length===0){
+    html += `<div style="color:var(--text-dim);font-size:13px;padding:16px 0">No sessions yet. Click "+ New Session" to begin.</div>`;
+  } else {
+    teamSessions.forEach(sess=>{
+      const prog = sessionProgress(sess.id);
+      const verd = sessionVerdict(sess.id);
+      const gwAll = getAllGateways(sess.tier);
+      html += `<div class="session-row" onclick="showView('session',null,'${sess.id}')">
+        <div class="sess-row-left">
+          <div class="sess-code">${esc(sess.sessionCode)}</div>
+          <div class="sess-meta">${fmtDate(sess.createdAt)} Â· RC: ${esc(sess.rcOfficer||'â€”')} Â· ${tierLabel(sess.tier)}</div>
+          ${sess.notes?`<div class="sess-notes-preview">${esc(sess.notes)}</div>`:''}
+        </div>
+        <div class="sess-row-right">
+          <div class="sess-dots">${gwAll.filter(g=>g.mandatory!==false).map(g=>{
+            const a=latestAttempt(sess.id,g.id);
+            const v=a?a.verdict:'pending';
+            return `<div class="dash-gw-dot ${v}" title="${g.id}"></div>`;
+          }).join('')}</div>
+          <div class="sess-progress">${prog.count}/${prog.total} passed</div>
+          <div class="sess-verdict ${verd}">${verd==='pass'?'âœ“ PASS':verd==='nopass'?'âœ— NO PASS':'â³ IN PROGRESS'}</div>
+        </div>
+      </div>`;
+    });
+  }
+
+  html += `</div></div>`;
+  document.getElementById('content').innerHTML = html;
+}
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// SESSION VIEW
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+function renderSessionBreadcrumb(){
+  const sess = sessions.find(s=>s.id===currentSessionId);
+  const team = sess ? teams.find(t=>t.id===sess.teamId) : null;
+  document.getElementById('sessionBreadcrumb').innerHTML = sess ? `
+    <button class="back-btn-sm" onclick="showView('dashboard')">Teams</button>
+    <span style="color:var(--text-dim)">â€º</span>
+    <button class="back-btn-sm" onclick="showView('team','${sess.teamId}')">${esc(team?team.name:'Team')}</button>
+    <span style="color:var(--text-dim)">â€º</span>
+    <span style="color:var(--text)">${esc(sess.sessionCode)}</span>
+    <span class="sess-rc-label">RC: ${esc(sess.rcOfficer||'â€”')}</span>
+    <span class="sess-date-label">${fmtDate(sess.createdAt)}</span>
+  ` : '';
+}
+
+function renderSessionSidebar(){
+  const sess = sessions.find(s=>s.id===currentSessionId);
+  if(!sess) return;
+  const tier = sess.tier;
+  const t = gateways[tier];
+  let html = '';
+
+  const renderSection = (label,items)=>{
+    if(!items||!items.length) return;
+    html += `<div class="sidebar-section-label">${label}</div>`;
+    items.forEach(gw=>{
+      const latest = latestAttempt(currentSessionId, gw.id);
+      const verdict = latest ? latest.verdict : 'pending';
+      const allAtt = gwAttempts(currentSessionId, gw.id);
+      const isCarryover = latest && latest.carryover && !allAtt.find(a=>!a.carryover);
+      const isActive = currentGatewayId===gw.id;
+      const nonCarryAttCount = allAtt.filter(a=>!a.carryover).length;
+      html += `<div class="gw-item ${isActive?'active-'+tier:''}" onclick="selectGateway('${gw.id}')">
+        <span class="gw-code ${tier}">${gw.id}</span>
+        <span class="gw-title-short">${gw.name}${isCarryover?' <span class="carryover-tag">â†©</span>':''}</span>
+        <div style="display:flex;align-items:center;gap:5px;flex-shrink:0">
+          ${nonCarryAttCount>0?`<span class="att-count">${nonCarryAttCount}</span>`:''}
+          <div class="gw-status-dot ${verdict==='pass'?'pass':verdict==='nopass'?'nopass':''}" style="${isCarryover?'opacity:0.55':''}" title="${isCarryover?'Carried over from prior session':''}"></div>
+        </div>
+      </div>`;
+    });
+  };
+
+  if(t.static) renderSection('Static Gateways',t.static);
+  if(t.track)  renderSection('Track Gateways',t.track);
+  document.getElementById('sidebar').innerHTML = html;
+  renderSessionBreadcrumb();
+}
+
+function renderSessionWelcome(){
+  document.getElementById('content').innerHTML = `
+    <div class="welcome-pane">
+      <div class="welcome-icon">ðŸ</div>
+      <div class="welcome-title">Select a Gateway</div>
+      <div class="welcome-sub">Choose a gateway from the sidebar to record an attempt.</div>
+    </div>`;
+}
+
+function selectGateway(id){
+  currentGatewayId = id;
+  const gw = getAllGateways(currentTier).find(g=>g.id===id);
+  if(!gw) return;
+  renderSessionSidebar();
+  renderGateway(gw);
+}
+
+function renderGateway(gw){
+  const tier = currentTier;
+  const latest = latestAttempt(currentSessionId, gw.id);
+  const history = gwAttempts(currentSessionId, gw.id);
+  const d = latest || {verdict:'pending', notes:''};
+
+  let tags='';
+  if(gw.mandatory) tags+='<span class="tag-mandatory">Mandatory</span> ';
+  if(gw.bridge)    tags+='<span class="tag-bridge">Tier Bridge</span> ';
+  if(gw.prereq)    tags+='<span class="tag-prereq">Prerequisite for P6 & P8</span> ';
+
+  const metrics = gw.metrics.map(m=>`<div class="metric-row">
+    <span class="metric-icon">â—ˆ</span><span class="metric-text">${m.text}</span><span class="metric-value">${m.value}</span>
+  </div>`).join('');
+  const conds = gw.conditions.map(c=>`<div class="condition-line">â†’ ${c}</div>`).join('');
+  const passH = gw.pass.map(p=>`<div class="verdict-item">${p}</div>`).join('');
+  const nopassH = gw.nopass.map(p=>`<div class="verdict-item">${p}</div>`).join('');
+  const isCarryover = latest && latest.carryover && !history.find(a=>!a.carryover);
+  const banCls = d.verdict==='pass'?'pass show':d.verdict==='nopass'?'nopass show':'';
+  const banTxt = d.verdict==='pass'
+    ? (isCarryover ? 'â†© CARRIED OVER â€” PASSED IN PRIOR SESSION' : 'âœ… GATEWAY PASSED')
+    : d.verdict==='nopass' ? 'âŒ GATEWAY â€” NO PASS' : '';
+
+  // Attempt history
+  let histHtml = '';
+  if(history.length>0){
+    histHtml = `<div class="attempt-history">
+      <div class="attempt-history-title">Attempt History <span class="att-count-badge">${history.length}</span></div>
+      ${history.map((a,i)=>`<div class="attempt-row">
+        <div class="attempt-num">#${history.length-i}</div>
+        <div class="attempt-verdict ${a.verdict}" style="${a.carryover?'opacity:0.65':''}">
+          ${a.carryover ? 'â†© Carry-over' : a.verdict==='pass'?'âœ“ Pass':a.verdict==='nopass'?'âœ— No Pass':'â³ Pending'}
+        </div>
+        <div class="attempt-time">${a.carryover?'Prior session':fmtDateTime(a.timestamp)}</div>
+        <div class="attempt-notes">${a.notes?esc(a.notes):'<span style="color:var(--text-dim)">No notes</span>'}</div>
+      </div>`).join('')}
+    </div>`;
+  }
+
+  document.getElementById('content').innerHTML = `
+    <div class="gw-card">
+      <div class="gw-header">
+        <div class="gw-id-badge ${tier}">${gw.id}</div>
+        <div class="gw-header-text">
+          <div class="gw-name">${gw.name} ${tags}</div>
+          <div class="gw-objective">${gw.objective}</div>
+        </div>
+      </div>
+      <div class="section"><div class="section-header"><span class="section-icon">âš™</span><span class="section-title">Test Conditions</span></div><div class="section-body">${conds}</div></div>
+      <div class="section"><div class="section-header"><span class="section-icon">ðŸ“</span><span class="section-title">Measurable Metrics</span></div><div class="section-body">${metrics}</div></div>
+      <div class="section"><div class="section-header"><span class="section-icon">âš–</span><span class="section-title">Pass / No Pass Criteria</span></div>
+        <div class="section-body"><div class="verdict-grid">
+          <div class="verdict-col pass-col"><div class="verdict-label pass-label">âœ“ Pass</div>${passH}</div>
+          <div class="verdict-col nopass-col"><div class="verdict-label nopass-label">âœ— No Pass</div>${nopassH}</div>
+        </div></div>
+      </div>
+      <div class="decision-panel">
+        <div class="decision-label">Record Attempt</div>
+        <div class="decision-btns">
+          <button class="decision-btn pass-btn" onclick="recordAttempt('${gw.id}','pass')">âœ“ Pass</button>
+          <button class="decision-btn nopass-btn" onclick="recordAttempt('${gw.id}','nopass')">âœ— No Pass</button>
+          <button class="decision-btn pending-btn" onclick="recordAttempt('${gw.id}','pending')">â³ Pending</button>
+        </div>
+        <textarea class="notes-input" id="attemptNotes" placeholder="RC notes, multi-vehicle roles, conditions, observationsâ€¦">${d.notes||''}</textarea>
+        <div class="result-banner ${banCls}" id="resultBanner">${banTxt}</div>
+      </div>
+      ${histHtml}
+    </div>`;
+}
+
+function recordAttempt(gwId, verdict){
+  if(!currentSessionId) return;
+  const sess = sessions.find(s=>s.id===currentSessionId);
+  if(!sess) return;
+  const notes = (document.getElementById('attemptNotes')||{}).value || '';
+  attempts.push({
+    id: uid(),
+    sessionId: currentSessionId,
+    teamId: sess.teamId,
+    gwId,
+    verdict,
+    notes,
+    timestamp: Date.now()
+  });
+  saveToStorage();
+  const gw = getAllGateways(currentTier).find(g=>g.id===gwId);
+  if(gw) renderGateway(gw);
+  renderSessionSidebar();
+  updateSessionProgress();
+}
+
+function updateSessionProgress(){
+  const prog = sessionProgress(currentSessionId);
+  const sess = sessions.find(s=>s.id===currentSessionId);
+  const tier = sess ? sess.tier : currentTier;
+  document.getElementById('progressFill').className='progress-bar-fill '+tier;
+  document.getElementById('progressFill').style.width = prog.total>0?Math.round(prog.count/prog.total*100)+'%':'0%';
+  document.getElementById('progressCount').textContent = `${prog.count} / ${prog.total} mandatory passed`;
+}
+
+function setTier(tier){
+  // In session view, tier is locked to session. Otherwise it's a navigation hint.
+  if(currentView==='session') return;
+  currentTier=tier;
+  setTierUI(tier);
+}
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ADD/EDIT TEAM MODAL
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+function openAddTeam(){
+  document.getElementById('addTeamTitle').textContent='Register Team';
+  document.getElementById('newTeamName').value='';
+  document.getElementById('newCarNo').value='';
+  document.getElementById('newTeamTier').value='rookie';
+  document.getElementById('editTeamId').value='';
+  document.getElementById('addTeamOverlay').classList.add('show');
+  setTimeout(()=>document.getElementById('newTeamName').focus(),60);
+}
+
+function openEditTeam(id){
+  const team=teams.find(t=>t.id===id);
+  if(!team) return;
+  document.getElementById('addTeamTitle').textContent='Edit Team';
+  document.getElementById('newTeamName').value=team.name;
+  document.getElementById('newCarNo').value=team.carNo||'';
+  document.getElementById('newTeamTier').value=team.tier;
+  document.getElementById('editTeamId').value=id;
+  document.getElementById('addTeamOverlay').classList.add('show');
+  setTimeout(()=>document.getElementById('newTeamName').focus(),60);
+}
+
+function closeAddTeam(e){
+  if(!e||e.target===document.getElementById('addTeamOverlay'))
+    document.getElementById('addTeamOverlay').classList.remove('show');
+}
+
+function confirmAddTeam(){
+  const name=document.getElementById('newTeamName').value.trim();
+  if(!name){document.getElementById('newTeamName').focus();return;}
+  const carNo=document.getElementById('newCarNo').value.trim();
+  const tier=document.getElementById('newTeamTier').value;
+  const editId=document.getElementById('editTeamId').value;
+
+  if(editId){
+    const team=teams.find(t=>t.id===editId);
+    if(team){team.name=name;team.carNo=carNo;team.tier=tier;}
+  } else {
+    teams.push({id:'team-'+uid(),name,carNo,tier,createdAt:Date.now()});
+  }
+  saveToStorage();
+  document.getElementById('addTeamOverlay').classList.remove('show');
+  if(currentView==='dashboard') renderDashboard();
+  else if(currentView==='team') renderTeamProfile();
+}
+
+function confirmRemoveTeam(id){
+  if(!confirm('Remove this team and ALL their sessions and attempts?')) return;
+  teams=teams.filter(t=>t.id!==id);
+  sessions=sessions.filter(s=>s.teamId!==id);
+  attempts=attempts.filter(a=>a.teamId!==id);
+  saveToStorage();
+  showView('dashboard');
+}
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// NEW SESSION MODAL
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+function openNewSession(teamId){
+  const team=teams.find(t=>t.id===teamId);
+  if(!team) return;
+  document.getElementById('nsTeamId').value=teamId;
+  document.getElementById('nsCode').value=nextSessionCode(teamId);
+  document.getElementById('nsRcOfficer').value='';
+  document.getElementById('nsDate').value=new Date().toISOString().slice(0,10);
+  document.getElementById('nsTier').value=team.tier;
+  document.getElementById('nsNotes').value='';
+  document.getElementById('newSessionOverlay').classList.add('show');
+  setTimeout(()=>document.getElementById('nsRcOfficer').focus(),60);
+}
+
+function closeNewSession(e){
+  if(!e||e.target===document.getElementById('newSessionOverlay'))
+    document.getElementById('newSessionOverlay').classList.remove('show');
+}
+
+function confirmNewSession(){
+  const teamId=document.getElementById('nsTeamId').value;
+  const sessionCode=document.getElementById('nsCode').value.trim();
+  const rcOfficer=document.getElementById('nsRcOfficer').value.trim();
+  const dateVal=document.getElementById('nsDate').value;
+  const tier=document.getElementById('nsTier').value;
+  const notes=document.getElementById('nsNotes').value.trim();
+  if(!sessionCode){return;}
+  const sessId='sess-'+uid();
+  const createdAt=dateVal?new Date(dateVal).getTime():Date.now();
+  sessions.push({id:sessId,teamId,sessionCode,rcOfficer,createdAt,tier,notes});
+
+  // Carry over previously passed gateways from prior sessions (flagged, still editable)
+  const priorStatus = teamGatewayStatus(teamId, tier);
+  getAllGateways(tier).forEach(gw=>{
+    if(priorStatus[gw.id]==='pass'){
+      attempts.push({
+        id: uid(), sessionId: sessId, teamId, gwId: gw.id,
+        verdict: 'pass',
+        notes: 'â†© Carried over from previous session',
+        timestamp: createdAt - 1, // earlier than any new attempt, so new attempts take precedence
+        carryover: true
+      });
+    }
+  });
+
+  saveToStorage();
+  document.getElementById('newSessionOverlay').classList.remove('show');
+  showView('session',null,sessId);
+}
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// SUMMARY & PRINT
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+function openTeamSummary(){
+  const team = teams.find(t=>t.id===currentTeamId);
+  if(!team) return;
+
+  const gwStatus  = teamGatewayStatus(currentTeamId, team.tier);
+  const all       = getAllGateways(team.tier);
+  const mandatory = all.filter(g=>g.mandatory!==false);
+  const passed    = mandatory.filter(g=>gwStatus[g.id]==='pass').length;
+  const anyNoPass = mandatory.some(g=>gwStatus[g.id]==='nopass');
+  const allPassed = mandatory.every(g=>gwStatus[g.id]==='pass');
+  const lic       = licenses[team.id];
+  const tierLbl   = tierLabel(team.tier).toUpperCase();
+  const teamSessions = sessions.filter(s=>s.teamId===currentTeamId).sort((a,b)=>b.createdAt-a.createdAt);
+
+  // Header meta
+  document.getElementById('modalMeta').innerHTML =
+    `Team: <strong>${esc(team.name)}</strong>${team.carNo?' Â· Car #'+esc(team.carNo):''}<br>
+     Category: ${tierLbl} Â· ${teamSessions.length} session${teamSessions.length!==1?'s':''} Â· ${passed}/${mandatory.length} mandatory passed`;
+
+  // Overall result â€” license decision if issued, otherwise cumulative eligibility
+  const el = document.getElementById('overallResult');
+  if(lic && lic.verdict==='granted'){
+    el.className='overall-result pass';
+    el.innerHTML=`âœ… ${tierLbl} LICENSE GRANTED Â· Issued by ${esc(lic.issuedBy||'â€”')} on ${fmtDate(lic.issuedAt)}`;
+  } else if(lic && lic.verdict==='denied'){
+    el.className='overall-result nopass';
+    el.innerHTML=`âŒ LICENSE DENIED Â· By ${esc(lic.issuedBy||'â€”')} on ${fmtDate(lic.issuedAt)}${lic.notes?' â€” '+esc(lic.notes):''}`;
+  } else if(allPassed){
+    el.className='overall-result pass';
+    el.textContent=`âœ… All mandatory gateways passed â€” eligible for license`;
+  } else if(anyNoPass){
+    el.className='overall-result nopass';
+    el.textContent=`âš  Not all mandatory gateways passed â€” further attempts required`;
+  } else {
+    el.className='overall-result pending';
+    el.textContent=`â³ Assessment in progress â€” ${passed}/${mandatory.length} mandatory passed`;
+  }
+
+  // Gateway rows â€” cumulative best status + attempt count + latest note
+  let rows = '';
+  all.forEach(gw=>{
+    const v       = gwStatus[gw.id] || 'pending';
+    const label   = v==='pass'?'Pass':v==='nopass'?'No Pass':'Pending';
+    const allAtt  = attempts.filter(a=>a.teamId===currentTeamId && a.gwId===gw.id && !a.carryover);
+    const lastAtt = allAtt.sort((a,b)=>b.timestamp-a.timestamp)[0];
+    const sessCount = new Set(allAtt.map(a=>a.sessionId)).size;
+
+    rows += `<div class="summary-row">
+      <span class="summary-code ${team.tier}">${gw.id}</span>
+      <span class="summary-name">${gw.name}${gw.mandatory===false?' <span style="color:var(--text-dim);font-size:11px">(optional)</span>':''}</span>
+      <span class="summary-verdict ${v}">${label}</span>
+      ${sessCount>0?`<span style="font-size:11px;color:var(--text-muted);margin-left:6px">${sessCount} session${sessCount!==1?'s':''}</span>`:''}
+    </div>`;
+    if(lastAtt && lastAtt.notes && !lastAtt.carryover)
+      rows += `<div style="padding:3px 0 7px 56px;font-size:11px;color:var(--text-muted);font-style:italic">${esc(lastAtt.notes)}</div>`;
+  });
+
+  // Session list at the bottom of the modal
+  rows += `<div style="margin-top:14px;border-top:1px solid var(--border);padding-top:10px">
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px">Sessions</div>`;
+  if(teamSessions.length===0){
+    rows += `<div style="color:var(--text-dim);font-size:12px">No sessions recorded.</div>`;
+  } else {
+    teamSessions.forEach(sess=>{
+      const prog = sessionProgress(sess.id);
+      const verd = sessionVerdict(sess.id);
+      const vIcon = verd==='pass'?'âœ“':verd==='nopass'?'âœ—':'â³';
+      const vCol  = verd==='pass'?'var(--pass)':verd==='nopass'?'var(--nopass)':'var(--text-muted)';
+      rows += `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
+        <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;min-width:120px">${esc(sess.sessionCode)}</span>
+        <span style="color:var(--text-muted)">${fmtDate(sess.createdAt)}</span>
+        <span style="color:var(--text-muted)">RC: ${esc(sess.rcOfficer||'â€”')}</span>
+        <span style="color:${vCol};font-weight:700;margin-left:auto">${vIcon} ${prog.count}/${prog.total}</span>
+      </div>`;
+    });
+  }
+  rows += `</div>`;
+
+  document.getElementById('summaryRows').innerHTML = rows;
+
+  // Swap print button to team-level print
+
+  document.getElementById('modalOverlay').classList.add('show');
+}
+
+function printTeamSummary(){
+  const team=teams.find(t=>t.id===currentTeamId);
+  if(!team) return;
+  const gwStatus=teamGatewayStatus(currentTeamId,team.tier);
+  const all=getAllGateways(team.tier);
+  const mandatory=all.filter(g=>g.mandatory!==false);
+  const passed=mandatory.filter(g=>gwStatus[g.id]==='pass').length;
+  const allPassed=mandatory.every(g=>gwStatus[g.id]==='pass');
+  const anyNoPass=mandatory.some(g=>gwStatus[g.id]==='nopass');
+  const lic=licenses[team.id];
+  const tierLbl=tierLabel(team.tier).toUpperCase();
+  const teamSessions=sessions.filter(s=>s.teamId===currentTeamId).sort((a,b)=>b.createdAt-a.createdAt);
+  const now=new Date().toLocaleString('en-GB');
+
+  let vCls,vTxt;
+  if(lic&&lic.verdict==='granted'){vCls='pass';vTxt=tierLbl+' LICENSE GRANTED â€” Issued by '+esc(lic.issuedBy||'â€”')+' on '+fmtDate(lic.issuedAt);}
+  else if(lic&&lic.verdict==='denied'){vCls='nopass';vTxt='LICENSE DENIED â€” By '+esc(lic.issuedBy||'â€”')+' on '+fmtDate(lic.issuedAt)+(lic.notes?' â€” '+esc(lic.notes):'');}
+  else if(allPassed){vCls='pass';vTxt='All mandatory gateways passed â€” eligible for license';}
+  else if(anyNoPass){vCls='nopass';vTxt='Not all mandatory gateways passed â€” further attempts required';}
+  else{vCls='pending';vTxt='Assessment in progress â€” '+passed+'/'+mandatory.length+' mandatory passed';}
+
+  const gwRows=all.map(gw=>{
+    const v=gwStatus[gw.id]||'pending';
+    const label=v==='pass'?'PASS':v==='nopass'?'NO PASS':'â€”';
+    const allAtt=attempts.filter(a=>a.teamId===currentTeamId&&a.gwId===gw.id&&!a.carryover);
+    const lastAtt=allAtt.sort((a,b)=>b.timestamp-a.timestamp)[0];
+    // Count unique sessions where a real attempt was recorded
+    const sessionsAttempted = new Set(allAtt.map(a=>a.sessionId)).size;
+    return '<tr><td style="font-weight:700;white-space:nowrap">'+gw.id+'</td><td>'+gw.name+(gw.mandatory===false?' <span class="pv-optional">(optional)</span>':'')+'</td><td class="pv-'+v+'" style="white-space:nowrap">'+label+'</td><td style="color:#555;font-size:8pt">'+(sessionsAttempted||'â€”')+'</td><td class="pv-notes">'+esc((lastAtt&&lastAtt.notes)||'')+'</td></tr>';
+  }).join('');
+
+  const sessRows=teamSessions.map(sess=>{
+    const prog=sessionProgress(sess.id);
+    const verd=sessionVerdict(sess.id);
+    const vLabel=verd==='pass'?'PASS':verd==='nopass'?'INCOMPLETE':'IN PROGRESS';
+    return '<tr><td style="font-weight:700">'+esc(sess.sessionCode)+'</td><td>'+fmtDate(sess.createdAt)+'</td><td>'+esc(sess.rcOfficer||'â€”')+'</td><td>'+prog.count+'/'+prog.total+' passed</td><td class="pv-'+(verd==='pass'?'pass':verd==='nopass'?'nopass':'pending')+'">'+vLabel+'</td></tr>';
+  }).join('');
+
+  const body=
+    '<div class="ph-logo">A2RL &middot; Race Control &mdash; Team Gateway Summary</div>'+
+    '<div class="ph-meta">Team: <strong>'+esc(team.name)+'</strong>'+(team.carNo?' &middot; Car #'+esc(team.carNo):'')+' &middot; Category: '+tierLbl+'<br>'+teamSessions.length+' session'+(teamSessions.length!==1?'s':'')+' &middot; Printed: '+now+'</div>'+
+    '<div class="ph-verdict '+vCls+'">'+vTxt+'</div>'+
+    '<table><thead><tr><th>ID</th><th>Gateway</th><th>Status</th><th>Sessions</th><th>Latest Notes</th></tr></thead><tbody>'+gwRows+'</tbody></table>'+
+    (teamSessions.length?'<div class="section-head">Session History</div><table><thead><tr><th>Session</th><th>Date</th><th>RC Officer</th><th>Progress</th><th>Result</th></tr></thead><tbody>'+sessRows+'</tbody></table>':'')+
+    signatureBlock();
+
+  document.getElementById('modalOverlay').classList.remove('show');
+  const pw=window.open('','_blank','width=900,height=700');
+  if(!pw){alert('Pop-ups are blocked â€” please allow pop-ups for this page to print.');return;}
+  pw.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Team Summary '+esc(team.name)+'</title><style>@page{margin:12mm 14mm;size:A4}*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}.ph-logo{font-weight:800;font-size:15pt;letter-spacing:.04em;border-bottom:2px solid #000;padding-bottom:6pt;margin-bottom:6pt}.ph-meta{font-size:8.5pt;color:#444;margin-bottom:6pt;line-height:1.55}.ph-verdict{display:inline-block;margin-bottom:10pt;font-weight:700;font-size:12pt;padding:4pt 12pt;border-radius:3pt}.ph-verdict.pass{background:#dcfce7;color:#166534;border:1px solid #86efac}.ph-verdict.nopass{background:#fee2e2;color:#991b1b;border:1px solid #fca5a5}.ph-verdict.pending{background:#f3f4f6;color:#374151;border:1px solid #d1d5db}.section-head{font-weight:700;font-size:9pt;letter-spacing:.1em;text-transform:uppercase;color:#555;border-top:1px solid #ccc;padding-top:7pt;margin-top:12pt;margin-bottom:4pt}table{width:100%;border-collapse:collapse;font-size:9pt;margin-bottom:4pt}th{font-weight:700;font-size:8pt;letter-spacing:.08em;text-transform:uppercase;border-bottom:1.5px solid #000;padding:4pt 5pt;text-align:left}td{padding:4pt 5pt;border-bottom:1px solid #e5e7eb;vertical-align:top;line-height:1.4}tr:last-child td{border-bottom:none}tr{page-break-inside:avoid}.pv-pass{font-weight:700;color:#166534}.pv-nopass{font-weight:700;color:#991b1b}.pv-pending{color:#6b7280}.pv-optional{font-size:7.5pt;color:#9ca3af}.pv-notes{font-size:8pt;color:#555;font-style:italic}.print-sig{margin-top:28pt;border-top:1px solid #ccc;padding-top:14pt;page-break-inside:avoid}.print-sig-lbl{font-size:7.5pt;color:#555;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10pt}.print-sig-row{display:flex;gap:28pt}.print-sig-field{flex:1}.print-sig-field.narrow{max-width:90pt}.print-sig-line{border-bottom:1px solid #000;height:20pt;margin-bottom:3pt}.print-sig-fieldlabel{font-size:7.5pt;color:#555;text-transform:uppercase;letter-spacing:.05em}</style></head><body>'+body+'</body></html>');
+  pw.document.close();
+  pw.focus();
+  setTimeout(function(){pw.print();},300);
+}
+
+function openSummary(){
+  if(currentView==='team'){ openTeamSummary(); return; }
+  if(currentView!=='session'){ return; }
+  const sess=sessions.find(s=>s.id===currentSessionId);
+  if(!sess) return;
+  const team=teams.find(t=>t.id===sess.teamId);
+  const verd=sessionVerdict(currentSessionId);
+  const prog=sessionProgress(currentSessionId);
+  const tierLbl=tierLabel(sess.tier).toUpperCase();
+
+  document.getElementById('modalMeta').innerHTML=
+    `Team: <strong>${esc(team?team.name:'â€”')}</strong>${team&&team.carNo?' Â· Car #'+esc(team.carNo):''}<br>
+     Session: <strong>${esc(sess.sessionCode)}</strong> Â· ${fmtDate(sess.createdAt)} Â· RC Officer: ${esc(sess.rcOfficer||'â€”')}<br>
+     Category: ${tierLbl} Â· ${prog.count}/${prog.total} mandatory passed`;
+
+  const el=document.getElementById('overallResult');
+  if(verd==='pass'){
+    el.className='overall-result pass';
+    el.textContent=`âœ… All mandatory gateways passed â€” ${tierLbl}`;
+  } else if(verd==='nopass'){
+    el.className='overall-result nopass';
+    el.textContent=`âš  Session incomplete â€” further attempts required`;
+  } else {
+    el.className='overall-result pending';
+    el.textContent='â³ Session in progress';
+  }
+
+  const all=getAllGateways(sess.tier);
+  let rows='';
+  all.forEach(gw=>{
+    const history=gwAttempts(currentSessionId,gw.id);
+    const latest=history[0];
+    const verdict=latest?latest.verdict:'pending';
+    const label=verdict==='pass'?'Pass':verdict==='nopass'?'No Pass':'Pending';
+    rows+=`<div class="summary-row">
+      <span class="summary-code ${sess.tier}">${gw.id}</span>
+      <span class="summary-name">${gw.name}${gw.mandatory===false?' <span style="color:var(--text-dim);font-size:11px">(optional)</span>':''}</span>
+      <span class="summary-verdict ${verdict}">${label}</span>
+      ${history.length>1?`<span style="font-size:11px;color:var(--text-muted);margin-left:4px">(${history.length} attempts)</span>`:''}
+    </div>`;
+    if(latest&&latest.notes) rows+=`<div style="padding:3px 0 7px 56px;font-size:11px;color:var(--text-muted);font-style:italic">${esc(latest.notes)}</div>`;
+  });
+  document.getElementById('summaryRows').innerHTML=rows;
+  document.getElementById('modalOverlay').classList.add('show');
+}
+
+function closeSummary(e){
+  if(!e||e.target===document.getElementById('modalOverlay'))
+    document.getElementById('modalOverlay').classList.remove('show');
+}
+
+function signatureBlock(){
+  return `<div class="print-sig">
+    <div class="print-sig-lbl">Race Control Officer Sign-off</div>
+    <div class="print-sig-row">
+      <div class="print-sig-field"><div class="print-sig-line"></div><div class="print-sig-fieldlabel">Officer Name (Print)</div></div>
+      <div class="print-sig-field"><div class="print-sig-line"></div><div class="print-sig-fieldlabel">Signature</div></div>
+      <div class="print-sig-field narrow"><div class="print-sig-line"></div><div class="print-sig-fieldlabel">Date</div></div>
+    </div>
+  </div>`;
+}
+
+
+function printCurrentSummary(){
+  if(currentView==='team') printTeamSummary();
+  else printSummary();
+}
+
+function printSummary(){
+  const sess=sessions.find(s=>s.id===currentSessionId);
+  if(!sess) return;
+  const team=teams.find(t=>t.id===sess.teamId);
+  const verd=sessionVerdict(currentSessionId);
+  const tierLbl=tierLabel(sess.tier).toUpperCase();
+  let vCls='pending',vTxt='Session In Progress';
+  if(verd==='pass'){vCls='pass';vTxt='All mandatory gateways passed â€” '+tierLbl;}
+  else if(verd==='nopass'){vCls='nopass';vTxt='Session Incomplete â€” Further Attempts Required';}
+
+  const all=getAllGateways(sess.tier);
+  const tableRows=all.map(gw=>{
+    const history=gwAttempts(currentSessionId,gw.id);
+    const latest=history[0];
+    const verdict=latest?latest.verdict:'pending';
+    const label=verdict==='pass'?'PASS':verdict==='nopass'?'NO PASS':'PENDING';
+    const attNote=history.filter(a=>!a.carryover).length>1?' ('+history.filter(a=>!a.carryover).length+' attempts)':'';
+    return '<tr><td style="font-weight:700;white-space:nowrap">'+gw.id+'</td><td>'+gw.name+(gw.mandatory===false?' <span class="pv-optional">(optional)</span>':'')+'</td><td class="pv-'+verdict+'" style="white-space:nowrap">'+label+attNote+'</td><td class="pv-notes">'+esc((latest&&!latest.carryover&&latest.notes)||'')+'</td></tr>';
+  }).join('');
+
+  const body =
+    '<div class="ph-logo">A2RL &middot; Race Control &mdash; Session Gateway Summary</div>'+
+    '<div class="ph-meta">Team: <strong>'+esc(team?team.name:'â€”')+'</strong>'+(team&&team.carNo?' &middot; Car #'+esc(team.carNo):'')+' &middot; Session: <strong>'+esc(sess.sessionCode)+'</strong><br>Date: '+fmtDate(sess.createdAt)+' &middot; RC Officer: '+esc(sess.rcOfficer||'â€”')+' &middot; Category: '+tierLbl+'</div>'+
+    '<div class="ph-verdict '+vCls+'">'+vTxt+'</div>'+
+    '<table><thead><tr><th>ID</th><th>Gateway</th><th>Verdict</th><th>Notes</th></tr></thead><tbody>'+tableRows+'</tbody></table>'+
+    signatureBlock();
+
+  document.getElementById('modalOverlay').classList.remove('show');
+  const pw=window.open('','_blank','width=900,height=700');
+  if(!pw){alert('Pop-ups are blocked â€” please allow pop-ups for this page to print.');return;}
+  pw.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Session Summary '+esc(sess.sessionCode)+'</title><style>@page{margin:12mm 14mm;size:A4}*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}.ph-logo{font-weight:800;font-size:15pt;letter-spacing:.04em;border-bottom:2px solid #000;padding-bottom:6pt;margin-bottom:6pt}.ph-meta{font-size:8.5pt;color:#444;margin-bottom:6pt;line-height:1.55}.ph-verdict{display:inline-block;margin-bottom:10pt;font-weight:700;font-size:12pt;padding:4pt 12pt;border-radius:3pt}.ph-verdict.pass{background:#dcfce7;color:#166534;border:1px solid #86efac}.ph-verdict.nopass{background:#fee2e2;color:#991b1b;border:1px solid #fca5a5}.ph-verdict.pending{background:#f3f4f6;color:#374151;border:1px solid #d1d5db}.section-head{font-weight:700;font-size:9pt;letter-spacing:.1em;text-transform:uppercase;color:#555;border-top:1px solid #ccc;padding-top:7pt;margin-top:12pt;margin-bottom:4pt}table{width:100%;border-collapse:collapse;font-size:9pt;margin-bottom:4pt}th{font-weight:700;font-size:8pt;letter-spacing:.08em;text-transform:uppercase;border-bottom:1.5px solid #000;padding:4pt 5pt;text-align:left}td{padding:4pt 5pt;border-bottom:1px solid #e5e7eb;vertical-align:top;line-height:1.4}tr:last-child td{border-bottom:none}tr{page-break-inside:avoid}.pv-pass{font-weight:700;color:#166534}.pv-nopass{font-weight:700;color:#991b1b}.pv-pending{color:#6b7280}.pv-optional{font-size:7.5pt;color:#9ca3af}.pv-notes{font-size:8pt;color:#555;font-style:italic}.print-sig{margin-top:28pt;border-top:1px solid #ccc;padding-top:14pt;page-break-inside:avoid}.print-sig-lbl{font-size:7.5pt;color:#555;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10pt}.print-sig-row{display:flex;gap:28pt}.print-sig-field{flex:1}.print-sig-field.narrow{max-width:90pt}.print-sig-line{border-bottom:1px solid #000;height:20pt;margin-bottom:3pt}.print-sig-fieldlabel{font-size:7.5pt;color:#555;text-transform:uppercase;letter-spacing:.05em}</style></head><body>'+body+'</body></html>');
+  pw.document.close();
+  pw.focus();
+  setTimeout(function(){pw.print();},300);
+}
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// INIT
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+async function init(){
+  const tick=()=>{
+    const n=new Date();
+    document.getElementById('liveDate').textContent=
+      n.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})+' Â· '+
+      n.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+  };
+  tick(); setInterval(tick,30000);
+  await loadFromStorage();
+  showView('dashboard');
+}
+init();
+</script>
+</body>
+</html>
+

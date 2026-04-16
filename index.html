@@ -319,12 +319,13 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .workspace-shell{max-width:980px;width:100%;}
 .workspace-brand{display:flex;justify-content:center;margin-bottom:18px;}
 .workspace-brand img{max-width:520px;width:100%;height:auto;mix-blend-mode:screen;filter:drop-shadow(0 10px 30px rgba(255,0,0,0.12));}
-.workspace-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;}
+.workspace-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px;}
 .workspace-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:24px;cursor:pointer;transition:border-color 0.15s,transform 0.15s,box-shadow 0.15s;}
 .workspace-card:hover{border-color:rgba(0,212,255,0.35);transform:translateY(-1px);box-shadow:0 10px 30px rgba(0,0,0,0.25);}
 .workspace-kicker{font-size:10px;letter-spacing:1.8px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
 .workspace-name{font-family:'Rajdhani',sans-serif;font-size:28px;font-weight:700;color:var(--text);margin-bottom:8px;}
 .workspace-copy{font-size:13px;color:var(--muted);line-height:1.5;}
+.qg-embed{width:100%;height:calc(100vh - 132px);border:1px solid var(--border);border-radius:10px;background:#0a0c0f;}
 </style>
 </head>
 <body>
@@ -361,6 +362,11 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
         <div class="workspace-name">A2RL Sim Challenge</div>
         <div class="workspace-copy">Simulation competition planning, digital sessions, isolated risk scoring, and simulator-only trends.</div>
       </div>
+      <div class="workspace-card" onclick="selectWorkspace('qg')">
+        <div class="workspace-kicker">Governance Workspace</div>
+        <div class="workspace-name">QG Tracker</div>
+        <div class="workspace-copy">Quality gateway team tracking, gateway attempts, licensing decisions, and session summaries in a dedicated isolated workspace.</div>
+      </div>
     </div>
   </div>
 </div>
@@ -381,24 +387,26 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
     <div style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted)" id="sb-clock"></div>
   </div>
 
-  <div class="sidebar-section-label">Operations</div>
-  <div class="nav-item active" onclick="showView('live')"><span class="nav-icon">⬡</span>Live Dashboard</div>
-  <div class="nav-item" onclick="showView('schedule')"><span class="nav-icon">📅</span><span id="nav-label-schedule">Track Schedule</span></div>
-  <div class="nav-item" onclick="showView('tracktime')"><span class="nav-icon">⏱</span><span id="nav-label-tracktime">Track Time Allocation</span></div>
+  <div class="sidebar-section-label" data-core-nav="1">Operations</div>
+  <div class="nav-item active" data-core-nav="1" onclick="showView('live')"><span class="nav-icon">⬡</span>Live Dashboard</div>
+  <div class="nav-item" data-core-nav="1" onclick="showView('schedule')"><span class="nav-icon">📅</span><span id="nav-label-schedule">Track Schedule</span></div>
+  <div class="nav-item" data-core-nav="1" onclick="showView('tracktime')"><span class="nav-icon">⏱</span><span id="nav-label-tracktime">Track Time Allocation</span></div>
 
-  <div class="sidebar-section-label" id="workspace-ops-section-label">Pitlane</div>
-  <div class="nav-item" onclick="showView('session')"><span class="nav-icon">＋</span>Sessions</div>
-  <div class="nav-item" onclick="showView('garage')"><span class="nav-icon">▶</span><span id="nav-label-garage">On Track</span></div>
-  <div class="nav-item" onclick="showView('garagealloc')"><span class="nav-icon">🏎</span><span id="nav-label-garagealloc">Garage</span></div>
-  <div class="nav-item" onclick="showView('history')"><span class="nav-icon">☰</span>Session History</div>
-  <div class="nav-item" onclick="showView('teams')"><span class="nav-icon">◈</span>Team Analysis</div>
-  <div class="nav-item" onclick="showView('trends')"><span class="nav-icon">∿</span>Risk Trends</div>
+  <div class="sidebar-section-label" id="workspace-ops-section-label" data-core-nav="1">Pitlane</div>
+  <div class="nav-item" data-core-nav="1" onclick="showView('session')"><span class="nav-icon">＋</span>Sessions</div>
+  <div class="nav-item" data-core-nav="1" onclick="showView('garage')"><span class="nav-icon">▶</span><span id="nav-label-garage">On Track</span></div>
+  <div class="nav-item" data-core-nav="1" onclick="showView('garagealloc')"><span class="nav-icon">🏎</span><span id="nav-label-garagealloc">Garage</span></div>
+  <div class="nav-item" data-core-nav="1" onclick="showView('history')"><span class="nav-icon">☰</span>Session History</div>
+  <div class="nav-item" data-core-nav="1" onclick="showView('teams')"><span class="nav-icon">◈</span>Team Analysis</div>
+  <div class="nav-item" data-core-nav="1" onclick="showView('trends')"><span class="nav-icon">∿</span>Risk Trends</div>
+  <div class="sidebar-section-label" id="qg-section-label" style="display:none;">QG Workspace</div>
+  <div class="nav-item" id="nav-qg" style="display:none;" onclick="showView('qg')"><span class="nav-icon">◫</span>QG Tracker</div>
 
-  <div class="sidebar-section-label">Admin</div>
-  <div class="nav-item" onclick="showView('events')"><span class="nav-icon">◉</span>Events</div>
-  <div class="nav-item" onclick="showView('users')"><span class="nav-icon">👤</span>User Management</div>
-  <div class="nav-item" onclick="showView('settings')"><span class="nav-icon">⚙</span>Settings & Weights</div>
-  <div class="nav-item" onclick="showView('insurance')"><span class="nav-icon">⊞</span>Insurance Report</div>
+  <div class="sidebar-section-label" data-core-nav="1">Admin</div>
+  <div class="nav-item" data-core-nav="1" onclick="showView('events')"><span class="nav-icon">◉</span>Events</div>
+  <div class="nav-item" data-core-nav="1" onclick="showView('users')"><span class="nav-icon">👤</span>User Management</div>
+  <div class="nav-item" data-core-nav="1" onclick="showView('settings')"><span class="nav-icon">⚙</span>Settings & Weights</div>
+  <div class="nav-item" data-core-nav="1" onclick="showView('insurance')"><span class="nav-icon">⊞</span>Insurance Report</div>
 
   <div class="sidebar-footer">
     <span id="workspace-footer-label">A2RL Operations Command</span>
@@ -418,7 +426,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
         <div class="live-dot"></div>
         <span id="topbar-on-track-team">—</span> <span id="topbar-live-indicator-label">ON TRACK</span>
       </div>
-      <div class="session-badge">
+      <div class="session-badge" id="topbar-session-badge">
         <span id="topbar-session-info">—</span>
       </div>
       <div class="session-badge">
@@ -427,13 +435,18 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
       <select id="workspace-switcher" onchange="selectWorkspace(this.value)" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);padding:6px 10px;border-radius:4px;font-size:12px;font-family:'Barlow',sans-serif;">
         <option value="ontrack">A2RL On Track</option>
         <option value="sim">A2RL Sim Challenge</option>
+        <option value="qg">QG Tracker</option>
       </select>
-      <button class="btn" onclick="exportCSV()">⤓ Export</button>
+      <button class="btn" id="topbar-export-btn" onclick="exportCSV()">⤓ Export</button>
       <button class="btn" onclick="logout()">Logout</button>
     </div>
   </div>
 
   <div class="content">
+
+    <div class="view" id="view-qg">
+      <iframe class="qg-embed" id="qg-embed-frame" src="qg-tracker.html" title="QG Tracker"></iframe>
+    </div>
 
     <!-- ═══════════════════════════════════════════════ LIVE DASHBOARD ══ -->
     <div class="view active" id="view-live">
@@ -1523,6 +1536,15 @@ const WORKSPACE_CONFIG = {
       tracktime: ['Sim Time Allocation', 'Fair allocation and monitoring of simulator session time'],
     },
   },
+  qg: {
+    label: 'QG Tracker',
+    shellLabel: 'Quality Gateway Tracker',
+    footerLabel: 'A2RL QG Tracker',
+    nav: { schedule:'QG Tracker', tracktime:'QG Tracker', garage:'QG Tracker', garagealloc:'QG Tracker' },
+    viewMeta: {
+      qg: ['QG Tracker', 'Quality gateway workflow, licensing decisions, and team session summaries'],
+    },
+  },
 };
 const DEFAULT_HISTORY_COLUMNS = [
   'eventName','track','eventType','sessType','sessNum','duration','weather',
@@ -1610,12 +1632,13 @@ let currentUser = JSON.parse(localStorage.getItem(GLOBAL_KEYS.currentUser) || 'n
 
 const DEFAULT_ADMIN_EMAIL = 'Rolesjosh417@gmail.com';
 const DEFAULT_ADMIN_PASSWORD = 'Admin@123';
-const ACCESS_AREAS = ['live','schedule','garagealloc','garage','tracktime','session','history','teams','trends','events','settings','insurance','users'];
+const ACCESS_AREAS = ['live','schedule','garagealloc','garage','tracktime','session','history','teams','trends','events','settings','insurance','qg','users'];
 const VIEWER_DEFAULT_AREAS = ['live','history','teams','trends'];
 const WORKSPACE_EVENT_TYPES = {
   ontrack: ['Track Competition','Testing (Track)','Testing (VDA)','Simulator Race','Simulator Testing'],
   sim: ['Sim Challenge Round','Simulator Qualifying','Simulator Practice','Simulator Race','Simulator Testing'],
 };
+function isQGWorkspace() { return currentWorkspace === 'qg'; }
 function getWorkspaceEventTypes() {
   return WORKSPACE_EVENT_TYPES[currentWorkspace] || WORKSPACE_EVENT_TYPES.ontrack;
 }
@@ -1685,6 +1708,7 @@ function applyWorkspaceUI() {
   const navGarage = document.getElementById('nav-label-garage');
   const navGarageAlloc = document.getElementById('nav-label-garagealloc');
   const opsSection = document.getElementById('workspace-ops-section-label');
+  const topbarLive = document.getElementById('topbar-on-track');
   const topbarIndicator = document.getElementById('topbar-live-indicator-label');
   const liveBannerHeading = document.getElementById('live-banner-heading');
   const liveAllocTitle = document.getElementById('live-alloc-title');
@@ -1704,6 +1728,12 @@ function applyWorkspaceUI() {
   const newTrackName = document.getElementById('new-track-name');
   const buildScheduleModalTitle = document.getElementById('build-schedule-modal-title');
   const garageModalTitle = document.getElementById('garage-modal-title');
+  const qgSection = document.getElementById('qg-section-label');
+  const qgNav = document.getElementById('nav-qg');
+  const topbarSessionBadge = document.getElementById('topbar-session-badge');
+  const topbarExportBtn = document.getElementById('topbar-export-btn');
+  const content = document.querySelector('.content');
+  const qgMode = isQGWorkspace();
   if (logoSub) logoSub.textContent = cfg.shellLabel;
   if (footer) footer.textContent = cfg.footerLabel;
   if (switcher) switcher.value = currentWorkspace || 'ontrack';
@@ -1731,6 +1761,13 @@ function applyWorkspaceUI() {
   if (newTrackName) newTrackName.placeholder = currentWorkspace === 'sim' ? 'Add simulation venue...' : 'Add track name...';
   if (buildScheduleModalTitle) buildScheduleModalTitle.textContent = currentWorkspace === 'sim' ? 'Build Simulation Session Plan' : 'Build Track Schedule';
   if (garageModalTitle) garageModalTitle.textContent = currentWorkspace === 'sim' ? 'Edit Sim Paddock Allocation' : 'Edit Garage Allocation';
+  document.querySelectorAll('[data-core-nav="1"]').forEach(el => { el.style.display = qgMode ? 'none' : ''; });
+  if (qgSection) qgSection.style.display = qgMode ? '' : 'none';
+  if (qgNav) qgNav.style.display = qgMode ? 'flex' : 'none';
+  if (topbarSessionBadge) topbarSessionBadge.style.display = qgMode ? 'none' : 'flex';
+  if (topbarExportBtn) topbarExportBtn.style.display = qgMode ? 'none' : '';
+  if (topbarLive) topbarLive.style.display = qgMode ? 'none' : topbarLive.style.display;
+  if (content) content.style.padding = qgMode ? '16px' : '22px 26px';
   renderWorkspaceEventTypeOptions();
   document.title = cfg.label;
 }
@@ -1756,8 +1793,9 @@ function selectWorkspace(workspaceId) {
   refreshWorkspaceUI();
   refreshAuthUI();
   if (currentUser) {
-    const savedView = readScopedString('active_view', 'live', 'a2rl_active_view');
-    showView(canAccessView(savedView) ? savedView : 'live');
+    const defaultView = isQGWorkspace() ? 'qg' : 'live';
+    const savedView = readScopedString('active_view', defaultView, 'a2rl_active_view');
+    showView(canAccessView(savedView) ? savedView : defaultView);
     renderLiveTable();
     renderFeed();
     initLiveCharts();
@@ -2361,6 +2399,7 @@ function riskTier(s) {
 // NAVIGATION
 // ═══════════════════════════════════════════════════════════════════════
 const viewMeta = {
+  qg:        ['QG Tracker',             'Quality gateway workflow, licensing decisions, and team session summaries'],
   live:      ['Live Dashboard',         'Real-time risk monitoring · Active session'],
   schedule:  ['Track Schedule',         'Plan and manage all on-track sessions'],
   garagealloc:['Garage',                'Garage bay allocation and team placement'],
@@ -2380,16 +2419,17 @@ function showView(id) {
     refreshWorkspaceUI();
     return;
   }
+  if (isQGWorkspace()) id = 'qg';
   if (!canAccessView(id)) {
     alert('You do not have access to this area.');
-    id = 'live';
+    id = isQGWorkspace() ? 'qg' : 'live';
   }
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   const el = document.getElementById('view-'+id);
   if (el) el.classList.add('active');
   const navKeyMap = {live:'live',schedule:'schedule',garagealloc:'garage',garage:'on track',tracktime:'track',
-    session:'log',history:'history',teams:'team',trends:'trend',settings:'settings',insurance:'insurance',users:'user'};
+    session:'log',history:'history',teams:'team',trends:'trend',settings:'settings',insurance:'insurance',qg:'qg',users:'user'};
   document.querySelectorAll('.nav-item').forEach(n => {
     const k = navKeyMap[id] || id;
     if (n.textContent.toLowerCase().includes(k)) n.classList.add('active');
@@ -7217,8 +7257,9 @@ function init(){
   syncTrackUsedFromSessions();
   schedule.forEach(b => recomputeBlockCompletion(b));
   updateTopbarSessionInfo();
-  const savedView = readScopedString('active_view', 'live', 'a2rl_active_view');
-  if (currentUser && currentWorkspace) showView(canAccessView(savedView) ? savedView : 'live');
+  const defaultView = isQGWorkspace() ? 'qg' : 'live';
+  const savedView = readScopedString('active_view', defaultView, 'a2rl_active_view');
+  if (currentUser && currentWorkspace) showView(canAccessView(savedView) ? savedView : defaultView);
   renderLiveTable();
   renderFeed();
   initLiveCharts();

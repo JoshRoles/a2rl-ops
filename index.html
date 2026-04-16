@@ -25,7 +25,8 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .sidebar{width:230px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto;}
 .sidebar::-webkit-scrollbar{width:3px;}
 .sidebar::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
-.sidebar-logo{padding:20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;}
+.sidebar-logo{padding:20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;cursor:pointer;transition:background 0.15s;}
+.sidebar-logo:hover{background:rgba(255,255,255,0.03);}
 .logo-icon{display:none;}
 .logo-text .logo-badge{font-family:'Rajdhani',sans-serif;font-size:9px;font-weight:700;letter-spacing:3px;color:var(--accent);text-transform:uppercase;}
 .logo-text .logo-main{font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;line-height:1;color:var(--text);}
@@ -316,6 +317,8 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 }
 .workspace-overlay{display:none;position:fixed;inset:0;background:rgba(5,8,14,0.92);z-index:140;align-items:center;justify-content:center;padding:24px;}
 .workspace-shell{max-width:980px;width:100%;}
+.workspace-brand{display:flex;justify-content:center;margin-bottom:18px;}
+.workspace-brand img{max-width:520px;width:100%;height:auto;mix-blend-mode:screen;filter:drop-shadow(0 10px 30px rgba(255,0,0,0.12));}
 .workspace-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;}
 .workspace-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:24px;cursor:pointer;transition:border-color 0.15s,transform 0.15s,box-shadow 0.15s;}
 .workspace-card:hover{border-color:rgba(0,212,255,0.35);transform:translateY(-1px);box-shadow:0 10px 30px rgba(0,0,0,0.25);}
@@ -339,6 +342,9 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 </div>
 <div id="workspace-overlay" class="workspace-overlay">
   <div class="workspace-shell">
+    <div class="workspace-brand">
+      <img src="assets/a2rl-logo-home.png" alt="A2RL logo">
+    </div>
     <div style="text-align:center;margin-bottom:22px;">
       <div class="workspace-kicker">Workspace Selection</div>
       <div class="workspace-name" style="font-size:34px;">Choose Your A2RL Workspace</div>
@@ -362,7 +368,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 
 <!-- SIDEBAR -->
 <div class="sidebar">
-  <div class="sidebar-logo">
+  <div class="sidebar-logo" onclick="goHome()">
     <div class="logo-text">
       <div class="logo-badge">A2RL</div>
       <div class="logo-main" id="workspace-logo-main">A2RL <span id="workspace-logo-sub">Operations Command Center</span></div>
@@ -1732,6 +1738,10 @@ function refreshWorkspaceUI() {
   const overlay = document.getElementById('workspace-overlay');
   if (overlay) overlay.style.display = currentWorkspace ? 'none' : 'flex';
   applyWorkspaceUI();
+}
+function goHome() {
+  const overlay = document.getElementById('workspace-overlay');
+  if (overlay) overlay.style.display = 'flex';
 }
 function selectWorkspace(workspaceId) {
   if (!WORKSPACE_CONFIG[workspaceId]) return;

@@ -20,6 +20,8 @@
 body{background:var(--bg);color:var(--text);font-family:'Barlow',sans-serif;font-size:14px;min-height:100vh;overflow-x:hidden;}
 body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(139,92,246,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(239,68,68,0.015) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0;}
 .shell{display:flex;min-height:100vh;position:relative;z-index:1;}
+.shell.qg-mode .sidebar{display:none !important;}
+.shell.qg-mode .main{width:100%;}
 
 /* SIDEBAR */
 .sidebar{width:230px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto;}
@@ -1538,11 +1540,11 @@ const WORKSPACE_CONFIG = {
   },
   qg: {
     label: 'QG Tracker',
-    shellLabel: 'Quality Gateway Tracker',
-    footerLabel: 'A2RL QG Tracker',
+    shellLabel: 'QG Tracker',
+    footerLabel: 'QG Tracker',
     nav: { schedule:'QG Tracker', tracktime:'QG Tracker', garage:'QG Tracker', garagealloc:'QG Tracker' },
     viewMeta: {
-      qg: ['QG Tracker', 'Quality gateway workflow, licensing decisions, and team session summaries'],
+      qg: ['QG Tracker', 'Race Control · Quality Gateway Script'],
     },
   },
 };
@@ -1700,6 +1702,7 @@ function loadWorkspaceData() {
 }
 function applyWorkspaceUI() {
   const cfg = WORKSPACE_CONFIG[currentWorkspace] || WORKSPACE_CONFIG.ontrack;
+  const shell = document.querySelector('.shell');
   const logoSub = document.getElementById('workspace-logo-sub');
   const footer = document.getElementById('workspace-footer-label');
   const switcher = document.getElementById('workspace-switcher');
@@ -1734,6 +1737,7 @@ function applyWorkspaceUI() {
   const topbarExportBtn = document.getElementById('topbar-export-btn');
   const content = document.querySelector('.content');
   const qgMode = isQGWorkspace();
+  if (shell) shell.classList.toggle('qg-mode', qgMode);
   if (logoSub) logoSub.textContent = cfg.shellLabel;
   if (footer) footer.textContent = cfg.footerLabel;
   if (switcher) switcher.value = currentWorkspace || 'ontrack';
@@ -1762,12 +1766,12 @@ function applyWorkspaceUI() {
   if (buildScheduleModalTitle) buildScheduleModalTitle.textContent = currentWorkspace === 'sim' ? 'Build Simulation Session Plan' : 'Build Track Schedule';
   if (garageModalTitle) garageModalTitle.textContent = currentWorkspace === 'sim' ? 'Edit Sim Paddock Allocation' : 'Edit Garage Allocation';
   document.querySelectorAll('[data-core-nav="1"]').forEach(el => { el.style.display = qgMode ? 'none' : ''; });
-  if (qgSection) qgSection.style.display = qgMode ? '' : 'none';
-  if (qgNav) qgNav.style.display = qgMode ? 'flex' : 'none';
+  if (qgSection) qgSection.style.display = 'none';
+  if (qgNav) qgNav.style.display = 'none';
   if (topbarSessionBadge) topbarSessionBadge.style.display = qgMode ? 'none' : 'flex';
   if (topbarExportBtn) topbarExportBtn.style.display = qgMode ? 'none' : '';
   if (topbarLive) topbarLive.style.display = qgMode ? 'none' : topbarLive.style.display;
-  if (content) content.style.padding = qgMode ? '16px' : '22px 26px';
+  if (content) content.style.padding = qgMode ? '0' : '22px 26px';
   renderWorkspaceEventTypeOptions();
   document.title = cfg.label;
 }

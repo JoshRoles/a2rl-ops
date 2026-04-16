@@ -650,6 +650,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
                 <div class="field"><label>Team</label><select id="g-team"></select></div>
                 <div class="field"><label>Session Type</label><select id="g-sess-type"><option>Single Car</option><option>Multi Car</option><option>Open Pit Lane</option></select></div>
                 <div class="field"><label>Session #</label><input type="number" id="g-session" value="1" min="1"></div>
+                <div class="field"><label>Weather</label><select id="g-weather"><option>Clear</option><option>Cloudy</option><option>Light Wind</option><option>Strong Wind</option><option>Rain</option></select></div>
                 <div class="field"><label>Start Attempts</label><input type="number" id="g-attempts" value="0" min="0"></div>
                 <div class="field"><label>Laps</label><input type="number" id="g-laps" value="0" min="0"></div>
                 <div class="field"><label>SW Stoppages</label><input type="number" id="g-stoppages" value="0" min="0"></div>
@@ -657,11 +658,13 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
                 <div class="field"><label>Crashed?</label><select id="g-crashed"><option value="No">No</option><option value="Yes">Yes</option></select></div>
                 <div class="field"><label>Damage ($)</label><input type="number" id="g-damage" value="0" min="0"></div>
                 <div class="field"><label>Top Speed (km/h)</label><input type="number" id="g-speed" value="0" min="0"></div>
+                <div class="field"><label>Avg Lap Time (s)</label><input type="number" id="g-laptime" value="0" min="0"></div>
                 <div class="field"><label>Planner Replans (0=No, 1=Yes)</label><input type="number" id="g-replans" value="0" min="0" max="1" step="1"></div>
                 <div class="field"><label>Instability (0-10)</label><input type="number" id="g-instab" value="0" min="0" max="10"></div>
                 <div class="field"><label>Sensor Failure (0=No, 1=Yes)</label><input type="number" id="g-sensor" value="0" min="0" max="1" step="1"></div>
                 <div class="field"><label>Manual Override (0=No, 1=Yes)</label><input type="number" id="g-manual" value="0" min="0" max="1" step="1"></div>
-                <div class="field"><label>Weather</label><select id="g-weather"><option>Clear</option><option>Cloudy</option><option>Light Wind</option><option>Strong Wind</option><option>Rain</option></select></div>
+                <div class="field"><label>Multi-Car Interaction</label><select id="g-multicar"><option value="No">No</option><option value="Yes">Yes</option></select></div>
+                <div class="field"><label>Overtaking Events</label><select id="g-overtaking"><option value="No">No</option><option value="Yes">Yes</option></select></div>
               </div>
               <div class="field" style="margin-top:8px;"><label>Notes</label><textarea id="g-notes" placeholder="Capture notes from the run..."></textarea></div>
               <div style="margin-top:10px;display:flex;gap:8px;">
@@ -1383,15 +1386,19 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 
 // DEFAULT WEIGHTS (algorithm)
 const DEFAULT_WEIGHTS = [
-  { key:'crash',         label:'Crash Event',           desc:'Binary penalty if car crashed this session',         val:20, ros:false },
-  { key:'estops',        label:'Emergency Stops',        desc:'E-stops per session, normalized to 5',               val:15, ros:false },
-  { key:'instability',   label:'Planner Instability',    desc:'0–10 score from ops team observation',               val:12, ros:false },
-  { key:'stoppages',     label:'SW Stoppages',           desc:'Software-triggered stops this session',              val:10, ros:false },
-  { key:'startAttempts', label:'Start Attempt Failures', desc:'Repeated start failures indicate readiness risk',    val:8,  ros:false },
+  { key:'crash',         label:'Crash Event',            desc:'Binary penalty if car crashed this session',         val:16, ros:false },
+  { key:'estops',        label:'Emergency Stops',        desc:'E-stops per session, normalized to 5',               val:12, ros:false },
+  { key:'instability',   label:'Planner Instability',    desc:'0–10 score from ops team observation',               val:10, ros:false },
+  { key:'stoppages',     label:'SW Stoppages',           desc:'Software-triggered stops this session',              val:8,  ros:false },
+  { key:'startAttempts', label:'Start Attempt Failures', desc:'Repeated start failures indicate readiness risk',    val:6,  ros:false },
   { key:'damage',        label:'Damage Cost',            desc:'Normalized damage cost vs fleet max',                val:10, ros:false },
-  { key:'sensor',        label:'Sensor Degradation',     desc:'0–1 index from sensor health monitoring',            val:8,  ros:false },
-  { key:'replans',       label:'Planner Replans',        desc:'Excessive replanning indicates instability',         val:7,  ros:false },
-  { key:'ttc',           label:'TTC Events',             desc:'Near-miss events (<1.5s TTC) — ROS automated',       val:10, ros:true  },
+  { key:'sensor',        label:'Sensor Degradation',     desc:'0–1 index from sensor health monitoring',            val:6,  ros:false },
+  { key:'replans',       label:'Planner Replans',        desc:'Excessive replanning indicates instability',         val:6,  ros:false },
+  { key:'ttc',           label:'TTC Events',             desc:'Near-miss events (<1.5s TTC) — ROS automated',       val:8,  ros:true  },
+  { key:'laptime',       label:'Avg Lap Time',           desc:'Slower average lap time can indicate unstable runs', val:6,  ros:false },
+  { key:'multicar',      label:'Multi-Car Interaction',  desc:'Shared-track interaction increases operational risk', val:4,  ros:false },
+  { key:'overtaking',    label:'Overtaking Events',      desc:'Overtaking introduces additional conflict points',    val:4,  ros:false },
+  { key:'manualOverride',label:'Manual Override',        desc:'Operator override should visibly raise risk score',   val:4,  ros:false },
 ];
 
 const DEFAULT_TEAMS = [
@@ -1428,11 +1435,23 @@ const HISTORY_COLUMNS = [
   { key:'eventType', label:'Event Type' },
   { key:'sessType', label:'Session Type' },
   { key:'sessNum', label:'Sess#' },
+  { key:'duration', label:'Duration' },
+  { key:'weather', label:'Weather' },
+  { key:'startAttempts', label:'Start Attempts' },
+  { key:'stoppages', label:'SW Stoppages' },
   { key:'riskScore', label:'Risk Score' },
   { key:'laps', label:'Laps' },
+  { key:'laptime', label:'Avg Lap Time' },
   { key:'speed', label:'Speed' },
   { key:'estops', label:'E-Stops' },
   { key:'crashed', label:'Crashed' },
+  { key:'damage', label:'Damage Cost' },
+  { key:'replans', label:'Planner Replans' },
+  { key:'instability', label:'Instability' },
+  { key:'sensor', label:'Sensor' },
+  { key:'multicar', label:'Multi-Car' },
+  { key:'overtaking', label:'Overtaking' },
+  { key:'manualOverride', label:'Manual Override' },
   { key:'notes', label:'Notes' },
 ];
 let sessions    = JSON.parse(localStorage.getItem('a2rl_sessions') || '[]');
@@ -1446,11 +1465,22 @@ let eventCfg    = JSON.parse(localStorage.getItem('a2rl_event_cfg')|| JSON.strin
 let schedCfg    = JSON.parse(localStorage.getItem('a2rl_sched_cfg')|| JSON.stringify({eventId:null,eventName:'A2RL Season 3 — Event 1',track:'Yas Marina Circuit',open:'08:00',close:'18:00',days:2,buffer:15,eventStart:null}));
 let trackOptions = JSON.parse(localStorage.getItem('a2rl_track_options') || JSON.stringify(DEFAULT_TRACKS));
 let teamSummaryMetrics = JSON.parse(localStorage.getItem('a2rl_team_summary_metrics') || JSON.stringify(['sessions','cumRisk','avg','best','worst','estops','crashes','trackHrs','tier']));
-let historyColumns = JSON.parse(localStorage.getItem('a2rl_history_columns') || JSON.stringify(['eventName','track','eventType','sessType','sessNum','riskScore','laps','speed','estops','crashed','notes']));
+let historyColumns = JSON.parse(localStorage.getItem('a2rl_history_columns') || JSON.stringify([
+  'eventName','track','eventType','sessType','sessNum','duration','weather',
+  'startAttempts','stoppages','riskScore','laps','laptime','speed','estops','crashed',
+  'damage','replans','instability','sensor','multicar','overtaking','manualOverride','notes'
+]));
+weights = DEFAULT_WEIGHTS.map(def => {
+  const saved = Array.isArray(weights) ? weights.find(w => w && w.key === def.key) : null;
+  return saved ? { ...def, ...saved } : { ...def };
+});
 if (!Array.isArray(trackOptions) || !trackOptions.length) trackOptions = [...DEFAULT_TRACKS];
 teamSummaryMetrics = TEAM_SUMMARY_METRICS.map(m => m.key).filter(k => (teamSummaryMetrics || []).includes(k));
 if (!teamSummaryMetrics.length) teamSummaryMetrics = TEAM_SUMMARY_METRICS.map(m => m.key);
-historyColumns = HISTORY_COLUMNS.map(c => c.key).filter(k => (historyColumns || []).includes(k));
+historyColumns = Array.from(new Set([
+  ...HISTORY_COLUMNS.map(c => c.key).filter(k => (historyColumns || []).includes(k)),
+  'duration','weather','startAttempts','stoppages','laptime','damage','replans','instability','sensor','multicar','overtaking','manualOverride'
+]));
 if (!historyColumns.length) historyColumns = HISTORY_COLUMNS.map(c => c.key);
 
 
@@ -1475,6 +1505,7 @@ let captureDrafts = JSON.parse(localStorage.getItem('a2rl_capture_drafts') || '{
 let garageCaptureActiveBlockId = null;
 let garageCaptureActiveTeam = '';
 let teamAnalysisSelected = '';
+let csvImportState = { fileName:'', headers:[], rows:[], mapping:{} };
 let users = JSON.parse(localStorage.getItem('a2rl_users') || '[]');
 let currentUser = JSON.parse(localStorage.getItem('a2rl_current_user') || 'null');
 
@@ -1938,6 +1969,8 @@ function calcRisk(s) {
   const W = {};
   weights.forEach(w => { W[w.key] = w.val / 100; });
   const maxDmg = thresholds.maxDamage || 100000;
+  const clamp01v = (v) => Math.max(0, Math.min(1, Number(v) || 0));
+  const yesNo01 = (v) => ['yes', 'y', 'true', '1'].includes(String(v || '').toLowerCase()) ? 1 : 0;
 
   let score = 0;
   const breakdown = {};
@@ -1982,14 +2015,29 @@ function calcRisk(s) {
   breakdown.replans = replanPts;
   score += replanPts;
 
+  // Average lap time (soft-normalized to 120s)
+  const lapTimePts = Math.min((s.laptime || 0) / 120, 1) * (W.laptime || 0) * 100;
+  breakdown.laptime = lapTimePts;
+  score += lapTimePts;
+
+  // Multi-car interaction flag
+  const multicarPts = yesNo01(s.multicar) * (W.multicar || 0) * 100;
+  breakdown.multicar = multicarPts;
+  score += multicarPts;
+
+  // Overtaking flag
+  const overtakingPts = yesNo01(s.overtaking) * (W.overtaking || 0) * 100;
+  breakdown.overtaking = overtakingPts;
+  score += overtakingPts;
+
   // TTC (ROS — norm to 10 events)
   const ttcPts = Math.min((s.ttc || 0) / 10, 1) * W.ttc * 100;
   breakdown.ttc = ttcPts;
   score += ttcPts;
 
   // Manual override bump (boolean 0/1)
-  const manualBump = (Math.max(0, Math.min(1, Number(s.manualOverride) || 0))) * 15;
-  breakdown.manual = manualBump;
+  const manualBump = clamp01v(s.manualOverride) * (W.manualOverride || 0) * 100;
+  breakdown.manualOverride = manualBump;
   score += manualBump;
 
   return { score: Math.min(100, Math.round(score * 10) / 10), breakdown };
@@ -2000,6 +2048,7 @@ function calcRiskPartial(s, present = {}) {
   const maxDmg = thresholds.maxDamage || 100000;
   const clamp01v = (v) => Math.max(0, Math.min(1, Number(v) || 0));
   const has = (k) => !!present[k];
+  const yesNo01 = (v) => ['yes', 'y', 'true', '1'].includes(String(v || '').toLowerCase()) ? 1 : 0;
 
   const metricDefs = [
     { key: 'crash', max: (W.crash || 0) * 100, points: ((s.crashed === 'Yes') ? (W.crash || 0) * 100 : 0) },
@@ -2010,8 +2059,11 @@ function calcRiskPartial(s, present = {}) {
     { key: 'damage', max: (W.damage || 0) * 100, points: Math.min((s.damage || 0) / maxDmg, 1) * (W.damage || 0) * 100 },
     { key: 'sensor', max: (W.sensor || 0) * 100, points: clamp01v(s.sensor) * (W.sensor || 0) * 100 },
     { key: 'replans', max: (W.replans || 0) * 100, points: clamp01v(s.replans) * (W.replans || 0) * 100 },
+    { key: 'laptime', max: (W.laptime || 0) * 100, points: Math.min((s.laptime || 0) / 120, 1) * (W.laptime || 0) * 100 },
+    { key: 'multicar', max: (W.multicar || 0) * 100, points: yesNo01(s.multicar) * (W.multicar || 0) * 100 },
+    { key: 'overtaking', max: (W.overtaking || 0) * 100, points: yesNo01(s.overtaking) * (W.overtaking || 0) * 100 },
     { key: 'ttc', max: (W.ttc || 0) * 100, points: Math.min((s.ttc || 0) / 10, 1) * (W.ttc || 0) * 100 },
-    { key: 'manual', max: 15, points: clamp01v(s.manualOverride) * 15 },
+    { key: 'manualOverride', max: (W.manualOverride || 0) * 100, points: clamp01v(s.manualOverride) * (W.manualOverride || 0) * 100 },
   ];
 
   const fullMax = metricDefs.reduce((a, m) => a + (m.max || 0), 0);
@@ -2406,20 +2458,22 @@ function calcAndSubmit(prefix='f') {
 }
 
 function resetGarageCapture() {
-  ['session','attempts','laps','stoppages','estops','damage','speed','replans','instab','sensor','manual'].forEach(k => {
+  ['session','attempts','laps','stoppages','estops','damage','speed','laptime','replans','instab','sensor','manual'].forEach(k => {
     const el = document.getElementById('g-'+k);
     if (!el) return;
     el.value = (k === 'session') ? 1 : 0;
   });
   const st = document.getElementById('g-sess-type'); if (st) st.value = 'Single Car';
   const cr = document.getElementById('g-crashed'); if (cr) cr.value = 'No';
+  const mc = document.getElementById('g-multicar'); if (mc) mc.value = 'No';
+  const ov = document.getElementById('g-overtaking'); if (ov) ov.value = 'No';
   const wx = document.getElementById('g-weather'); if (wx) wx.value = 'Clear';
   const nt = document.getElementById('g-notes'); if (nt) nt.value = '';
   saveGarageCaptureDraftFromInputs();
 }
 
 function bindGarageCaptureDraftAutosave() {
-  const ids = ['g-attempts','g-laps','g-stoppages','g-estops','g-crashed','g-damage','g-speed','g-replans','g-instab','g-sensor','g-manual','g-weather','g-notes'];
+  const ids = ['g-attempts','g-laps','g-stoppages','g-estops','g-crashed','g-damage','g-speed','g-laptime','g-replans','g-instab','g-sensor','g-manual','g-weather','g-multicar','g-overtaking','g-notes'];
   ids.forEach(id => {
     const el = document.getElementById(id);
     if (!el || el.dataset.boundDraft === '1') return;
@@ -2437,6 +2491,7 @@ function resetForm() {
   document.getElementById('f-crashed').value = 'No';
   document.getElementById('f-multicar').value = 'No';
   document.getElementById('f-overtaking').value = 'No';
+  document.getElementById('f-weather').value = 'Clear';
   document.getElementById('f-notes').value = '';
   document.getElementById('score-result').classList.remove('visible');
   setDefaultFormDate();
@@ -2473,7 +2528,10 @@ function submitManualSession() {
     crashed: document.getElementById('ms-crashed')?.value || 'No',
     damage: parseFloat(document.getElementById('ms-damage')?.value) || 0,
     speed: parseFloat(document.getElementById('ms-speed')?.value) || 0,
+    laptime: parseFloat(document.getElementById('ms-laptime')?.value) || 0,
     replans: Math.max(0, Math.min(1, parseInt(document.getElementById('ms-replans')?.value) || 0)),
+    multicar: document.getElementById('ms-multicar')?.value || 'No',
+    overtaking: document.getElementById('ms-overtaking')?.value || 'No',
     estops: parseInt(document.getElementById('ms-estops')?.value) || 0,
     instability: parseFloat(document.getElementById('ms-instab')?.value) || 0,
     sensor: Math.max(0, Math.min(1, parseInt(document.getElementById('ms-sensor')?.value) || 0)),
@@ -2564,11 +2622,23 @@ function renderHistory() {
     if (cols.has('eventType')) hh += '<th>Event Type</th>';
     if (cols.has('sessType')) hh += '<th>Session Type</th>';
     if (cols.has('sessNum')) hh += '<th>Sess#</th>';
+    if (cols.has('duration')) hh += '<th>Duration</th>';
+    if (cols.has('weather')) hh += '<th>Weather</th>';
+    if (cols.has('startAttempts')) hh += '<th>Start Attempts</th>';
+    if (cols.has('stoppages')) hh += '<th>SW Stoppages</th>';
     if (cols.has('riskScore')) hh += '<th>Risk Score</th>';
     if (cols.has('laps')) hh += '<th>Laps</th>';
+    if (cols.has('laptime')) hh += '<th>Avg Lap Time</th>';
     if (cols.has('speed')) hh += '<th>Speed</th>';
     if (cols.has('estops')) hh += '<th>E-Stops</th>';
     if (cols.has('crashed')) hh += '<th>Crashed</th>';
+    if (cols.has('damage')) hh += '<th>Damage Cost</th>';
+    if (cols.has('replans')) hh += '<th>Planner Replans</th>';
+    if (cols.has('instability')) hh += '<th>Instability</th>';
+    if (cols.has('sensor')) hh += '<th>Sensor</th>';
+    if (cols.has('multicar')) hh += '<th>Multi-Car</th>';
+    if (cols.has('overtaking')) hh += '<th>Overtaking</th>';
+    if (cols.has('manualOverride')) hh += '<th>Manual Override</th>';
     if (cols.has('notes')) hh += '<th>Notes</th>';
     hh += '<th></th>';
     head.innerHTML = hh;
@@ -2594,6 +2664,10 @@ function renderHistory() {
     if (cols.has('eventType')) row += `<td style="font-size:12px;">${s.eventType||'—'}</td>`;
     if (cols.has('sessType')) row += `<td><span class="badge ${s.sessType==='Multi Car'?'badge-purple':s.sessType==='Open Pit Lane'?'badge-blue':'badge-med'}" style="font-size:9px;">${s.sessType||'Single'}</span>${s.sessType==='Multi Car' ? ' <span class="badge badge-purple" style="font-size:9px;opacity:0.9;">MULTI GROUP</span>' : ''}</td>`;
     if (cols.has('sessNum')) row += `<td class="mono">#${s.sessNum||1}</td>`;
+    if (cols.has('duration')) row += `<td class="mono">${isStub ? '' : ((s.duration ?? '') !== '' ? `${s.duration}m` : '')}</td>`;
+    if (cols.has('weather')) row += `<td style="font-size:12px;">${isStub ? '' : (s.weather || '')}</td>`;
+    if (cols.has('startAttempts')) row += `<td class="mono">${isStub ? '' : (s.startAttempts ?? '')}</td>`;
+    if (cols.has('stoppages')) row += `<td class="mono">${isStub ? '' : (s.stoppages ?? '')}</td>`;
     if (cols.has('riskScore')) {
       const conf = Math.max(0, Math.min(1, Number(s.riskConfidence)));
       const hasConf = Number.isFinite(conf) && !isStub;
@@ -2604,9 +2678,17 @@ function renderHistory() {
       row += `<td>${isStub ? '' : `<span style="color:${col};font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600">${(s.riskScore||0).toFixed(1)}</span> <span class="badge ${tier.cls}">${tier.label}</span>${confBadge}`}</td>`;
     }
     if (cols.has('laps')) row += `<td class="mono">${isStub ? '' : (s.laps ?? '')}</td>`;
+    if (cols.has('laptime')) row += `<td class="mono">${isStub ? '' : ((s.laptime ?? '') !== '' ? `${s.laptime}s` : '')}</td>`;
     if (cols.has('speed')) row += `<td class="mono">${isStub ? '' : ((s.speed ?? '') !== '' ? `${s.speed} km/h` : '')}</td>`;
     if (cols.has('estops')) row += `<td class="mono">${isStub ? '' : (s.estops ?? '')}</td>`;
     if (cols.has('crashed')) row += `<td style="color:${s.crashed==='Yes'?C.red:C.muted}">${isStub ? '' : (s.crashed||'No')}</td>`;
+    if (cols.has('damage')) row += `<td class="mono">${isStub ? '' : ((s.damage ?? '') !== '' ? `$${Number(s.damage || 0).toLocaleString(undefined,{maximumFractionDigits:2})}` : '')}</td>`;
+    if (cols.has('replans')) row += `<td class="mono">${isStub ? '' : (s.replans ?? '')}</td>`;
+    if (cols.has('instability')) row += `<td class="mono">${isStub ? '' : (s.instability ?? '')}</td>`;
+    if (cols.has('sensor')) row += `<td class="mono">${isStub ? '' : (s.sensor ?? '')}</td>`;
+    if (cols.has('multicar')) row += `<td>${isStub ? '' : (s.multicar || 'No')}</td>`;
+    if (cols.has('overtaking')) row += `<td>${isStub ? '' : (s.overtaking || 'No')}</td>`;
+    if (cols.has('manualOverride')) row += `<td class="mono">${isStub ? '' : (s.manualOverride ?? '')}</td>`;
     if (cols.has('notes')) row += `<td style="font-size:11px;color:var(--muted);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${isStub ? '' : (s.notes||'')}</td>`;
     return `<tr>${row}
       <td style="display:flex;gap:4px;"><button class="btn sm" onclick="editSession('${s.id}')" title="Edit">✎</button><button class="btn sm danger" onclick="deleteSession('${s.id}')" title="Delete">✕</button></td>
@@ -6132,6 +6214,40 @@ function chooseCsvHeader(headers, targetLabel, aliases, required) {
 function clamp01(v) {
   return Math.max(0, Math.min(1, parseInt(v, 10) || 0));
 }
+const CSV_IMPORT_FIELDS = [
+  { key:'team', label:'Team', aliases:['team', 'teamname', 'constructor'], required:true },
+  { key:'timestamp', label:'Timestamp', aliases:['timestamp', 'datetime', 'date_time', 'sessiontimestamp'], required:false },
+  { key:'date', label:'Date', aliases:['date', 'rundate', 'trackdate'], required:false },
+  { key:'time', label:'Time', aliases:['time', 'runtime', 'tracktime'], required:false },
+  { key:'eventType', label:'Event Type', aliases:['eventtype', 'event_type'], required:false },
+  { key:'sessType', label:'Session Type', aliases:['sesstype', 'sessiontype', 'session_type'], required:false },
+  { key:'sessNum', label:'Session Number', aliases:['sessnum', 'sessionnum', 'session_number', 'sessionid', 'session_id'], required:false },
+  { key:'duration', label:'Duration (min)', aliases:['duration', 'durationmin', 'minutes'], required:false },
+  { key:'weather', label:'Weather', aliases:['weather', 'conditions'], required:false },
+  { key:'startAttempts', label:'Start Attempts', aliases:['startattempts', 'attempts'], required:false },
+  { key:'laps', label:'Laps', aliases:['laps', 'lapcount', 'totallaps', 'total_laps'], required:false },
+  { key:'stoppages', label:'SW Stoppages', aliases:['stoppages', 'softwarestoppages'], required:false },
+  { key:'estops', label:'E-Stops', aliases:['estops', 'estop', 'emergencystops'], required:false },
+  { key:'crashed', label:'Crashed', aliases:['crashed', 'crash', 'crashedyesno'], required:false },
+  { key:'damage', label:'Damage', aliases:['damage', 'vehicledamage', 'value'], required:false },
+  { key:'speed', label:'Average Speed', aliases:['speed', 'averagespeed', 'topspeedkmh', 'top_speed_kmh', 'topspeed'], required:false },
+  { key:'laptime', label:'Avg Lap Time (s)', aliases:['laptime', 'avglaptime', 'average_lap_time', 'avg_lap_time'], required:false },
+  { key:'replans', label:'Planner Replans (0/1)', aliases:['replans', 'plannerreplans'], required:false },
+  { key:'instability', label:'Instability', aliases:['instability', 'unstableevents'], required:false },
+  { key:'sensor', label:'Sensor Failure (0/1)', aliases:['sensor', 'sensorfailure'], required:false },
+  { key:'multicar', label:'Multi-Car Interaction', aliases:['multicar', 'multicarinteraction', 'multi_car_interaction'], required:false },
+  { key:'overtaking', label:'Overtaking Events', aliases:['overtaking', 'overtakingevents', 'overtake'], required:false },
+  { key:'manualOverride', label:'Manual Override (0/1)', aliases:['manualoverride', 'manual_override', 'manualoverride010'], required:false },
+  { key:'notes', label:'Notes', aliases:['notes', 'comment', 'comments', 'remarks'], required:false },
+];
+function parseCsvNumber(value) {
+  const cleaned = String(value ?? '')
+    .replace(/[$,\s]/g, '')
+    .replace(/[^\d.-]/g, '');
+  if (!cleaned) return 0;
+  const parsed = parseFloat(cleaned);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
 function parseLegacyTimestamp(row, map) {
   const ts = map.timestamp ? (row[map.timestamp] || '') : '';
   if (ts) {
@@ -6145,6 +6261,128 @@ function parseLegacyTimestamp(row, map) {
     if (!isNaN(composed)) return composed.toISOString();
   }
   return null;
+}
+function getDefaultCsvMapping(headers) {
+  const mapping = {};
+  CSV_IMPORT_FIELDS.forEach(field => {
+    mapping[field.key] = detectCsvHeader(headers, field.aliases) || '';
+  });
+  return mapping;
+}
+function setCsvImportMapping(fieldKey, header) {
+  csvImportState.mapping[fieldKey] = header || '';
+}
+function renderCsvImportModal() {
+  const fileEl = document.getElementById('csv-import-file-name');
+  const statusEl = document.getElementById('csv-import-status');
+  const mappingEl = document.getElementById('csv-import-mapping-grid');
+  const previewHead = document.getElementById('csv-import-preview-head');
+  const previewBody = document.getElementById('csv-import-preview-body');
+  if (!fileEl || !statusEl || !mappingEl || !previewHead || !previewBody) return;
+  const headers = csvImportState.headers || [];
+  const rows = csvImportState.rows || [];
+  const mapping = csvImportState.mapping || {};
+  fileEl.textContent = csvImportState.fileName || 'CSV import';
+  const missingRequired = CSV_IMPORT_FIELDS.filter(field => field.required && !mapping[field.key]).map(field => field.label);
+  const hasDateSource = !!mapping.timestamp || !!mapping.date;
+  statusEl.style.color = (missingRequired.length || !hasDateSource) ? 'var(--amber)' : 'var(--green)';
+  statusEl.textContent = missingRequired.length
+    ? `Missing required mapping: ${missingRequired.join(', ')}`
+    : (!hasDateSource ? 'Map either Timestamp or Date before importing.' : `Ready to import ${rows.length} rows.`);
+  mappingEl.innerHTML = CSV_IMPORT_FIELDS.map(field => {
+    const current = mapping[field.key] || '';
+    const opts = ['<option value="">Skip this field</option>']
+      .concat(headers.map(h => `<option value="${h.replace(/"/g,'&quot;')}" ${current===h?'selected':''}>${h}</option>`))
+      .join('');
+    return `<div style="display:grid;grid-template-columns:180px 1fr;gap:10px;align-items:center;">
+      <div style="font-size:12px;color:${field.required?'var(--text)':'var(--muted)'};">${field.label}${field.required?' *':''}</div>
+      <select onchange="setCsvImportMapping('${field.key}', this.value)" style="width:100%;">${opts}</select>
+    </div>`;
+  }).join('');
+  previewHead.innerHTML = '<tr>' + headers.map(h => `<th>${h}</th>`).join('') + '</tr>';
+  previewBody.innerHTML = rows.slice(0, 6).map(row => '<tr>' + headers.map(h => {
+    const val = String(row[h] ?? '');
+    const short = val.length > 80 ? val.slice(0, 77) + '...' : val;
+    return `<td title="${val.replace(/"/g,'&quot;')}">${short || '<span style="color:var(--muted)">—</span>'}</td>`;
+  }).join('') + '</tr>').join('') || '<tr><td style="padding:12px;color:var(--muted);">No preview rows available.</td></tr>';
+}
+function confirmCsvImport() {
+  const map = csvImportState.mapping || {};
+  if (!map.team) { alert('Team column mapping is required.'); return; }
+  if (!map.timestamp && !map.date) { alert('Please map either a timestamp column or a date column.'); return; }
+  const rows = csvImportState.rows || [];
+  try {
+    const imported = [];
+    rows.forEach((row, idx) => {
+      const team = (row[map.team] || '').trim();
+      const trackTs = parseLegacyTimestamp(row, map);
+      if (!team || !trackTs) return;
+      const raw = (k) => (map[k] ? String(row[map[k]] ?? '').trim() : '');
+      const hasVal = (k) => raw(k) !== '';
+      const crashedRaw = hasVal('crashed') ? raw('crashed').toLowerCase() : 'no';
+      const crashed = ['1', 'yes', 'y', 'true'].includes(crashedRaw) ? 'Yes' : 'No';
+      const s = {
+        id: Date.now() + idx + Math.floor(Math.random() * 1000),
+        team,
+        eventType: raw('eventType') || 'Testing (Track)',
+        sessType: raw('sessType') || 'Single Car',
+        sessNum: parseInt(parseCsvNumber(raw('sessNum')) || 1, 10) || 1,
+        timestamp: trackTs,
+        trackTimestamp: trackTs,
+        duration: parseInt(parseCsvNumber(raw('duration')) || 30, 10) || 30,
+        weather: raw('weather') || 'Clear',
+        startAttempts: parseInt(parseCsvNumber(raw('startAttempts')) || 0, 10) || 0,
+        laps: parseInt(parseCsvNumber(raw('laps')) || 0, 10) || 0,
+        stoppages: parseInt(parseCsvNumber(raw('stoppages')) || 0, 10) || 0,
+        estops: parseInt(parseCsvNumber(raw('estops')) || 0, 10) || 0,
+        crashed,
+        damage: parseCsvNumber(raw('damage')) || 0,
+        speed: parseCsvNumber(raw('speed')) || 0,
+        laptime: parseCsvNumber(raw('laptime')) || 0,
+        replans: clamp01(raw('replans') || 0),
+        instability: parseCsvNumber(raw('instability')) || 0,
+        sensor: clamp01(raw('sensor') || 0),
+        multicar: raw('multicar') || 'No',
+        overtaking: raw('overtaking') || 'No',
+        manualOverride: clamp01(raw('manualOverride') || 0),
+        notes: raw('notes') || '',
+        stub: false,
+      };
+      const present = {
+        crash: hasVal('crashed'),
+        estops: hasVal('estops'),
+        instability: hasVal('instability'),
+        stoppages: hasVal('stoppages'),
+        startAttempts: hasVal('startAttempts'),
+        damage: hasVal('damage'),
+        sensor: hasVal('sensor'),
+        replans: hasVal('replans'),
+        laptime: hasVal('laptime'),
+        multicar: hasVal('multicar'),
+        overtaking: hasVal('overtaking'),
+        ttc: false,
+        manualOverride: hasVal('manualOverride'),
+      };
+      const hasPartial = Object.values(present).some(Boolean);
+      const result = hasPartial ? calcRiskPartial(s, present) : { ...calcRisk(s), confidence: 1, partialData: false };
+      s.riskScore = result.score;
+      s.riskBreakdown = result.breakdown;
+      s.riskConfidence = result.confidence;
+      s.partialData = !!result.partialData;
+      imported.push(s);
+    });
+    if (!imported.length) { alert('No valid rows imported. Check your mappings and values.'); return; }
+    sessions = [...sessions, ...imported];
+    save();
+    renderHistory();
+    renderTeamView();
+    renderTrends();
+    renderLiveTable();
+    closeModal('modal-csv-import');
+    alert(`Imported ${imported.length} sessions from CSV.`);
+  } catch (err) {
+    alert('CSV import failed. Please verify the file and mappings.');
+  }
 }
 function importSessionsCSV() {
   const input = document.createElement('input');
@@ -6161,101 +6399,14 @@ function importSessionsCSV() {
           alert('CSV appears empty.');
           return;
         }
-        const map = {
-          team: chooseCsvHeader(headers, 'Team', ['team', 'teamname', 'constructor'], true),
-          timestamp: chooseCsvHeader(headers, 'Timestamp', ['timestamp', 'datetime', 'date_time', 'sessiontimestamp'], false),
-          date: chooseCsvHeader(headers, 'Date', ['date', 'rundate', 'trackdate'], false),
-          time: chooseCsvHeader(headers, 'Time', ['time', 'runtime', 'tracktime'], false),
-          eventType: chooseCsvHeader(headers, 'Event Type', ['eventtype', 'event_type'], false),
-          sessType: chooseCsvHeader(headers, 'Session Type', ['sesstype', 'sessiontype', 'session_type'], false),
-          sessNum: chooseCsvHeader(headers, 'Session Number', ['sessnum', 'sessionnum', 'session_number'], false),
-          duration: chooseCsvHeader(headers, 'Duration (min)', ['duration', 'durationmin', 'minutes'], false),
-          laps: chooseCsvHeader(headers, 'Laps', ['laps', 'lapcount'], false),
-          speed: chooseCsvHeader(headers, 'Average Speed', ['speed', 'averagespeed'], false),
-          estops: chooseCsvHeader(headers, 'E-Stops', ['estops', 'estop', 'emergencystops'], false),
-          crashed: chooseCsvHeader(headers, 'Crashed', ['crashed', 'crash'], false),
-          damage: chooseCsvHeader(headers, 'Damage', ['damage', 'vehicledamage'], false),
-          instability: chooseCsvHeader(headers, 'Instability', ['instability', 'unstableevents'], false),
-          stoppages: chooseCsvHeader(headers, 'Software Stoppages', ['stoppages', 'softwarestoppages'], false),
-          startAttempts: chooseCsvHeader(headers, 'Start Attempts', ['startattempts', 'attempts'], false),
-          sensor: chooseCsvHeader(headers, 'Sensor Failure (0/1)', ['sensor', 'sensorfailure'], false),
-          replans: chooseCsvHeader(headers, 'Planner Replans (0/1)', ['replans', 'plannerreplans'], false),
-          manualOverride: chooseCsvHeader(headers, 'Manual Override (0/1)', ['manualoverride', 'manual_override'], false),
-          notes: chooseCsvHeader(headers, 'Notes', ['notes', 'comment', 'remarks'], false),
+        csvImportState = {
+          fileName: file.name || 'sessions.csv',
+          headers,
+          rows,
+          mapping: getDefaultCsvMapping(headers),
         };
-        if (!map.team) {
-          alert('Team column mapping is required.');
-          return;
-        }
-        if (!map.timestamp && !map.date) {
-          alert('Please map either a timestamp column or a date column.');
-          return;
-        }
-
-        const imported = [];
-        rows.forEach((row, idx) => {
-          const team = (row[map.team] || '').trim();
-          const trackTs = parseLegacyTimestamp(row, map);
-          if (!team || !trackTs) return;
-          const raw = (k) => (map[k] ? String(row[map[k]] ?? '').trim() : '');
-          const hasVal = (k) => raw(k) !== '';
-          const crashedRaw = hasVal('crashed') ? raw('crashed').toLowerCase() : 'no';
-          const crashed = ['1', 'yes', 'y', 'true'].includes(crashedRaw) ? 'Yes' : 'No';
-          const s = {
-            id: Date.now() + idx + Math.floor(Math.random() * 1000),
-            team,
-            eventType: raw('eventType') || 'Testing (Track)',
-            sessType: raw('sessType') || 'Single Car',
-            sessNum: parseInt(raw('sessNum') || 1, 10) || 1,
-            timestamp: trackTs,
-            trackTimestamp: trackTs,
-            duration: parseInt(raw('duration') || 30, 10) || 30,
-            laps: parseInt(raw('laps') || 0, 10) || 0,
-            speed: parseFloat(raw('speed') || 0) || 0,
-            estops: parseInt(raw('estops') || 0, 10) || 0,
-            crashed,
-            damage: parseFloat(raw('damage') || 0) || 0,
-            instability: parseFloat(raw('instability') || 0) || 0,
-            stoppages: parseInt(raw('stoppages') || 0, 10) || 0,
-            startAttempts: parseInt(raw('startAttempts') || 0, 10) || 0,
-            sensor: clamp01(raw('sensor') || 0),
-            replans: clamp01(raw('replans') || 0),
-            manualOverride: clamp01(raw('manualOverride') || 0),
-            notes: raw('notes') || '',
-            stub: false,
-          };
-          const present = {
-            crash: hasVal('crashed'),
-            estops: hasVal('estops'),
-            instability: hasVal('instability'),
-            stoppages: hasVal('stoppages'),
-            startAttempts: hasVal('startAttempts'),
-            damage: hasVal('damage'),
-            sensor: hasVal('sensor'),
-            replans: hasVal('replans'),
-            ttc: false,
-            manual: hasVal('manualOverride'),
-          };
-          const hasPartial = Object.values(present).some(Boolean);
-          const result = hasPartial ? calcRiskPartial(s, present) : { ...calcRisk(s), confidence: 1, partialData: false };
-          s.riskScore = result.score;
-          s.riskBreakdown = result.breakdown;
-          s.riskConfidence = result.confidence;
-          s.partialData = !!result.partialData;
-          imported.push(s);
-        });
-
-        if (!imported.length) {
-          alert('No valid rows imported. Check team/date mappings and values.');
-          return;
-        }
-        sessions = [...sessions, ...imported];
-        save();
-        renderHistory();
-        renderTeamView();
-        renderTrends();
-        renderLiveTable();
-        alert(`Imported ${imported.length} sessions from CSV.`);
+        renderCsvImportModal();
+        openModal('modal-csv-import');
       } catch (err) {
         alert('CSV import failed. Please verify file format.');
       }
@@ -6474,15 +6625,20 @@ function editSession(id) {
   document.getElementById('es-date').value=isNaN(dt)?'':toLocalDateStr(dt);
   document.getElementById('es-time').value=isNaN(dt)?'':dt.toTimeString().slice(0,5);
   document.getElementById('es-duration').value=s.duration||30;
+  document.getElementById('es-weather').value=s.weather||'Clear';
   document.getElementById('es-laps').value=s.laps||0;
   document.getElementById('es-speed').value=s.speed||0;
+  document.getElementById('es-laptime').value=s.laptime||0;
   document.getElementById('es-estops').value=s.estops||0;
   document.getElementById('es-crashed').value=s.crashed||'No';
   document.getElementById('es-damage').value=s.damage||0;
   document.getElementById('es-instab').value=s.instability||0;
   document.getElementById('es-stoppages').value=s.stoppages||0;
   document.getElementById('es-attempts').value=s.startAttempts||0;
+  document.getElementById('es-replans').value=Math.max(0, Math.min(1, parseInt(s.replans)||0));
   document.getElementById('es-sensor').value=Math.max(0, Math.min(1, parseInt(s.sensor)||0));
+  document.getElementById('es-multicar').value=s.multicar||'No';
+  document.getElementById('es-overtaking').value=s.overtaking||'No';
   document.getElementById('es-manual').value=Math.max(0, Math.min(1, parseInt(s.manualOverride)||0));
   document.getElementById('es-notes').value=s.notes||'';
   openModal('modal-edit-session');
@@ -6500,17 +6656,21 @@ function saveEditSession() {
     timestamp:new Date(dv+'T'+tv).toISOString(),
     trackTimestamp:new Date(dv+'T'+tv).toISOString(),
     duration:parseInt(document.getElementById('es-duration').value)||30,
+    weather:document.getElementById('es-weather').value || 'Clear',
     laps:parseInt(document.getElementById('es-laps').value)||0,
     speed:parseFloat(document.getElementById('es-speed').value)||0,
+    laptime:parseFloat(document.getElementById('es-laptime').value)||0,
     estops:parseInt(document.getElementById('es-estops').value)||0,
     crashed:document.getElementById('es-crashed').value,
     damage:parseFloat(document.getElementById('es-damage').value)||0,
     instability:parseFloat(document.getElementById('es-instab').value)||0,
     stoppages:parseInt(document.getElementById('es-stoppages').value)||0,
     startAttempts:parseInt(document.getElementById('es-attempts').value)||0,
+    replans:Math.max(0, Math.min(1, parseInt(document.getElementById('es-replans').value)||0)),
     sensor:Math.max(0, Math.min(1, parseInt(document.getElementById('es-sensor').value)||0)),
+    multicar:document.getElementById('es-multicar').value || 'No',
+    overtaking:document.getElementById('es-overtaking').value || 'No',
     manualOverride:Math.max(0, Math.min(1, parseInt(document.getElementById('es-manual').value)||0)),
-    replans:Math.max(0, Math.min(1, parseInt((sessions[idx].replans)||0))),
     notes:document.getElementById('es-notes').value, stub:false,
   };
   const {score,breakdown}=calcRisk(u);
@@ -6851,15 +7011,20 @@ init();
       <div class="field"><label>Date</label><input type="date" id="es-date"></div>
       <div class="field"><label>Time</label><input type="time" id="es-time"></div>
       <div class="field"><label>Duration (min)</label><input type="number" id="es-duration" min="1"></div>
+      <div class="field"><label>Weather</label><select id="es-weather"><option>Clear</option><option>Cloudy</option><option>Light Wind</option><option>Strong Wind</option><option>Rain</option></select></div>
       <div class="field"><label>Laps</label><input type="number" id="es-laps" min="0"></div>
       <div class="field"><label>Top Speed (km/h)</label><input type="number" id="es-speed" min="0"></div>
+      <div class="field"><label>Avg Lap Time (s)</label><input type="number" id="es-laptime" min="0" step="0.1"></div>
       <div class="field"><label>E-Stops</label><input type="number" id="es-estops" min="0"></div>
       <div class="field"><label>Crashed?</label><select id="es-crashed"><option>No</option><option>Yes</option></select></div>
       <div class="field"><label>Damage ($)</label><input type="number" id="es-damage" min="0"></div>
       <div class="field"><label>Planner Instability (0-10)</label><input type="number" id="es-instab" min="0" max="10" step="0.1"></div>
       <div class="field"><label>SW Stoppages</label><input type="number" id="es-stoppages" min="0"></div>
       <div class="field"><label>Start Attempts</label><input type="number" id="es-attempts" min="0"></div>
+      <div class="field"><label>Planner Replans (0=No, 1=Yes)</label><input type="number" id="es-replans" min="0" max="1" step="1"></div>
       <div class="field"><label>Sensor Failure (0=No, 1=Yes)</label><input type="number" id="es-sensor" min="0" max="1" step="1"></div>
+      <div class="field"><label>Multi-Car Interaction</label><select id="es-multicar"><option value="No">No</option><option value="Yes">Yes</option></select></div>
+      <div class="field"><label>Overtaking Events</label><select id="es-overtaking"><option value="No">No</option><option value="Yes">Yes</option></select></div>
       <div class="field"><label>Manual Override (0=No, 1=Yes)</label><input type="number" id="es-manual" min="0" max="1" step="1"></div>
     </div>
     <div class="field" style="margin-top:12px;"><label>Notes</label>
@@ -6918,15 +7083,52 @@ init();
       <div class="field"><label>Crashed?</label><select id="ms-crashed"><option value="No">No</option><option value="Yes">Yes</option></select></div>
       <div class="field"><label>Damage ($)</label><input type="number" id="ms-damage" value="0" min="0"></div>
       <div class="field"><label>Top Speed (km/h)</label><input type="number" id="ms-speed" value="0" min="0"></div>
+      <div class="field"><label>Avg Lap Time (s)</label><input type="number" id="ms-laptime" value="0" min="0" step="0.1"></div>
       <div class="field"><label>Planner Replans (0=No, 1=Yes)</label><input type="number" id="ms-replans" value="0" min="0" max="1" step="1"></div>
       <div class="field"><label>Instability (0-10)</label><input type="number" id="ms-instab" value="0" min="0" max="10"></div>
       <div class="field"><label>Sensor Failure (0=No, 1=Yes)</label><input type="number" id="ms-sensor" value="0" min="0" max="1" step="1"></div>
+      <div class="field"><label>Multi-Car Interaction</label><select id="ms-multicar"><option value="No">No</option><option value="Yes">Yes</option></select></div>
+      <div class="field"><label>Overtaking Events</label><select id="ms-overtaking"><option value="No">No</option><option value="Yes">Yes</option></select></div>
       <div class="field"><label>Manual Override (0=No, 1=Yes)</label><input type="number" id="ms-manual" value="0" min="0" max="1" step="1"></div>
     </div>
     <div class="field" style="margin-top:10px;"><label>Notes</label><textarea id="ms-notes"></textarea></div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modal-manual-session')">Cancel</button>
       <button class="btn primary" onclick="submitManualSession()">Save Manual Session</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="modal-csv-import">
+  <div class="modal" style="width:1100px;max-height:88vh;overflow-y:auto;">
+    <button class="modal-close" onclick="closeModal('modal-csv-import')">✕</button>
+    <div class="modal-title">CSV Import Mapping</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">
+      Review the uploaded CSV, adjust any column mappings, then import the rows into Session History.
+    </div>
+    <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+      <div id="csv-import-file-name" class="mono" style="font-size:12px;color:var(--text);"></div>
+      <div id="csv-import-status" style="font-size:12px;color:var(--muted);"></div>
+    </div>
+    <div class="grid-2" style="align-items:start;">
+      <div class="panel" style="margin:0;">
+        <div class="panel-head"><div class="panel-title">Field Mapping</div></div>
+        <div class="panel-body">
+          <div id="csv-import-mapping-grid" style="display:grid;gap:8px;"></div>
+        </div>
+      </div>
+      <div class="panel" style="margin:0;">
+        <div class="panel-head"><div class="panel-title">CSV Preview</div></div>
+        <div class="panel-body" style="padding:0;overflow:auto;">
+          <table class="data-table" style="min-width:780px;">
+            <thead id="csv-import-preview-head"></thead>
+            <tbody id="csv-import-preview-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-csv-import')">Cancel</button>
+      <button class="btn primary" onclick="confirmCsvImport()">Import CSV</button>
     </div>
   </div>
 </div>

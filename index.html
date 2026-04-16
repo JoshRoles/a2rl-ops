@@ -1506,6 +1506,7 @@ let garageCaptureActiveBlockId = null;
 let garageCaptureActiveTeam = '';
 let teamAnalysisSelected = '';
 let csvImportState = { fileName:'', headers:[], rows:[], mapping:{} };
+let teamSummarySort = JSON.parse(localStorage.getItem('a2rl_team_summary_sort') || '{"key":"avg","dir":"desc"}');
 let users = JSON.parse(localStorage.getItem('a2rl_users') || '[]');
 let currentUser = JSON.parse(localStorage.getItem('a2rl_current_user') || 'null');
 
@@ -1960,6 +1961,7 @@ function save() {
   localStorage.setItem('a2rl_track_options', JSON.stringify(trackOptions));
   localStorage.setItem('a2rl_team_summary_metrics', JSON.stringify(teamSummaryMetrics));
   localStorage.setItem('a2rl_history_columns', JSON.stringify(historyColumns));
+  localStorage.setItem('a2rl_team_summary_sort', JSON.stringify(teamSummarySort));
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -2736,6 +2738,16 @@ function toggleTeamSummaryMetricsPanel() {
   panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
   if (panel.style.display !== 'none') renderTeamSummaryMetricControls();
 }
+function setTeamSummarySort(key) {
+  if (!key) return;
+  if ((teamSummarySort?.key || '') === key) {
+    teamSummarySort.dir = (teamSummarySort.dir === 'asc') ? 'desc' : 'asc';
+  } else {
+    teamSummarySort = { key, dir: key === 'team' ? 'asc' : 'desc' };
+  }
+  save();
+  renderTeamView();
+}
 function renderTeamView() {
   const teamMap = {};
   teams.forEach(t => { teamMap[t.name] = t; });
@@ -2784,19 +2796,42 @@ function renderTeamView() {
   const head = document.getElementById('team-summary-head-row');
   if (head) {
     const cols = new Set(teamSummaryMetrics || []);
-    let hh = '<th>Team</th>';
-    if (cols.has('sessions')) hh += '<th>Total Sessions</th>';
-    if (cols.has('cumRisk')) hh += '<th>Cumulative Risk</th>';
-    if (cols.has('avg')) hh += '<th>Avg Risk</th>';
-    if (cols.has('best')) hh += '<th>Best</th>';
-    if (cols.has('worst')) hh += '<th>Worst</th>';
-    if (cols.has('estops')) hh += '<th>E-Stops</th>';
-    if (cols.has('crashes')) hh += '<th>Crashes</th>';
-    if (cols.has('trackHrs')) hh += '<th>Total Track Hrs</th>';
-    if (cols.has('tier')) hh += '<th>Tier</th>';
+    const sortArrow = key => (teamSummarySort?.key === key ? (teamSummarySort.dir === 'asc' ? ' ▲' : ' ▼') : '');
+    const sortableHead = (label, key) => `<th onclick="setTeamSummarySort('${key}')" style="cursor:pointer;user-select:none;" title="Sort by ${label}">${label}${sortArrow(key)}</th>`;
+    let hh = sortableHead('Team', 'team');
+    if (cols.has('sessions')) hh += sortableHead('Total Sessions', 'sessions');
+    if (cols.has('cumRisk')) hh += sortableHead('Cumulative Risk', 'cumRisk');
+    if (cols.has('avg')) hh += sortableHead('Avg Risk', 'avg');
+    if (cols.has('best')) hh += sortableHead('Best', 'best');
+    if (cols.has('worst')) hh += sortableHead('Worst', 'worst');
+    if (cols.has('estops')) hh += sortableHead('E-Stops', 'estops');
+    if (cols.has('crashes')) hh += sortableHead('Crashes', 'crashes');
+    if (cols.has('trackHrs')) hh += sortableHead('Total Track Hrs', 'trackHrs');
+    if (cols.has('tier')) hh += sortableHead('Tier', 'tier');
     head.innerHTML = hh;
   }
-  if (tbody) tbody.innerHTML = allTeams.map(t => {
+  const sortKey = teamSummarySort?.key || 'avg';
+  const sortDir = teamSummarySort?.dir === 'asc' ? 1 : -1;
+  const sortedTeams = [...allTeams].sort((a,b) => {
+    const aStats = stats[a.name];
+    const bStats = stats[b.name];
+    let aVal, bVal;
+    if (sortKey === 'team') {
+      aVal = a.name.toLowerCase();
+      bVal = b.name.toLowerCase();
+    } else if (sortKey === 'tier') {
+      const rank = { low:0, medium:1, high:2, critical:3 };
+      aVal = rank[riskTier(aStats.avg).label.toLowerCase()] ?? -1;
+      bVal = rank[riskTier(bStats.avg).label.toLowerCase()] ?? -1;
+    } else {
+      aVal = Number(aStats[sortKey] ?? 0);
+      bVal = Number(bStats[sortKey] ?? 0);
+    }
+    if (aVal < bVal) return -1 * sortDir;
+    if (aVal > bVal) return 1 * sortDir;
+    return a.name.localeCompare(b.name);
+  });
+  if (tbody) tbody.innerHTML = sortedTeams.map(t => {
     const st = stats[t.name];
     const tier = riskTier(st.avg);
     const click = `teamAnalysisSelected='${String(t.name).replace(/\\/g,'\\\\').replace(/'/g,"\\'")}';renderTeamDrilldown(teamAnalysisSelected);`;

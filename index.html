@@ -314,6 +314,14 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
   background:rgba(245,158,11,0.2);
   border-color:rgba(245,158,11,0.5);
 }
+.workspace-overlay{display:none;position:fixed;inset:0;background:rgba(5,8,14,0.92);z-index:140;align-items:center;justify-content:center;padding:24px;}
+.workspace-shell{max-width:980px;width:100%;}
+.workspace-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;}
+.workspace-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:24px;cursor:pointer;transition:border-color 0.15s,transform 0.15s,box-shadow 0.15s;}
+.workspace-card:hover{border-color:rgba(0,212,255,0.35);transform:translateY(-1px);box-shadow:0 10px 30px rgba(0,0,0,0.25);}
+.workspace-kicker{font-size:10px;letter-spacing:1.8px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
+.workspace-name{font-family:'Rajdhani',sans-serif;font-size:28px;font-weight:700;color:var(--text);margin-bottom:8px;}
+.workspace-copy{font-size:13px;color:var(--muted);line-height:1.5;}
 </style>
 </head>
 <body>
@@ -329,6 +337,27 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
     </div>
   </div>
 </div>
+<div id="workspace-overlay" class="workspace-overlay">
+  <div class="workspace-shell">
+    <div style="text-align:center;margin-bottom:22px;">
+      <div class="workspace-kicker">Workspace Selection</div>
+      <div class="workspace-name" style="font-size:34px;">Choose Your A2RL Workspace</div>
+      <div class="workspace-copy">Keep operational track events and simulation challenge data fully separated while using the same platform workflows.</div>
+    </div>
+    <div class="workspace-grid">
+      <div class="workspace-card" onclick="selectWorkspace('ontrack')">
+        <div class="workspace-kicker">Production Workspace</div>
+        <div class="workspace-name">A2RL On Track</div>
+        <div class="workspace-copy">Track operations, published sessions, garage capture, real-world history, and physical-event analysis.</div>
+      </div>
+      <div class="workspace-card" onclick="selectWorkspace('sim')">
+        <div class="workspace-kicker">Digital Workspace</div>
+        <div class="workspace-name">A2RL Sim Challenge</div>
+        <div class="workspace-copy">Simulation competition planning, digital sessions, isolated risk scoring, and simulator-only trends.</div>
+      </div>
+    </div>
+  </div>
+</div>
 <div class="shell">
 
 <!-- SIDEBAR -->
@@ -336,7 +365,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
   <div class="sidebar-logo">
     <div class="logo-text">
       <div class="logo-badge">A2RL</div>
-      <div class="logo-main">A2RL <span>Operations Command Center</span></div>
+      <div class="logo-main" id="workspace-logo-main">A2RL <span id="workspace-logo-sub">Operations Command Center</span></div>
     </div>
   </div>
 
@@ -348,13 +377,13 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 
   <div class="sidebar-section-label">Operations</div>
   <div class="nav-item active" onclick="showView('live')"><span class="nav-icon">⬡</span>Live Dashboard</div>
-  <div class="nav-item" onclick="showView('schedule')"><span class="nav-icon">📅</span>Track Schedule</div>
-  <div class="nav-item" onclick="showView('tracktime')"><span class="nav-icon">⏱</span>Track Time Allocation</div>
+  <div class="nav-item" onclick="showView('schedule')"><span class="nav-icon">📅</span><span id="nav-label-schedule">Track Schedule</span></div>
+  <div class="nav-item" onclick="showView('tracktime')"><span class="nav-icon">⏱</span><span id="nav-label-tracktime">Track Time Allocation</span></div>
 
-  <div class="sidebar-section-label">Pitlane</div>
+  <div class="sidebar-section-label" id="workspace-ops-section-label">Pitlane</div>
   <div class="nav-item" onclick="showView('session')"><span class="nav-icon">＋</span>Sessions</div>
-  <div class="nav-item" onclick="showView('garage')"><span class="nav-icon">▶</span>On Track</div>
-  <div class="nav-item" onclick="showView('garagealloc')"><span class="nav-icon">🏎</span>Garage</div>
+  <div class="nav-item" onclick="showView('garage')"><span class="nav-icon">▶</span><span id="nav-label-garage">On Track</span></div>
+  <div class="nav-item" onclick="showView('garagealloc')"><span class="nav-icon">🏎</span><span id="nav-label-garagealloc">Garage</span></div>
   <div class="nav-item" onclick="showView('history')"><span class="nav-icon">☰</span>Session History</div>
   <div class="nav-item" onclick="showView('teams')"><span class="nav-icon">◈</span>Team Analysis</div>
   <div class="nav-item" onclick="showView('trends')"><span class="nav-icon">∿</span>Risk Trends</div>
@@ -366,7 +395,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
   <div class="nav-item" onclick="showView('insurance')"><span class="nav-icon">⊞</span>Insurance Report</div>
 
   <div class="sidebar-footer">
-    A2RL Operations Command
+    <span id="workspace-footer-label">A2RL Operations Command</span>
     <div class="ver">v2.0.0 · Season 3</div>
   </div>
 </div>
@@ -381,7 +410,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
     <div class="topbar-right">
       <div class="on-track-indicator" id="topbar-on-track" style="display:none">
         <div class="live-dot"></div>
-        <span id="topbar-on-track-team">—</span> ON TRACK
+        <span id="topbar-on-track-team">—</span> <span id="topbar-live-indicator-label">ON TRACK</span>
       </div>
       <div class="session-badge">
         <span id="topbar-session-info">—</span>
@@ -389,6 +418,10 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
       <div class="session-badge">
         <span id="auth-user-badge">Guest</span>
       </div>
+      <select id="workspace-switcher" onchange="selectWorkspace(this.value)" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);padding:6px 10px;border-radius:4px;font-size:12px;font-family:'Barlow',sans-serif;">
+        <option value="ontrack">A2RL On Track</option>
+        <option value="sim">A2RL Sim Challenge</option>
+      </select>
       <button class="btn" onclick="exportCSV()">⤓ Export</button>
       <button class="btn" onclick="logout()">Logout</button>
     </div>
@@ -401,7 +434,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
       <div class="panel" style="margin-bottom:12px;padding:14px 16px;border-color:rgba(0,212,255,0.28);background:rgba(0,212,255,0.06);">
         <div style="display:flex;gap:24px;align-items:flex-end;flex-wrap:wrap;">
           <div style="flex:1;min-width:480px;">
-            <span style="color:var(--muted);text-transform:uppercase;letter-spacing:2.1px;font-size:15px;">Currently On Track</span><br>
+            <span id="live-banner-heading" style="color:var(--muted);text-transform:uppercase;letter-spacing:2.1px;font-size:15px;">Currently On Track</span><br>
             <span id="live-banner-current" style="display:block;font-weight:800;color:var(--text);font-size:51px;line-height:1.15;">—</span>
           </div>
           <div style="min-width:220px;">
@@ -499,7 +532,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
         </div>
       </div>
       <div class="panel">
-        <div class="panel-head"><div class="panel-title">Track Time Allocation</div><span style="font-size:11px;color:var(--muted);">Allocated vs Used · hours</span></div>
+        <div class="panel-head"><div class="panel-title" id="live-alloc-title">Track Time Allocation</div><span id="live-alloc-subtitle" style="font-size:11px;color:var(--muted);">Allocated vs Used · hours</span></div>
         <div class="panel-body"><div class="chart-wrap"><canvas id="chart-live-alloc"></canvas></div></div>
       </div>
     </div>
@@ -573,7 +606,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
         </div>
 
         <div class="panel">
-          <div class="panel-head"><div class="panel-title">Published Sessions (Push Individually to On Track)</div></div>
+          <div class="panel-head"><div class="panel-title" id="published-sessions-title">Published Sessions (Push Individually to On Track)</div></div>
           <div class="panel-body" style="padding:0;">
             <table class="data-table">
               <thead><tr><th>Day</th><th>Time</th><th>Team</th><th>Type</th><th>Duration</th><th>Status</th><th>Action</th></tr></thead>
@@ -588,7 +621,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
     <div class="view" id="view-garagealloc">
       <div class="panel">
         <div class="panel-head">
-          <div class="panel-title">🏎 Garage Allocation</div>
+          <div class="panel-title" id="garagealloc-panel-title">🏎 Garage Allocation</div>
           <div style="display:flex;gap:8px;">
             <button class="btn sm primary" onclick="openGarageModal()">Edit Allocation</button>
             <button class="btn sm" onclick="autoAllocateGarages()">Auto-Assign</button>
@@ -606,7 +639,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
         <div style="display:none;">
           <div class="panel">
             <div class="panel-head">
-              <div class="panel-title">🏎 Garage Allocation</div>
+              <div class="panel-title" id="garagealloc-hidden-panel-title">🏎 Garage Allocation</div>
               <div style="display:flex;gap:8px;">
                 <button class="btn sm primary" onclick="openGarageModal()">Edit Allocation</button>
                 <button class="btn sm" onclick="autoAllocateGarages()">Auto-Assign</button>
@@ -619,7 +652,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
         </div>
         <div>
           <div class="on-track-card">
-            <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Currently On Track</div>
+            <div id="garage-live-heading" style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Currently On Track</div>
             <div class="countdown-team" id="ot-team-name">— No Active Session —</div>
             <div class="countdown-ring">
               <svg width="120" height="120" viewBox="0 0 120 120">
@@ -642,7 +675,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
         </div>
         <div>
           <div class="panel" id="garage-capture-panel">
-            <div class="panel-head"><div class="panel-title">Session Capture (On Track)</div></div>
+            <div class="panel-head"><div class="panel-title" id="garage-capture-panel-title">Session Capture (On Track)</div></div>
             <div class="panel-body">
               <div id="garage-capture-tabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;"></div>
               <div style="font-size:11px;color:var(--muted);margin-bottom:8px;" id="garage-capture-hint">Capture risk data for current scheduled session.</div>
@@ -682,7 +715,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
             </div>
           </div>
           <div class="panel" style="margin-top:14px;">
-            <div class="panel-head"><div class="panel-title">Today's Published On-Track Plan</div></div>
+            <div class="panel-head"><div class="panel-title" id="published-plan-title">Today's Published On-Track Plan</div></div>
             <div class="panel-body" style="padding:8px 14px;">
               <div id="garage-published-today" style="display:flex;flex-direction:column;gap:6px;"></div>
             </div>
@@ -707,7 +740,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
     <div class="view" id="view-tracktime">
       <div class="stat-row">
         <div class="stat-card" style="--accent-line:var(--accent)">
-          <div class="stat-label">Total Track Hours</div>
+          <div class="stat-label" id="tt-total-label">Total Track Hours</div>
           <div class="stat-val" id="tt-total">0<span>h</span></div>
           <div class="stat-delta" style="color:var(--muted)">scheduled this event</div>
         </div>
@@ -731,7 +764,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
       <div class="grid-65">
         <div class="panel">
           <div class="panel-head">
-            <div class="panel-title">⏱ Track Time Allocation</div>
+            <div class="panel-title" id="tracktime-panel-title">⏱ Track Time Allocation</div>
             <div style="display:flex;gap:8px;align-items:center;">
               <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Event Filter</span>
               <select id="tt-event-filter" onchange="renderTrackTime()" style="min-width:220px;background:var(--bg3);border:1px solid var(--border2);color:var(--text);padding:6px 10px;border-radius:4px;font-size:12px;font-family:'Barlow',sans-serif;"></select>
@@ -762,7 +795,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
     <div class="view" id="view-session">
       <div class="panel">
         <div class="panel-head">
-          <div class="panel-title">Sessions Overview (Day Publish to On Track)</div>
+          <div class="panel-title" id="session-overview-title">Sessions Overview (Day Publish to On Track)</div>
           <button class="btn sm" onclick="downloadScheduleForOrganisation()">⤓ Download Schedule</button>
         </div>
         <div class="panel-body" style="padding:0;">
@@ -1076,7 +1109,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
                 <button class="btn primary" style="width:100%;" onclick="saveCategoryMultipliers()">Save</button>
               </div>
             </div>
-            <div style="margin-top:10px;font-size:11px;color:var(--muted);">
+            <div style="margin-top:10px;font-size:11px;color:var(--muted);" id="cat-mult-copy">
               These values control how much track time each category receives relative to Rookie (1.0).
             </div>
           </div>
@@ -1100,11 +1133,11 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
           </div>
         </div>
         <div class="panel" style="margin-top:14px;">
-          <div class="panel-head"><div class="panel-title">Track Library</div></div>
+          <div class="panel-head"><div class="panel-title" id="track-library-title">Track Library</div></div>
           <div class="panel-body">
             <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
               <input type="text" id="new-track-name" placeholder="Add track name..." style="min-width:260px;">
-              <button class="btn primary" onclick="addTrackOption()">+ Add Track</button>
+              <button class="btn primary" id="add-track-btn" onclick="addTrackOption()">+ Add Track</button>
             </div>
             <div id="track-library-list" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;"></div>
           </div>
@@ -1206,7 +1239,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 <div class="modal-overlay" id="modal-build-schedule">
   <div class="modal" style="width:600px;">
     <button class="modal-close" onclick="closeModal('modal-build-schedule')">✕</button>
-    <div class="modal-title">Build Track Schedule</div>
+    <div class="modal-title" id="build-schedule-modal-title">Build Track Schedule</div>
     <div class="form-grid">
       <div class="field"><label>Day</label>
         <select id="sched-build-day"></select>
@@ -1350,7 +1383,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 <div class="modal-overlay" id="modal-garage">
   <div class="modal" style="width:560px;">
     <button class="modal-close" onclick="closeModal('modal-garage')">✕</button>
-    <div class="modal-title">Edit Garage Allocation</div>
+    <div class="modal-title" id="garage-modal-title">Edit Garage Allocation</div>
     <div id="garage-edit-list" style="display:flex;flex-direction:column;gap:8px;max-height:400px;overflow-y:auto;"></div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modal-garage')">Cancel</button>
@@ -1454,34 +1487,93 @@ const HISTORY_COLUMNS = [
   { key:'manualOverride', label:'Manual Override' },
   { key:'notes', label:'Notes' },
 ];
-let sessions    = JSON.parse(localStorage.getItem('a2rl_sessions') || '[]');
-let teams       = JSON.parse(localStorage.getItem('a2rl_teams')    || JSON.stringify(DEFAULT_TEAMS));
-let weights     = JSON.parse(localStorage.getItem('a2rl_weights')  || JSON.stringify(DEFAULT_WEIGHTS));
-let schedule    = JSON.parse(localStorage.getItem('a2rl_schedule') || '[]');  // [{day,time,type,teams,duration,label}]
-let trackAlloc  = JSON.parse(localStorage.getItem('a2rl_trackalloc')|| '[]'); // [{team,hours,sessTypes,notes}]
-let garages     = JSON.parse(localStorage.getItem('a2rl_garages')  || '{}');  // {bayNum: teamName}
-let thresholds  = JSON.parse(localStorage.getItem('a2rl_thresh')   || JSON.stringify({low:30,med:55,high:75,maxDamage:100000}));
-let eventCfg    = JSON.parse(localStorage.getItem('a2rl_event_cfg')|| JSON.stringify({season:3,eventNum:1,org:'A2RL',defaultDur:30}));
-let schedCfg    = JSON.parse(localStorage.getItem('a2rl_sched_cfg')|| JSON.stringify({eventId:null,eventName:'A2RL Season 3 — Event 1',track:'Yas Marina Circuit',open:'08:00',close:'18:00',days:2,buffer:15,eventStart:null}));
-let trackOptions = JSON.parse(localStorage.getItem('a2rl_track_options') || JSON.stringify(DEFAULT_TRACKS));
-let teamSummaryMetrics = JSON.parse(localStorage.getItem('a2rl_team_summary_metrics') || JSON.stringify(['sessions','cumRisk','avg','best','worst','estops','crashes','trackHrs','tier']));
-let historyColumns = JSON.parse(localStorage.getItem('a2rl_history_columns') || JSON.stringify([
+const GLOBAL_KEYS = {
+  workspace: 'a2rl_current_workspace',
+  users: 'a2rl_users',
+  currentUser: 'a2rl_current_user',
+};
+const WORKSPACE_CONFIG = {
+  ontrack: {
+    label: 'A2RL On Track',
+    shellLabel: 'Operations Command Center',
+    footerLabel: 'A2RL Operations Command',
+    nav: { schedule:'Track Schedule', tracktime:'Track Time Allocation', garage:'On Track', garagealloc:'Garage' },
+    viewMeta: {
+      schedule: ['Track Schedule', 'Plan and manage all on-track sessions'],
+      garagealloc: ['Garage', 'Garage bay allocation and team placement'],
+      garage: ['On Track', 'Live session timer · Queue · Published runs · Capture'],
+      tracktime: ['Track Time Allocation', 'Fair allocation and monitoring of track hours'],
+    },
+  },
+  sim: {
+    label: 'A2RL Sim Challenge',
+    shellLabel: 'Sim Challenge Command Center',
+    footerLabel: 'A2RL Sim Challenge',
+    nav: { schedule:'Sim Session Plan', tracktime:'Sim Time Allocation', garage:'Live Simulation', garagealloc:'Sim Paddock' },
+    viewMeta: {
+      schedule: ['Sim Session Plan', 'Plan and manage all simulator competition sessions'],
+      garagealloc: ['Sim Paddock', 'Allocate simulator bays and operator positions'],
+      garage: ['Live Simulation', 'Run control, queue, and digital session capture'],
+      tracktime: ['Sim Time Allocation', 'Fair allocation and monitoring of simulator session time'],
+    },
+  },
+};
+const DEFAULT_HISTORY_COLUMNS = [
   'eventName','track','eventType','sessType','sessNum','duration','weather',
   'startAttempts','stoppages','riskScore','laps','laptime','speed','estops','crashed',
   'damage','replans','instability','sensor','multicar','overtaking','manualOverride','notes'
-]));
-weights = DEFAULT_WEIGHTS.map(def => {
-  const saved = Array.isArray(weights) ? weights.find(w => w && w.key === def.key) : null;
-  return saved ? { ...def, ...saved } : { ...def };
-});
-if (!Array.isArray(trackOptions) || !trackOptions.length) trackOptions = [...DEFAULT_TRACKS];
-teamSummaryMetrics = TEAM_SUMMARY_METRICS.map(m => m.key).filter(k => (teamSummaryMetrics || []).includes(k));
-if (!teamSummaryMetrics.length) teamSummaryMetrics = TEAM_SUMMARY_METRICS.map(m => m.key);
-historyColumns = Array.from(new Set([
-  ...HISTORY_COLUMNS.map(c => c.key).filter(k => (historyColumns || []).includes(k)),
-  'duration','weather','startAttempts','stoppages','laptime','damage','replans','instability','sensor','multicar','overtaking','manualOverride'
-]));
-if (!historyColumns.length) historyColumns = HISTORY_COLUMNS.map(c => c.key);
+];
+let currentWorkspace = localStorage.getItem(GLOBAL_KEYS.workspace) || '';
+function wk(name) { return `a2rl_${currentWorkspace}_${name}`; }
+function readScopedJson(name, fallback, legacyKey='') {
+  const raw = currentWorkspace ? localStorage.getItem(wk(name)) : null;
+  if (raw != null) {
+    try { return JSON.parse(raw); } catch {}
+  }
+  if (currentWorkspace === 'ontrack' && legacyKey) {
+    const legacy = localStorage.getItem(legacyKey);
+    if (legacy != null) {
+      try { return JSON.parse(legacy); } catch {}
+    }
+  }
+  return fallback;
+}
+function readScopedString(name, fallback, legacyKey='') {
+  const raw = currentWorkspace ? localStorage.getItem(wk(name)) : null;
+  if (raw != null) return raw;
+  if (currentWorkspace === 'ontrack' && legacyKey) {
+    const legacy = localStorage.getItem(legacyKey);
+    if (legacy != null) return legacy;
+  }
+  return fallback;
+}
+function migrateLegacyWorkspaceData() {
+  if (currentWorkspace !== 'ontrack') return;
+  const legacyPairs = {
+    sessions:'a2rl_sessions', teams:'a2rl_teams', weights:'a2rl_weights', schedule:'a2rl_schedule',
+    trackalloc:'a2rl_trackalloc', garages:'a2rl_garages', thresh:'a2rl_thresh', event_cfg:'a2rl_event_cfg',
+    sched_cfg:'a2rl_sched_cfg', track_options:'a2rl_track_options', team_summary_metrics:'a2rl_team_summary_metrics',
+    history_columns:'a2rl_history_columns', sched_zoom:'a2rl_sched_zoom', capture_drafts:'a2rl_capture_drafts',
+    team_summary_sort:'a2rl_team_summary_sort', cat_mult:'a2rl_cat_mult', events:'a2rl_events', active_view:'a2rl_active_view'
+  };
+  Object.entries(legacyPairs).forEach(([name, legacyKey]) => {
+    if (localStorage.getItem(wk(name)) != null) return;
+    const val = localStorage.getItem(legacyKey);
+    if (val != null) localStorage.setItem(wk(name), val);
+  });
+}
+let sessions = [];
+let teams = [];
+let weights = [];
+let schedule = [];
+let trackAlloc = [];
+let garages = {};
+let thresholds = {};
+let eventCfg = {};
+let schedCfg = {};
+let trackOptions = [];
+let teamSummaryMetrics = [];
+let historyColumns = [];
 
 
 // CSS color constants (avoids single-quote issues in template literals)
@@ -1497,34 +1589,181 @@ let liveSession = null;  // {team, type, duration, sessNum, startTime, timerInte
 let sessionQueue = [];
 let activityLog = [];
 let currentSchedDay = 0;
-let schedZoom = Math.max(0.6, Math.min(3, parseFloat(localStorage.getItem('a2rl_sched_zoom') || '1') || 1));
+let schedZoom = 1;
 let scheduleUndo = [];
 let scheduleRedo = [];
 let lastChangeNotesBase = [];
-let captureDrafts = JSON.parse(localStorage.getItem('a2rl_capture_drafts') || '{}');
+let captureDrafts = {};
 let garageCaptureActiveBlockId = null;
 let garageCaptureActiveTeam = '';
 let teamAnalysisSelected = '';
 let csvImportState = { fileName:'', headers:[], rows:[], mapping:{} };
-let teamSummarySort = JSON.parse(localStorage.getItem('a2rl_team_summary_sort') || '{"key":"avg","dir":"desc"}');
-let users = JSON.parse(localStorage.getItem('a2rl_users') || '[]');
-let currentUser = JSON.parse(localStorage.getItem('a2rl_current_user') || 'null');
+let teamSummarySort = { key:'avg', dir:'desc' };
+let users = JSON.parse(localStorage.getItem(GLOBAL_KEYS.users) || '[]');
+let currentUser = JSON.parse(localStorage.getItem(GLOBAL_KEYS.currentUser) || 'null');
 
 const DEFAULT_ADMIN_EMAIL = 'Rolesjosh417@gmail.com';
 const DEFAULT_ADMIN_PASSWORD = 'Admin@123';
 const ACCESS_AREAS = ['live','schedule','garagealloc','garage','tracktime','session','history','teams','trends','events','settings','insurance','users'];
 const VIEWER_DEFAULT_AREAS = ['live','history','teams','trends'];
+const WORKSPACE_EVENT_TYPES = {
+  ontrack: ['Track Competition','Testing (Track)','Testing (VDA)','Simulator Race','Simulator Testing'],
+  sim: ['Sim Challenge Round','Simulator Qualifying','Simulator Practice','Simulator Race','Simulator Testing'],
+};
+function getWorkspaceEventTypes() {
+  return WORKSPACE_EVENT_TYPES[currentWorkspace] || WORKSPACE_EVENT_TYPES.ontrack;
+}
+function defaultEventType() {
+  return getWorkspaceEventTypes()[0] || 'Track Competition';
+}
+function renderWorkspaceEventTypeOptions() {
+  const opts = getWorkspaceEventTypes().map(v => `<option>${v}</option>`).join('');
+  const allTypeSelects = ['f-event','es-event-type','ms-event'];
+  allTypeSelects.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const prev = el.value;
+    el.innerHTML = opts;
+    el.value = getWorkspaceEventTypes().includes(prev) ? prev : defaultEventType();
+  });
+  const filterOpts = `<option value="">All Event Types</option>` + getWorkspaceEventTypes().map(v => `<option>${v}</option>`).join('');
+  ['hist-filter-type','td-type-filter'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const prev = el.value;
+    el.innerHTML = filterOpts;
+    el.value = getWorkspaceEventTypes().includes(prev) ? prev : '';
+  });
+}
+
+function loadWorkspaceData() {
+  if (!currentWorkspace) return;
+  migrateLegacyWorkspaceData();
+  sessions = readScopedJson('sessions', [], 'a2rl_sessions');
+  teams = readScopedJson('teams', JSON.parse(JSON.stringify(DEFAULT_TEAMS)), 'a2rl_teams');
+  weights = readScopedJson('weights', JSON.parse(JSON.stringify(DEFAULT_WEIGHTS)), 'a2rl_weights');
+  schedule = readScopedJson('schedule', [], 'a2rl_schedule');
+  trackAlloc = readScopedJson('trackalloc', [], 'a2rl_trackalloc');
+  garages = readScopedJson('garages', {}, 'a2rl_garages');
+  thresholds = readScopedJson('thresh', {low:30,med:55,high:75,maxDamage:100000}, 'a2rl_thresh');
+  eventCfg = readScopedJson('event_cfg', {season:3,eventNum:1,org:'A2RL',defaultDur:30}, 'a2rl_event_cfg');
+  schedCfg = readScopedJson('sched_cfg', {eventId:null,eventName:'A2RL Season 3 — Event 1',track:'Yas Marina Circuit',open:'08:00',close:'18:00',days:2,buffer:15,eventStart:null}, 'a2rl_sched_cfg');
+  trackOptions = readScopedJson('track_options', [...DEFAULT_TRACKS], 'a2rl_track_options');
+  teamSummaryMetrics = readScopedJson('team_summary_metrics', ['sessions','cumRisk','avg','best','worst','estops','crashes','trackHrs','tier'], 'a2rl_team_summary_metrics');
+  historyColumns = readScopedJson('history_columns', [...DEFAULT_HISTORY_COLUMNS], 'a2rl_history_columns');
+  schedZoom = Math.max(0.6, Math.min(3, parseFloat(readScopedString('sched_zoom', '1', 'a2rl_sched_zoom')) || 1));
+  captureDrafts = readScopedJson('capture_drafts', {}, 'a2rl_capture_drafts');
+  teamSummarySort = readScopedJson('team_summary_sort', {key:'avg',dir:'desc'}, 'a2rl_team_summary_sort');
+  CAT_MULT = readScopedJson('cat_mult', { rookie: 1.0, challenger: 0.8, pro: 0.6 }, 'a2rl_cat_mult');
+  events = readScopedJson('events', [], 'a2rl_events');
+  weights = DEFAULT_WEIGHTS.map(def => {
+    const saved = Array.isArray(weights) ? weights.find(w => w && w.key === def.key) : null;
+    return saved ? { ...def, ...saved } : { ...def };
+  });
+  if (!Array.isArray(trackOptions) || !trackOptions.length) trackOptions = [...DEFAULT_TRACKS];
+  teamSummaryMetrics = TEAM_SUMMARY_METRICS.map(m => m.key).filter(k => (teamSummaryMetrics || []).includes(k));
+  if (!teamSummaryMetrics.length) teamSummaryMetrics = TEAM_SUMMARY_METRICS.map(m => m.key);
+  historyColumns = Array.from(new Set([
+    ...HISTORY_COLUMNS.map(c => c.key).filter(k => (historyColumns || []).includes(k)),
+    'duration','weather','startAttempts','stoppages','laptime','damage','replans','instability','sensor','multicar','overtaking','manualOverride'
+  ]));
+  if (!historyColumns.length) historyColumns = HISTORY_COLUMNS.map(c => c.key);
+}
+function applyWorkspaceUI() {
+  const cfg = WORKSPACE_CONFIG[currentWorkspace] || WORKSPACE_CONFIG.ontrack;
+  const logoSub = document.getElementById('workspace-logo-sub');
+  const footer = document.getElementById('workspace-footer-label');
+  const switcher = document.getElementById('workspace-switcher');
+  const navSchedule = document.getElementById('nav-label-schedule');
+  const navTracktime = document.getElementById('nav-label-tracktime');
+  const navGarage = document.getElementById('nav-label-garage');
+  const navGarageAlloc = document.getElementById('nav-label-garagealloc');
+  const opsSection = document.getElementById('workspace-ops-section-label');
+  const topbarIndicator = document.getElementById('topbar-live-indicator-label');
+  const liveBannerHeading = document.getElementById('live-banner-heading');
+  const liveAllocTitle = document.getElementById('live-alloc-title');
+  const liveAllocSubtitle = document.getElementById('live-alloc-subtitle');
+  const publishedSessionsTitle = document.getElementById('published-sessions-title');
+  const garageAllocPanelTitle = document.getElementById('garagealloc-panel-title');
+  const garageAllocHiddenTitle = document.getElementById('garagealloc-hidden-panel-title');
+  const garageLiveHeading = document.getElementById('garage-live-heading');
+  const garageCapturePanelTitle = document.getElementById('garage-capture-panel-title');
+  const publishedPlanTitle = document.getElementById('published-plan-title');
+  const ttTotalLabel = document.getElementById('tt-total-label');
+  const tracktimePanelTitle = document.getElementById('tracktime-panel-title');
+  const sessionOverviewTitle = document.getElementById('session-overview-title');
+  const catMultCopy = document.getElementById('cat-mult-copy');
+  const trackLibraryTitle = document.getElementById('track-library-title');
+  const addTrackBtn = document.getElementById('add-track-btn');
+  const newTrackName = document.getElementById('new-track-name');
+  const buildScheduleModalTitle = document.getElementById('build-schedule-modal-title');
+  const garageModalTitle = document.getElementById('garage-modal-title');
+  if (logoSub) logoSub.textContent = cfg.shellLabel;
+  if (footer) footer.textContent = cfg.footerLabel;
+  if (switcher) switcher.value = currentWorkspace || 'ontrack';
+  if (navSchedule) navSchedule.textContent = cfg.nav.schedule;
+  if (navTracktime) navTracktime.textContent = cfg.nav.tracktime;
+  if (navGarage) navGarage.textContent = cfg.nav.garage;
+  if (navGarageAlloc) navGarageAlloc.textContent = cfg.nav.garagealloc;
+  if (opsSection) opsSection.textContent = currentWorkspace === 'sim' ? 'Simulation Ops' : 'Pitlane';
+  if (topbarIndicator) topbarIndicator.textContent = currentWorkspace === 'sim' ? 'LIVE SIM' : 'ON TRACK';
+  if (liveBannerHeading) liveBannerHeading.textContent = currentWorkspace === 'sim' ? 'Current Sim Session' : 'Currently On Track';
+  if (liveAllocTitle) liveAllocTitle.textContent = currentWorkspace === 'sim' ? 'Sim Time Allocation' : 'Track Time Allocation';
+  if (liveAllocSubtitle) liveAllocSubtitle.textContent = currentWorkspace === 'sim' ? 'Allocated vs Used · sim hours' : 'Allocated vs Used · hours';
+  if (publishedSessionsTitle) publishedSessionsTitle.textContent = currentWorkspace === 'sim' ? 'Published Sessions (Queue Individually to Live Simulation)' : 'Published Sessions (Push Individually to On Track)';
+  if (garageAllocPanelTitle) garageAllocPanelTitle.textContent = currentWorkspace === 'sim' ? '🖥 Sim Paddock Allocation' : '🏎 Garage Allocation';
+  if (garageAllocHiddenTitle) garageAllocHiddenTitle.textContent = currentWorkspace === 'sim' ? '🖥 Sim Paddock Allocation' : '🏎 Garage Allocation';
+  if (garageLiveHeading) garageLiveHeading.textContent = currentWorkspace === 'sim' ? 'Current Sim Session' : 'Currently On Track';
+  if (garageCapturePanelTitle) garageCapturePanelTitle.textContent = currentWorkspace === 'sim' ? 'Session Capture (Live Simulation)' : 'Session Capture (On Track)';
+  if (publishedPlanTitle) publishedPlanTitle.textContent = currentWorkspace === 'sim' ? "Today's Published Sim Plan" : "Today's Published On-Track Plan";
+  if (ttTotalLabel) ttTotalLabel.textContent = currentWorkspace === 'sim' ? 'Total Sim Hours' : 'Total Track Hours';
+  if (tracktimePanelTitle) tracktimePanelTitle.textContent = currentWorkspace === 'sim' ? '⏱ Sim Time Allocation' : '⏱ Track Time Allocation';
+  if (sessionOverviewTitle) sessionOverviewTitle.textContent = currentWorkspace === 'sim' ? 'Sessions Overview (Day Queue to Live Simulation)' : 'Sessions Overview (Day Publish to On Track)';
+  if (catMultCopy) catMultCopy.textContent = currentWorkspace === 'sim' ? 'These values control how much simulator session time each category receives relative to Rookie (1.0).' : 'These values control how much track time each category receives relative to Rookie (1.0).';
+  if (trackLibraryTitle) trackLibraryTitle.textContent = currentWorkspace === 'sim' ? 'Simulation Venue Library' : 'Track Library';
+  if (addTrackBtn) addTrackBtn.textContent = currentWorkspace === 'sim' ? '+ Add Sim Venue' : '+ Add Track';
+  if (newTrackName) newTrackName.placeholder = currentWorkspace === 'sim' ? 'Add simulation venue...' : 'Add track name...';
+  if (buildScheduleModalTitle) buildScheduleModalTitle.textContent = currentWorkspace === 'sim' ? 'Build Simulation Session Plan' : 'Build Track Schedule';
+  if (garageModalTitle) garageModalTitle.textContent = currentWorkspace === 'sim' ? 'Edit Sim Paddock Allocation' : 'Edit Garage Allocation';
+  renderWorkspaceEventTypeOptions();
+  document.title = cfg.label;
+}
+function refreshWorkspaceUI() {
+  const overlay = document.getElementById('workspace-overlay');
+  if (overlay) overlay.style.display = currentWorkspace ? 'none' : 'flex';
+  applyWorkspaceUI();
+}
+function selectWorkspace(workspaceId) {
+  if (!WORKSPACE_CONFIG[workspaceId]) return;
+  if (currentWorkspace === workspaceId) { refreshWorkspaceUI(); return; }
+  if (currentWorkspace) save();
+  currentWorkspace = workspaceId;
+  localStorage.setItem(GLOBAL_KEYS.workspace, currentWorkspace);
+  loadWorkspaceData();
+  rebuildLiveRisks();
+  syncTrackUsedFromSessions();
+  schedule.forEach(b => recomputeBlockCompletion(b));
+  refreshWorkspaceUI();
+  refreshAuthUI();
+  if (currentUser) {
+    const savedView = readScopedString('active_view', 'live', 'a2rl_active_view');
+    showView(canAccessView(savedView) ? savedView : 'live');
+    renderLiveTable();
+    renderFeed();
+    initLiveCharts();
+  }
+}
 
 function seedAuth() {
   if (!Array.isArray(users) || !users.length) {
     users = [{ email: DEFAULT_ADMIN_EMAIL, password: DEFAULT_ADMIN_PASSWORD, role: 'admin', active: true, allowedViews: [...ACCESS_AREAS] }];
-    localStorage.setItem('a2rl_users', JSON.stringify(users));
+    localStorage.setItem(GLOBAL_KEYS.users, JSON.stringify(users));
   } else {
     users = users.map(u => ({
       ...u,
       allowedViews: Array.isArray(u.allowedViews) ? u.allowedViews : (u.role === 'admin' ? [...ACCESS_AREAS] : [...VIEWER_DEFAULT_AREAS]),
     }));
-    localStorage.setItem('a2rl_users', JSON.stringify(users));
+    localStorage.setItem(GLOBAL_KEYS.users, JSON.stringify(users));
   }
 }
 function isAdmin() { return (currentUser?.role || '') === 'admin'; }
@@ -1563,15 +1802,18 @@ function login() {
     return;
   }
   currentUser = { email: u.email, role: u.role || 'viewer', allowedViews: Array.isArray(u.allowedViews) ? u.allowedViews : (u.role==='admin'?[...ACCESS_AREAS]:[...VIEWER_DEFAULT_AREAS]) };
-  localStorage.setItem('a2rl_current_user', JSON.stringify(currentUser));
+  localStorage.setItem(GLOBAL_KEYS.currentUser, JSON.stringify(currentUser));
   if (msg) msg.textContent = '';
   refreshAuthUI();
-  const savedView = localStorage.getItem('a2rl_active_view') || 'live';
-  showView(canAccessView(savedView) ? savedView : 'live');
+  refreshWorkspaceUI();
+  if (currentWorkspace) {
+    const savedView = readScopedString('active_view', 'live', 'a2rl_active_view');
+    showView(canAccessView(savedView) ? savedView : 'live');
+  }
 }
 function logout() {
   currentUser = null;
-  localStorage.removeItem('a2rl_current_user');
+  localStorage.removeItem(GLOBAL_KEYS.currentUser);
   refreshAuthUI();
 }
 
@@ -1948,20 +2190,21 @@ function downloadScheduleChangeNotes() {
 
 // ── SAVE ──
 function save() {
-  localStorage.setItem('a2rl_sessions', JSON.stringify(sessions));
-  localStorage.setItem('a2rl_teams',    JSON.stringify(teams));
-  localStorage.setItem('a2rl_weights',  JSON.stringify(weights));
-  localStorage.setItem('a2rl_schedule', JSON.stringify(schedule));
-  localStorage.setItem('a2rl_trackalloc', JSON.stringify(trackAlloc));
-  localStorage.setItem('a2rl_garages',  JSON.stringify(garages));
-  localStorage.setItem('a2rl_thresh',   JSON.stringify(thresholds));
-  localStorage.setItem('a2rl_event_cfg',JSON.stringify(eventCfg));
-  localStorage.setItem('a2rl_sched_cfg',JSON.stringify(schedCfg));
-  localStorage.setItem('a2rl_capture_drafts', JSON.stringify(captureDrafts));
-  localStorage.setItem('a2rl_track_options', JSON.stringify(trackOptions));
-  localStorage.setItem('a2rl_team_summary_metrics', JSON.stringify(teamSummaryMetrics));
-  localStorage.setItem('a2rl_history_columns', JSON.stringify(historyColumns));
-  localStorage.setItem('a2rl_team_summary_sort', JSON.stringify(teamSummarySort));
+  if (!currentWorkspace) return;
+  localStorage.setItem(wk('sessions'), JSON.stringify(sessions));
+  localStorage.setItem(wk('teams'), JSON.stringify(teams));
+  localStorage.setItem(wk('weights'), JSON.stringify(weights));
+  localStorage.setItem(wk('schedule'), JSON.stringify(schedule));
+  localStorage.setItem(wk('trackalloc'), JSON.stringify(trackAlloc));
+  localStorage.setItem(wk('garages'), JSON.stringify(garages));
+  localStorage.setItem(wk('thresh'), JSON.stringify(thresholds));
+  localStorage.setItem(wk('event_cfg'), JSON.stringify(eventCfg));
+  localStorage.setItem(wk('sched_cfg'), JSON.stringify(schedCfg));
+  localStorage.setItem(wk('capture_drafts'), JSON.stringify(captureDrafts));
+  localStorage.setItem(wk('track_options'), JSON.stringify(trackOptions));
+  localStorage.setItem(wk('team_summary_metrics'), JSON.stringify(teamSummaryMetrics));
+  localStorage.setItem(wk('history_columns'), JSON.stringify(historyColumns));
+  localStorage.setItem(wk('team_summary_sort'), JSON.stringify(teamSummarySort));
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -2123,6 +2366,10 @@ const viewMeta = {
 };
 
 function showView(id) {
+  if (!currentWorkspace) {
+    refreshWorkspaceUI();
+    return;
+  }
   if (!canAccessView(id)) {
     alert('You do not have access to this area.');
     id = 'live';
@@ -2137,10 +2384,11 @@ function showView(id) {
     const k = navKeyMap[id] || id;
     if (n.textContent.toLowerCase().includes(k)) n.classList.add('active');
   });
-  const [title, sub] = viewMeta[id] || [id, ''];
+  const wsMeta = WORKSPACE_CONFIG[currentWorkspace]?.viewMeta || {};
+  const [title, sub] = wsMeta[id] || viewMeta[id] || [id, ''];
   document.getElementById('page-title').textContent = title;
   document.getElementById('page-sub').textContent = sub;
-  localStorage.setItem('a2rl_active_view', id);
+  localStorage.setItem(wk('active_view'), id);
 
   if (id === 'history')   renderHistory();
   if (id === 'teams')     renderTeamView();
@@ -2321,7 +2569,7 @@ function calcAndSubmit(prefix='f') {
   const liveBlk = scheduleLive.current;
   const activeTabTeam = prefix === 'g' ? (garageCaptureActiveTeam || (selectedBlk?.teams||[])[0] || '') : '';
   const team = prefix === 'g' ? activeTabTeam : (from('team')?.value || '');
-  const eventType = prefix === 'g' ? 'Testing (Track)' : (from('event')?.value || 'Testing (Track)');
+  const eventType = prefix === 'g' ? defaultEventType() : (from('event')?.value || defaultEventType());
   const sessType = from('sess-type')?.value || 'Single Car';
   const sessNum = prefix === 'g' && selectedBlk ? getSessionOrdinalForBlock(selectedBlk) : (parseInt(from('session')?.value) || 1);
   const dateVal = prefix === 'g' ? (document.getElementById('f-date')?.value || toLocalDateStr(new Date())) : (from('date')?.value || toLocalDateStr(new Date()));
@@ -2513,7 +2761,7 @@ function submitManualSession() {
   const ev = getScheduleEventById();
   const s = {
     team: document.getElementById('ms-team')?.value || '',
-    eventType: document.getElementById('ms-event')?.value || 'Testing (Track)',
+    eventType: document.getElementById('ms-event')?.value || defaultEventType(),
     sessType: document.getElementById('ms-sess-type')?.value || 'Single Car',
     sessNum: parseInt(document.getElementById('ms-session')?.value) || 1,
     duration: parseInt(document.getElementById('ms-duration')?.value) || 30,
@@ -2950,7 +3198,7 @@ function resetTeamDrillFilters() {
 // ═══════════════════════════════════════════════════════════════════════
 
 // Category multipliers: how much track time relative to rookie (1.0)
-let CAT_MULT = JSON.parse(localStorage.getItem('a2rl_cat_mult') || 'null') || { rookie: 1.0, challenger: 0.8, pro: 0.6 };
+let CAT_MULT = { rookie: 1.0, challenger: 0.8, pro: 0.6 };
 const CAT_LABEL = { rookie: 'ROOKIE', challenger: 'CHAL', pro: 'PRO' };
 const CAT_COLOR = { rookie: 'var(--green)', challenger: 'var(--amber)', pro: 'var(--red)' };
 
@@ -2986,7 +3234,7 @@ function saveCategoryMultipliers() {
     challenger: Number.isFinite(c) ? Math.max(0, c) : 0.8,
     pro: Number.isFinite(p) ? Math.max(0, p) : 0.6,
   };
-  localStorage.setItem('a2rl_cat_mult', JSON.stringify(CAT_MULT));
+  if (currentWorkspace) localStorage.setItem(wk('cat_mult'), JSON.stringify(CAT_MULT));
   refreshTeamCategoryOptionLabels();
   alert('Saved category multipliers. New schedules will use these values.');
 }
@@ -4189,7 +4437,7 @@ function renderScheduleView() {
       const next = Math.max(0.6, Math.min(3, schedZoom * factor));
       if (Math.abs(next - schedZoom) < 0.001) return;
       schedZoom = +next.toFixed(3);
-      localStorage.setItem('a2rl_sched_zoom', String(schedZoom));
+      if (currentWorkspace) localStorage.setItem(wk('sched_zoom'), String(schedZoom));
       renderScheduleView();
     }, { passive:false });
   }
@@ -5246,7 +5494,7 @@ function createUserLogin() {
   if (users.some(u => (u.email || '').toLowerCase() === email.toLowerCase())) { alert('User already exists.'); return; }
   if (role !== 'admin' && !allowedViews.length) { alert('Select at least one access area.'); return; }
   users.push({ email, password, role, active: true, allowedViews: role === 'admin' ? [...ACCESS_AREAS] : allowedViews });
-  localStorage.setItem('a2rl_users', JSON.stringify(users));
+  localStorage.setItem(GLOBAL_KEYS.users, JSON.stringify(users));
   document.getElementById('um-email').value = '';
   document.getElementById('um-password').value = '';
   renderUsersManagement();
@@ -5259,14 +5507,14 @@ function deleteUserLogin(i) {
     return;
   }
   users.splice(i, 1);
-  localStorage.setItem('a2rl_users', JSON.stringify(users));
+  localStorage.setItem(GLOBAL_KEYS.users, JSON.stringify(users));
   renderUsersManagement();
 }
 function toggleUserActive(i) {
   if (!requireAdmin('Only admin can edit users.')) return;
   if (!users[i]) return;
   users[i].active = users[i].active === false ? true : false;
-  localStorage.setItem('a2rl_users', JSON.stringify(users));
+  localStorage.setItem(GLOBAL_KEYS.users, JSON.stringify(users));
   renderUsersManagement();
 }
 function openEditUserPermissions(i) {
@@ -5318,10 +5566,10 @@ function saveEditedUserPermissions() {
   }
   users[idx].role = role;
   users[idx].allowedViews = allowedViews;
-  localStorage.setItem('a2rl_users', JSON.stringify(users));
+  localStorage.setItem(GLOBAL_KEYS.users, JSON.stringify(users));
   if (currentUser && (currentUser.email || '').toLowerCase() === (users[idx].email || '').toLowerCase()) {
     currentUser = { ...currentUser, role, allowedViews };
-    localStorage.setItem('a2rl_current_user', JSON.stringify(currentUser));
+    localStorage.setItem(GLOBAL_KEYS.currentUser, JSON.stringify(currentUser));
     refreshAuthUI();
   }
   closeModal('modal-edit-user');
@@ -5612,7 +5860,7 @@ function initLiveCharts() {
 function renderTeamCharts(stats, activeTeams) {
   setTimeout(() => {
     const real = sessions.filter(s => (s.riskScore || 0) > 0 && !s.stub);
-    const types = ['Track Competition','Testing (Track)','Testing (VDA)','Simulator Race','Simulator Testing'];
+    const types = getWorkspaceEventTypes();
     const byType = types.map(t => {
       const ts = real.filter(s => (s.eventType||'') === t);
       const avg = ts.length ? ts.reduce((a,s)=>a+(s.riskScore||0),0)/ts.length : null;
@@ -5921,7 +6169,7 @@ function editSession(id) {
   const teamSel = document.getElementById('es-team');
   teamSel.innerHTML = teams.map(t => '<option value="' + t.name + '"' + (t.name === s.team ? ' selected' : '') + '>' + t.name + '</option>').join('');
   document.getElementById('edit-sess-id').value = String(id);
-  document.getElementById('es-event-type').value = s.eventType || 'Testing (Track)';
+  document.getElementById('es-event-type').value = s.eventType || defaultEventType();
   document.getElementById('es-sess-type').value = s.sessType || 'Single Car';
   document.getElementById('es-sess-num').value = s.sessNum || 1;
   const dt = new Date(s.trackTimestamp || s.timestamp);
@@ -6373,7 +6621,7 @@ function confirmCsvImport() {
       const s = {
         id: Date.now() + idx + Math.floor(Math.random() * 1000),
         team,
-        eventType: raw('eventType') || 'Testing (Track)',
+            eventType: raw('eventType') || defaultEventType(),
         sessType: raw('sessType') || 'Single Car',
         sessNum: parseInt(parseCsvNumber(raw('sessNum')) || 1, 10) || 1,
         timestamp: trackTs,
@@ -6476,8 +6724,8 @@ function exportInsurance() {
 // ═══════════════════════════════════════════════════════════════════════
 // EVENTS MANAGEMENT
 // ═══════════════════════════════════════════════════════════════════════
-let events = JSON.parse(localStorage.getItem('a2rl_events')||'[]');
-function saveEvents() { localStorage.setItem('a2rl_events', JSON.stringify(events)); }
+let events = [];
+function saveEvents() { if (currentWorkspace) localStorage.setItem(wk('events'), JSON.stringify(events)); }
 function refreshEventStatusesFromDate() {
   if (!Array.isArray(events) || !events.length) return false;
   const today = new Date();
@@ -6667,7 +6915,7 @@ function editSession(id) {
   const sel=document.getElementById('es-team');
   if(sel) sel.innerHTML=teams.map(t=>'<option'+(t.name===s.team?' selected':'')+'>'+t.name+'</option>').join('');
   document.getElementById('edit-sess-id').value=String(id);
-  document.getElementById('es-event-type').value=s.eventType||'Testing (Track)';
+  document.getElementById('es-event-type').value=s.eventType||defaultEventType();
   document.getElementById('es-sess-type').value=s.sessType||'Single Car';
   document.getElementById('es-sess-num').value=s.sessNum||1;
   const dt=new Date(s.trackTimestamp || s.timestamp);
@@ -6950,15 +7198,17 @@ function applyRoleGuards() {
 }
 
 function init(){
+  if (currentWorkspace) loadWorkspaceData();
   seedAuth();
   applyRoleGuards();
+  refreshWorkspaceUI();
   refreshAuthUI();
   rebuildLiveRisks();
   syncTrackUsedFromSessions();
   schedule.forEach(b => recomputeBlockCompletion(b));
   updateTopbarSessionInfo();
-  const savedView = localStorage.getItem('a2rl_active_view') || 'live';
-  if (currentUser) showView(canAccessView(savedView) ? savedView : 'live');
+  const savedView = readScopedString('active_view', 'live', 'a2rl_active_view');
+  if (currentUser && currentWorkspace) showView(canAccessView(savedView) ? savedView : 'live');
   renderLiveTable();
   renderFeed();
   initLiveCharts();

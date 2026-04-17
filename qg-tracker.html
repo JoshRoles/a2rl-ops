@@ -1014,20 +1014,23 @@ function setMainLayout(mode){
 }
 
 function renderDashboardSidebar(){
-  let html = `<div class="sidebar-section-label">Gateway Setup</div>
+  document.getElementById('sidebar').innerHTML = renderGatewayTabsSidebar();
+}
+
+function renderGatewayTabsSidebar(){
+  return `<div class="sidebar-section-label">Gateway Categories</div>
     <div class="gw-item" onclick="gatewayAdminTier='rookie';showView('gateway-admin')">
       <span class="gw-code rookie">ROOKIE</span>
-      <span class="gw-title-short">Manage Rookie gateways</span>
+      <span class="gw-title-short">Rookie</span>
     </div>
     <div class="gw-item" onclick="gatewayAdminTier='challenger';showView('gateway-admin')">
       <span class="gw-code challenger">CHALLENGER</span>
-      <span class="gw-title-short">Manage Challenger gateways</span>
+      <span class="gw-title-short">Challenger</span>
     </div>
     <div class="gw-item" onclick="gatewayAdminTier='pro';showView('gateway-admin')">
       <span class="gw-code pro">PRO</span>
-      <span class="gw-title-short">Manage PRO gateways</span>
+      <span class="gw-title-short">Pro</span>
     </div>`;
-  document.getElementById('sidebar').innerHTML = html;
 }
 
 function setTierUI(tier){
@@ -1314,19 +1317,7 @@ function renderSessionSidebar(){
   if(!sess) return;
   const tier = sess.tier;
   const t = gateways[tier];
-  let html = `<div class="sidebar-section-label">Gateway Setup</div>
-    <div class="gw-item" onclick="gatewayAdminTier='rookie';showView('gateway-admin')">
-      <span class="gw-code rookie">ROOKIE</span>
-      <span class="gw-title-short">Manage Rookie gateways</span>
-    </div>
-    <div class="gw-item" onclick="gatewayAdminTier='challenger';showView('gateway-admin')">
-      <span class="gw-code challenger">CHALLENGER</span>
-      <span class="gw-title-short">Manage Challenger gateways</span>
-    </div>
-    <div class="gw-item" onclick="gatewayAdminTier='pro';showView('gateway-admin')">
-      <span class="gw-code pro">PRO</span>
-      <span class="gw-title-short">Manage PRO gateways</span>
-    </div>`;
+  let html = renderGatewayTabsSidebar();
 
   const renderSection = (label,items)=>{
     if(!items||!items.length) return;

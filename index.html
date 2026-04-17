@@ -2398,40 +2398,6 @@ function getScheduleBlocksForDay(dayIdx = currentSchedDay) {
     .filter(b => matchSelectedScheduleEvent(b) && (b.day || 0) === dayIdx)
     .sort((a,b)=>_toM(a.time)-_toM(b.time));
 }
-function getDisplayScheduleBlocksForDay(dayIdx = currentSchedDay) {
-  const rows = getScheduleBlocksForDay(dayIdx).map(b => ({ ...b }));
-  const hasBreak = rows.some(b => b.type === 'break');
-  if (hasBreak || rows.length < 2) return rows;
-  const lunchWindowStart = _toM('11:30');
-  const lunchWindowEnd = _toM('14:30');
-  let bestGap = null;
-  for (let i = 0; i < rows.length - 1; i++) {
-    const a = rows[i];
-    const b = rows[i + 1];
-    const aEnd = _toM(a.time) + (parseInt(a.duration, 10) || 0);
-    const bStart = _toM(b.time);
-    const gapStart = Math.max(aEnd, lunchWindowStart);
-    const gapEnd = Math.min(bStart, lunchWindowEnd);
-    const gapMins = gapEnd - gapStart;
-    if (gapMins >= 20 && (!bestGap || gapMins > bestGap.gapMins)) {
-      bestGap = { gapStart, gapMins, insertAfter: i };
-    }
-  }
-  if (!bestGap) return rows;
-  const derived = {
-    id: `derived-lunch-${dayIdx}-${bestGap.gapStart}`,
-    day: dayIdx,
-    eventId: schedCfg?.eventId || null,
-    time: _fM(bestGap.gapStart),
-    duration: bestGap.gapMins,
-    type: 'break',
-    teams: [],
-    label: 'Lunch Break',
-    derived: true,
-  };
-  rows.splice(bestGap.insertAfter + 1, 0, derived);
-  return rows;
-}
 function cloneDaySchedule(dayIdx = currentSchedDay) {
   return JSON.parse(JSON.stringify(getScheduleBlocksForDay(dayIdx)));
 }
@@ -2527,7 +2493,7 @@ function downloadScheduleChangeNotes() {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
-  const rows = getDisplayScheduleBlocksForDay(dayIdx);
+  const rows = getScheduleBlocksForDay(dayIdx);
   const bucket = scheduleChangeLog?.[getScheduleChangeLogKey(dayIdx)];
   const prevVersion = (bucket?.versions || []).find(v => v.version === (version.version - 1));
   const prevSnapshot = Array.isArray(prevVersion?.snapshot) ? prevVersion.snapshot : [];
@@ -4771,7 +4737,7 @@ function renderScheduleView() {
   const closeM = w.dayEndM;
   const trackOpenM = w.trackOpenM;
   const trackCloseM = w.trackCloseM;
-  const dayBlocks = getDisplayScheduleBlocksForDay(currentSchedDay)
+  const dayBlocks = schedule.filter(b=>b.day===currentSchedDay && matchSelectedScheduleEvent(b))
     .sort((a,b)=>toM(a.time)-toM(b.time));
   const minDur = dayBlocks
     .filter(b => b.type !== 'reserve')

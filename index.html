@@ -6,7 +6,7 @@
 <title>A2RL Operations Command</title>
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
 :root {
   --bg:#07070a; --bg2:#0f1018; --bg3:#171926; --bg4:#0b0b12;
@@ -1590,6 +1590,7 @@ function initSupabaseClient() {
     supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   } catch {
     supabaseClient = null;
+    console.error('Supabase client initialization failed');
   }
 }
 function readScopedJson(name, fallback, legacyKey='') {

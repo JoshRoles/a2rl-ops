@@ -18,6 +18,7 @@
 }
 *{margin:0;padding:0;box-sizing:border-box;}
 body{background:var(--bg);color:var(--text);font-family:'Roboto',sans-serif;font-size:14px;min-height:100vh;overflow-x:hidden;}
+body.auth-guest .shell{display:none !important;}
 body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(139,92,246,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(239,68,68,0.015) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0;}
 .shell{display:flex;min-height:100vh;position:relative;z-index:1;}
 .shell.qg-mode .sidebar{display:none !important;}
@@ -229,7 +230,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .track-time-pct{font-size:11px;color:var(--muted);min-width:36px;text-align:right;}
 
 /* MODAL */
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:100;align-items:center;justify-content:center;backdrop-filter:blur(4px);}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:5000;align-items:center;justify-content:center;backdrop-filter:blur(4px);}
 .modal-overlay.open{display:flex;}
 .modal{background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:24px;width:520px;max-width:95vw;max-height:85vh;overflow-y:auto;position:relative;}
 .modal-title{font-family:'Roboto',sans-serif;font-size:17px;font-weight:700;letter-spacing:0.5px;margin-bottom:18px;color:var(--text);}
@@ -320,13 +321,24 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
   border-color:rgba(245,158,11,0.5);
 }
 .workspace-overlay{display:none;position:fixed;inset:0;background:rgba(5,8,14,0.92);z-index:140;flex-direction:column;align-items:stretch;justify-content:flex-start;padding:0;overflow-y:auto;}
+.workspace-overlay--login-only{background:var(--bg);}
+.workspace-login-hero{display:none;flex-direction:column;align-items:center;padding:28px 16px 8px;}
+.workspace-login-hero img{max-width:min(420px,88vw);width:100%;height:auto;display:block;filter:drop-shadow(0 12px 40px rgba(0,0,0,0.55));}
+.workspace-login-sub{font-size:13px;color:var(--muted);margin-top:14px;text-align:center;}
+.workspace-overlay--login-only .workspace-login-hero{display:flex;}
+.workspace-overlay--login-only .workspace-shell{display:none !important;}
+.workspace-overlay--login-only .workspace-home-kicker{display:none;}
+.workspace-overlay--login-only .workspace-home-bar{flex:1;display:flex;align-items:center;justify-content:center;border:none;background:transparent;padding:16px 20px 40px;}
+.workspace-overlay--login-only .workspace-home-bar-inner{flex-direction:column;justify-content:center;max-width:380px;width:100%;}
+.workspace-overlay--login-only #home-auth-guest{flex-direction:column;align-items:stretch;width:100%;gap:10px;}
+.workspace-overlay--login-only #home-auth-guest input[type=email],.workspace-overlay--login-only #home-auth-guest input[type=password]{width:100%;}
+.workspace-overlay--login-only #home-auth-guest .btn{align-self:flex-start;}
 .workspace-home-bar{flex-shrink:0;background:rgba(8,12,20,0.97);border-bottom:1px solid var(--border);padding:12px 20px;}
 .workspace-home-bar-inner{max-width:1100px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;}
 .workspace-home-kicker{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);}
 #home-auth-guest{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
 #home-auth-guest input[type=email],#home-auth-guest input[type=password]{width:min(200px,42vw);padding:7px 10px;font-size:13px;background:rgba(255,255,255,0.04);border:1px solid var(--border2);border-radius:5px;color:var(--text);}
 #home-auth-user{display:none;align-items:center;gap:10px;flex-wrap:wrap;}
-.home-admin-quick{display:none;align-items:center;gap:6px;flex-wrap:wrap;}
 .workspace-card--locked{opacity:0.42;pointer-events:none;}
 .workspace-shell{max-width:980px;width:100%;margin:0 auto;padding:24px;flex:1;}
 .workspace-brand{display:flex;justify-content:center;margin-bottom:18px;}
@@ -343,6 +355,10 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 </head>
 <body>
 <div id="workspace-overlay" class="workspace-overlay">
+  <div class="workspace-login-hero">
+    <img src="assets/a2rl-logo-home.png" alt="Abu Dhabi Autonomous Racing League — A2RL" decoding="async">
+    <p class="workspace-login-sub">Sign in with your A2RL credentials to open a workspace.</p>
+  </div>
   <div class="workspace-home-bar">
     <div class="workspace-home-bar-inner">
       <span class="workspace-home-kicker">A2RL Operations Command Center</span>
@@ -355,11 +371,6 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
         </div>
         <div id="home-auth-user" style="display:none;">
           <span id="home-user-badge" class="session-badge" style="margin:0;"></span>
-          <span id="home-admin-quick" class="home-admin-quick">
-            <button type="button" class="btn sm" onclick="homeAdminOpenView('events')">Events</button>
-            <button type="button" class="btn sm" onclick="homeAdminOpenView('settings')">Settings</button>
-            <button type="button" class="btn sm" onclick="homeAdminOpenView('insurance')">Insurance</button>
-          </span>
           <button type="button" class="btn sm" id="home-admin-gear" onclick="openHomeAdminModal()" title="Users &amp; workspace access" style="display:none;">⚙</button>
           <button type="button" class="btn sm" onclick="logout()">Logout</button>
         </div>
@@ -1778,9 +1789,15 @@ function applyWorkspaceUI() {
   renderWorkspaceEventTypeOptions();
   document.title = cfg.label;
 }
+function syncWorkspaceOverlayGuestClass() {
+  const overlay = document.getElementById('workspace-overlay');
+  if (overlay) overlay.classList.toggle('workspace-overlay--login-only', !currentUser);
+  document.body.classList.toggle('auth-guest', !currentUser);
+}
 function refreshWorkspaceUI() {
   const overlay = document.getElementById('workspace-overlay');
   if (overlay) overlay.style.display = currentWorkspace ? 'none' : 'flex';
+  syncWorkspaceOverlayGuestClass();
   applyWorkspaceUI();
 }
 function goHome() {
@@ -1869,13 +1886,12 @@ function refreshHomeAuthBar() {
   const guest = document.getElementById('home-auth-guest');
   const userRow = document.getElementById('home-auth-user');
   const gear = document.getElementById('home-admin-gear');
-  const quick = document.getElementById('home-admin-quick');
   const hb = document.getElementById('home-user-badge');
   if (guest) guest.style.display = currentUser ? 'none' : 'flex';
   if (userRow) userRow.style.display = currentUser ? 'flex' : 'none';
-  if (hb && currentUser) hb.textContent = `${currentUser.email} · ${(currentUser.role || '').toUpperCase()}`;
+  if (hb && currentUser) hb.textContent = currentUser.email || '';
   if (gear) gear.style.display = isAdmin() ? 'inline-flex' : 'none';
-  if (quick) quick.style.display = isAdmin() ? 'inline-flex' : 'none';
+  syncWorkspaceOverlayGuestClass();
   refreshWorkspaceCards();
 }
 function refreshWorkspaceCards() {
@@ -1901,22 +1917,6 @@ function openHomeAdminModal() {
   if (!requireAdmin('Only administrators can manage users and access.')) return;
   renderUsersManagement();
   openModal('modal-home-admin');
-}
-function homeAdminOpenView(viewId) {
-  if (!requireAdmin()) return;
-  if (!canAccessView(viewId)) {
-    alert('Your role does not include access to that area.');
-    return;
-  }
-  const pickWs = () => {
-    if (currentWorkspace && canAccessWorkspace(currentWorkspace)) return currentWorkspace;
-    return normalizeUserWorkspaces(currentUser)[0] || 'ontrack';
-  };
-  const ws = pickWs();
-  selectWorkspace(ws);
-  const ov = document.getElementById('workspace-overlay');
-  if (ov) ov.style.display = 'none';
-  showView(viewId);
 }
 function login() {
   const email = (document.getElementById('login-email')?.value || '').trim().toLowerCase();

@@ -440,6 +440,11 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
   <div class="nav-item" data-core-nav="1" onclick="showView('teams')"><span class="nav-icon">◈</span>Team Analysis</div>
   <div class="nav-item" data-core-nav="1" onclick="showView('trends')"><span class="nav-icon">∿</span>Risk Trends</div>
 
+  <div class="sidebar-section-label" data-core-nav="1">Configuration</div>
+  <div class="nav-item" data-core-nav="1" onclick="showView('events')"><span class="nav-icon">◎</span>Events</div>
+  <div class="nav-item" data-core-nav="1" onclick="showView('settings')"><span class="nav-icon">⚙</span>Settings</div>
+  <div class="nav-item" data-core-nav="1" onclick="showView('insurance')"><span class="nav-icon">◆</span>Insurance</div>
+
   <div class="sidebar-footer">
     <span id="workspace-footer-label">A2RL Operations Command</span>
     <div class="ver">v2.0.0 · Season 3</div>
@@ -1642,6 +1647,15 @@ const DEFAULT_ADMIN_PASSWORD = 'Admin@123';
 const ACCESS_AREAS = ['live','schedule','garagealloc','garage','tracktime','session','history','teams','trends','events','settings','insurance','qg'];
 const ALL_WORKSPACES = ['ontrack','sim','qg'];
 const VIEWER_DEFAULT_AREAS = ['live','history','teams','trends'];
+const CONTRIBUTOR_DEFAULT_AREAS = ['live','schedule','garagealloc','garage','tracktime','session','history','teams','trends','events','insurance'];
+const ROLES = { viewer: 'viewer', contributor: 'contributor', admin: 'admin' };
+function currentRole() {
+  const r = (currentUser?.role || '').toLowerCase();
+  if (r === ROLES.admin || r === ROLES.contributor || r === ROLES.viewer) return r;
+  return ROLES.viewer;
+}
+function isViewer() { return currentRole() === ROLES.viewer; }
+function isContributor() { return currentRole() === ROLES.contributor; }
 function normalizeUserWorkspaces(u) {
   if (!u) return [...ALL_WORKSPACES];
   if ((u.role || '') === 'admin') return [...ALL_WORKSPACES];
@@ -1653,6 +1667,31 @@ function canAccessWorkspace(ws) {
   if (!currentUser) return false;
   if (isAdmin()) return true;
   return normalizeUserWorkspaces(currentUser).includes(ws);
+}
+function canContribute() {
+  return isAdmin() || isContributor();
+}
+function isLastActiveAdmin(emailToExclude = '') {
+  const admins = (users || []).filter(u => (u?.role || '') === ROLES.admin && u.active !== false);
+  if (!emailToExclude) return admins.length <= 1;
+  const otherAdmins = admins.filter(u => (u.email || '').toLowerCase() !== String(emailToExclude).toLowerCase());
+  return otherAdmins.length === 0;
+}
+function isSessionLockedForContributor(s) {
+  if (!s) return true;
+  if ((String(s.status || '').toLowerCase()) === 'completed') return true;
+  if (!s.schedBlockId) return false;
+  const block = schedule.find(b => String(b.id) === String(s.schedBlockId));
+  return Boolean(block?.completed);
+}
+function canContributorMutateSession(s) {
+  if (isAdmin()) return true;
+  if (!isContributor()) return false;
+  if (isSessionLockedForContributor(s)) return false;
+  const owner = String(s?.submittedBy || '').toLowerCase();
+  const me = String(currentUser?.email || '').toLowerCase();
+  if (!owner) return true; // legacy sessions
+  return owner === me;
 }
 const WORKSPACE_EVENT_TYPES = {
   ontrack: ['Track Competition','Testing (Track)','Testing (VDA)','Simulator Race','Simulator Testing'],
@@ -1840,15 +1879,22 @@ function seedAuth() {
     users = [{ email: DEFAULT_ADMIN_EMAIL, password: DEFAULT_ADMIN_PASSWORD, role: 'admin', active: true, allowedViews: [...ACCESS_AREAS], allowedWorkspaces: [...ALL_WORKSPACES] }];
     localStorage.setItem(GLOBAL_KEYS.users, JSON.stringify(users));
   } else {
-    users = users.map(u => ({
-      ...u,
-      allowedViews: Array.isArray(u.allowedViews) ? u.allowedViews.filter(v => v !== 'users') : (u.role === 'admin' ? [...ACCESS_AREAS] : [...VIEWER_DEFAULT_AREAS]),
-      allowedWorkspaces: Array.isArray(u.allowedWorkspaces) && u.allowedWorkspaces.length ? u.allowedWorkspaces.filter(w => ALL_WORKSPACES.includes(w)) : [...ALL_WORKSPACES],
-    }));
+    users = users.map(u => {
+      const role = [ROLES.admin, ROLES.contributor, ROLES.viewer].includes(u.role) ? u.role : ROLES.viewer;
+      const defaults = role === ROLES.admin
+        ? [...ACCESS_AREAS]
+        : (role === ROLES.contributor ? [...CONTRIBUTOR_DEFAULT_AREAS] : [...VIEWER_DEFAULT_AREAS]);
+      return {
+        ...u,
+        role,
+        allowedViews: Array.isArray(u.allowedViews) ? u.allowedViews.filter(v => v !== 'users') : defaults,
+        allowedWorkspaces: Array.isArray(u.allowedWorkspaces) && u.allowedWorkspaces.length ? u.allowedWorkspaces.filter(w => ALL_WORKSPACES.includes(w)) : [...ALL_WORKSPACES],
+      };
+    });
     localStorage.setItem(GLOBAL_KEYS.users, JSON.stringify(users));
   }
 }
-function isAdmin() { return (currentUser?.role || '') === 'admin'; }
+function isAdmin() { return currentRole() === ROLES.admin; }
 function canAccessView(id) {
   if (!currentUser) return false;
   if (id === 'users') return false;
@@ -1927,7 +1973,10 @@ function login() {
     if (msg) msg.textContent = 'Invalid credentials';
     return;
   }
-  const allowedViews = Array.isArray(u.allowedViews) ? u.allowedViews.filter(v => v !== 'users') : (u.role === 'admin' ? [...ACCESS_AREAS] : [...VIEWER_DEFAULT_AREAS]);
+  const defaults = u.role === ROLES.admin
+    ? [...ACCESS_AREAS]
+    : (u.role === ROLES.contributor ? [...CONTRIBUTOR_DEFAULT_AREAS] : [...VIEWER_DEFAULT_AREAS]);
+  const allowedViews = Array.isArray(u.allowedViews) ? u.allowedViews.filter(v => v !== 'users') : defaults;
   currentUser = {
     email: u.email,
     role: u.role || 'viewer',
@@ -1971,13 +2020,13 @@ function toggleAccessChecksDisabled() {
   const role = document.getElementById('um-role')?.value || 'viewer';
   const checks = document.querySelectorAll('#um-access-checks input[data-acc-check]');
   checks.forEach(cb => {
-    if (role === 'admin') { cb.checked = true; cb.disabled = true; }
+  if (role === ROLES.admin) { cb.checked = true; cb.disabled = true; }
     else cb.disabled = false;
   });
 }
 function getSelectedAccessAreas() {
   const role = document.getElementById('um-role')?.value || 'viewer';
-  if (role === 'admin') return [...ACCESS_AREAS];
+  if (role === ROLES.admin) return [...ACCESS_AREAS];
   return Array.from(document.querySelectorAll('#um-access-checks input[data-acc-check]:checked')).map(cb => cb.value);
 }
 function renderWorkspaceAccessChecksCreate() {
@@ -1995,13 +2044,13 @@ function renderWorkspaceAccessChecksCreate() {
 function toggleWorkspaceChecksDisabled() {
   const role = document.getElementById('um-role')?.value || 'viewer';
   document.querySelectorAll('#um-workspace-checks input[data-ws-check]').forEach(cb => {
-    if (role === 'admin') { cb.checked = true; cb.disabled = true; }
+    if (role === ROLES.admin) { cb.checked = true; cb.disabled = true; }
     else cb.disabled = false;
   });
 }
 function getSelectedWorkspaces() {
   const role = document.getElementById('um-role')?.value || 'viewer';
-  if (role === 'admin') return [...ALL_WORKSPACES];
+  if (role === ROLES.admin) return [...ALL_WORKSPACES];
   return Array.from(document.querySelectorAll('#um-workspace-checks input[data-ws-check]:checked')).map(cb => cb.value);
 }
 
@@ -2550,7 +2599,7 @@ function showView(id) {
   const el = document.getElementById('view-'+id);
   if (el) el.classList.add('active');
   const navKeyMap = {live:'live',schedule:'schedule',garagealloc:'garage',garage:'on track',tracktime:'track',
-    session:'log',history:'history',teams:'team',trends:'trend',settings:'settings',insurance:'insurance',qg:'qg',users:'user'};
+    session:'log',history:'history',teams:'team',trends:'trend',events:'event',settings:'settings',insurance:'insurance',qg:'qg',users:'user'};
   document.querySelectorAll('.nav-item').forEach(n => {
     const k = navKeyMap[id] || id;
     if (n.textContent.toLowerCase().includes(k)) n.classList.add('active');
@@ -2795,6 +2844,7 @@ function calcAndSubmit(prefix='f') {
     sensor:        Math.max(0, Math.min(1, parseInt(from('sensor')?.value) || 0)),
     manualOverride:Math.max(0, Math.min(1, parseInt(from('manual')?.value) || 0)),
     ttc: 0, ttcMin: 0, gpsDeviation: 0, lateralAccel: 0,
+    submittedBy: (currentUser?.email || '').toLowerCase(),
   };
 
   // If a schedule block is currently live for this team, link submission to that block/event
@@ -2957,6 +3007,7 @@ function submitManualSession() {
     sensor: Math.max(0, Math.min(1, parseInt(document.getElementById('ms-sensor')?.value) || 0)),
     manualOverride: Math.max(0, Math.min(1, parseInt(document.getElementById('ms-manual')?.value) || 0)),
     ttc:0, ttcMin:0, gpsDeviation:0, lateralAccel:0,
+    submittedBy: (currentUser?.email || '').toLowerCase(),
   };
   const { score, breakdown } = calcRisk(s);
   s.riskScore = score; s.riskBreakdown = breakdown; s.id = String(Date.now());
@@ -3117,6 +3168,12 @@ function renderHistory() {
 }
 
 function deleteSession(id) {
+  const target = sessions.find(s => String(s.id) === String(id));
+  if (!target) return;
+  if (!isAdmin()) {
+    alert('Only admins can delete historical session records.');
+    return;
+  }
   sessions = sessions.filter(s => String(s.id) !== String(id));
   schedule.forEach(b => recomputeBlockCompletion(b));
   save();
@@ -5590,6 +5647,11 @@ function applySettingsReadOnly() {
     if (el.classList.contains('settings-tab')) return;
     el.disabled = ro;
   });
+  if (isContributor()) {
+    root.querySelectorAll('button[onclick*="openEditTeam"]').forEach(btn => {
+      btn.disabled = false;
+    });
+  }
   root.querySelectorAll('.settings-tab').forEach(tab => {
     tab.style.pointerEvents = 'auto';
     tab.style.opacity = '1';
@@ -5664,10 +5726,10 @@ function createUserLogin() {
   const allowedViews = getSelectedAccessAreas();
   if (!email || !password) { alert('Email and password required.'); return; }
   if (users.some(u => (u.email || '').toLowerCase() === email.toLowerCase())) { alert('User already exists.'); return; }
-  if (role !== 'admin' && !allowedViews.length) { alert('Select at least one access area.'); return; }
-  const allowedWorkspaces = role === 'admin' ? [...ALL_WORKSPACES] : getSelectedWorkspaces();
-  if (role !== 'admin' && !allowedWorkspaces.length) { alert('Select at least one workspace.'); return; }
-  users.push({ email, password, role, active: true, allowedViews: role === 'admin' ? [...ACCESS_AREAS] : allowedViews, allowedWorkspaces });
+  if (role !== ROLES.admin && !allowedViews.length) { alert('Select at least one access area.'); return; }
+  const allowedWorkspaces = role === ROLES.admin ? [...ALL_WORKSPACES] : getSelectedWorkspaces();
+  if (role !== ROLES.admin && !allowedWorkspaces.length) { alert('Select at least one workspace.'); return; }
+  users.push({ email, password, role, active: true, allowedViews: role === ROLES.admin ? [...ACCESS_AREAS] : allowedViews, allowedWorkspaces });
   localStorage.setItem(GLOBAL_KEYS.users, JSON.stringify(users));
   document.getElementById('um-email').value = '';
   document.getElementById('um-password').value = '';
@@ -5676,8 +5738,16 @@ function createUserLogin() {
 function deleteUserLogin(i) {
   if (!requireAdmin('Only admin can delete users.')) return;
   if (!users[i]) return;
+  if ((users[i].email || '').toLowerCase() === (currentUser?.email || '').toLowerCase()) {
+    alert('You cannot delete your own account.');
+    return;
+  }
   if ((users[i].email || '').toLowerCase() === DEFAULT_ADMIN_EMAIL.toLowerCase()) {
     alert('Primary admin cannot be deleted.');
+    return;
+  }
+  if (users[i].role === ROLES.admin && isLastActiveAdmin(users[i].email || '')) {
+    alert('You cannot delete the last active admin.');
     return;
   }
   users.splice(i, 1);
@@ -5687,6 +5757,14 @@ function deleteUserLogin(i) {
 function toggleUserActive(i) {
   if (!requireAdmin('Only admin can edit users.')) return;
   if (!users[i]) return;
+  if ((users[i].email || '').toLowerCase() === (currentUser?.email || '').toLowerCase()) {
+    alert('You cannot deactivate your own account.');
+    return;
+  }
+  if (users[i].role === ROLES.admin && users[i].active !== false && isLastActiveAdmin(users[i].email || '')) {
+    alert('You cannot deactivate the last active admin.');
+    return;
+  }
   users[i].active = users[i].active === false ? true : false;
   localStorage.setItem(GLOBAL_KEYS.users, JSON.stringify(users));
   renderUsersManagement();
@@ -5703,7 +5781,7 @@ function openEditUserPermissions(i) {
   if (wrap) {
     const selected = new Set(Array.isArray(u.allowedViews) ? u.allowedViews : []);
     wrap.innerHTML = ACCESS_AREAS.map(v => {
-      const checked = (u.role === 'admin' || selected.has(v)) ? 'checked' : '';
+      const checked = (u.role === ROLES.admin || selected.has(v)) ? 'checked' : '';
       return `<label style="display:flex;align-items:center;gap:6px;padding:4px 6px;border:1px solid var(--border);border-radius:5px;background:var(--card);">
         <input type="checkbox" value="${v}" data-edit-acc-check ${checked} style="accent-color:var(--accent);">
         <span style="font-size:11px;text-transform:capitalize;">${v}</span>
@@ -5715,7 +5793,7 @@ function openEditUserPermissions(i) {
     const sel = new Set(normalizeUserWorkspaces(u));
     const labels = { ontrack: 'On Track', sim: 'Sim Challenge', qg: 'QG Tracker' };
     wrapWs.innerHTML = ALL_WORKSPACES.map(ws => {
-      const checked = (u.role === 'admin' || sel.has(ws)) ? 'checked' : '';
+      const checked = (u.role === ROLES.admin || sel.has(ws)) ? 'checked' : '';
       return `<label style="display:flex;align-items:center;gap:6px;padding:4px 6px;border:1px solid var(--border);border-radius:5px;background:var(--card);">
         <input type="checkbox" value="${ws}" data-edit-ws-check ${checked} style="accent-color:var(--accent);">
         <span style="font-size:11px;">${labels[ws]}</span>
@@ -5730,14 +5808,14 @@ function toggleEditAccessChecksDisabled() {
   const role = document.getElementById('edit-user-role')?.value || 'viewer';
   const checks = document.querySelectorAll('#edit-user-access-checks input[data-edit-acc-check]');
   checks.forEach(cb => {
-    if (role === 'admin') { cb.checked = true; cb.disabled = true; }
+    if (role === ROLES.admin) { cb.checked = true; cb.disabled = true; }
     else cb.disabled = false;
   });
 }
 function toggleEditWorkspaceChecksDisabled() {
   const role = document.getElementById('edit-user-role')?.value || 'viewer';
   document.querySelectorAll('#edit-user-workspace-checks input[data-edit-ws-check]').forEach(cb => {
-    if (role === 'admin') { cb.checked = true; cb.disabled = true; }
+    if (role === ROLES.admin) { cb.checked = true; cb.disabled = true; }
     else cb.disabled = false;
   });
 }
@@ -5746,22 +5824,32 @@ function saveEditedUserPermissions() {
   const idx = parseInt(document.getElementById('edit-user-index')?.value || '-1');
   if (!Number.isFinite(idx) || idx < 0 || !users[idx]) return;
   const role = document.getElementById('edit-user-role')?.value || 'viewer';
+  const targetEmail = (users[idx].email || '').toLowerCase();
+  const myEmail = (currentUser?.email || '').toLowerCase();
   const isPrimary = (users[idx].email || '').toLowerCase() === DEFAULT_ADMIN_EMAIL.toLowerCase();
-  if (isPrimary && role !== 'admin') {
+  if (isPrimary && role !== ROLES.admin) {
     alert('Primary admin must remain admin.');
     return;
   }
-  let allowedViews = role === 'admin'
+  if (targetEmail === myEmail && role !== users[idx].role) {
+    alert('You cannot change your own role. Ask another admin.');
+    return;
+  }
+  if (users[idx].role === ROLES.admin && role !== ROLES.admin && isLastActiveAdmin(users[idx].email || '')) {
+    alert('You cannot demote the last active admin.');
+    return;
+  }
+  let allowedViews = role === ROLES.admin
     ? [...ACCESS_AREAS]
     : Array.from(document.querySelectorAll('#edit-user-access-checks input[data-edit-acc-check]:checked')).map(cb => cb.value);
-  if (role !== 'admin' && !allowedViews.length) {
+  if (role !== ROLES.admin && !allowedViews.length) {
     alert('Select at least one access area.');
     return;
   }
-  let allowedWorkspaces = role === 'admin'
+  let allowedWorkspaces = role === ROLES.admin
     ? [...ALL_WORKSPACES]
     : Array.from(document.querySelectorAll('#edit-user-workspace-checks input[data-edit-ws-check]:checked')).map(cb => cb.value);
-  if (role !== 'admin' && !allowedWorkspaces.length) {
+  if (role !== ROLES.admin && !allowedWorkspaces.length) {
     alert('Select at least one workspace.');
     return;
   }
@@ -5879,6 +5967,10 @@ function saveTeam() {
   const name = document.getElementById('new-team-name').value.trim();
   if (!name) return alert('Team name required');
   const orig = document.getElementById('edit-team-original').value;
+  if (!orig && !isAdmin()) {
+    alert('Only admins can create new teams.');
+    return;
+  }
   const newTeam = {
     name,
     code: document.getElementById('new-team-code').value.toUpperCase() || name.slice(0,3).toUpperCase(),
@@ -7114,6 +7206,10 @@ showView = function(id) {
 function editSession(id) {
   const s=sessions.find(x=>String(x.id)===String(id));
   if(!s){return;}
+  if (!canContributorMutateSession(s)) {
+    alert('Only admins or the original contributor can edit a non-completed session.');
+    return;
+  }
   const sel=document.getElementById('es-team');
   if(sel) sel.innerHTML=teams.map(t=>'<option'+(t.name===s.team?' selected':'')+'>'+t.name+'</option>').join('');
   document.getElementById('edit-sess-id').value=String(id);
@@ -7146,6 +7242,10 @@ function saveEditSession() {
   const id=document.getElementById('edit-sess-id').value;
   const idx=sessions.findIndex(x=>String(x.id)===id);
   if(idx<0) return;
+  if (!canContributorMutateSession(sessions[idx])) {
+    alert('Only admins or the original contributor can update a non-completed session.');
+    return;
+  }
   const dv=document.getElementById('es-date').value, tv=document.getElementById('es-time').value;
   const u={...sessions[idx],
     team:document.getElementById('es-team').value,
@@ -7171,6 +7271,7 @@ function saveEditSession() {
     overtaking:document.getElementById('es-overtaking').value || 'No',
     manualOverride:Math.max(0, Math.min(1, parseInt(document.getElementById('es-manual').value)||0)),
     notes:document.getElementById('es-notes').value, stub:false,
+    submittedBy: sessions[idx].submittedBy || (currentUser?.email || '').toLowerCase(),
   };
   const {score,breakdown}=calcRisk(u);
   u.riskScore=score; u.riskBreakdown=breakdown;
@@ -7376,27 +7477,45 @@ showView = function(id){
 };
 
 function applyRoleGuards() {
-  const guarded = [
-    'startScheduleWizard','generateSchedule','saveSlot','saveEditSlot','deleteSlotFromModal','removeSchedBlock','clearSchedule','exportScheduleToSessions',
-    'openGarageModal','saveGarageAllocation','autoAllocateGarages','openStartSessionModal','startActiveSession','endActiveSession','addFeedNote',
-    'openQueueModal','addToQueue','removeFromQueue','dequeueSession',
-    'calcAndSubmit','resetForm','openAllocModal','saveAllocation','deleteAlloc','autoDistributeTime',
-    'openManualSessionModal','submitManualSession',
-    'openNewEventModal','openEditEventModal','saveEvent','activateEvent','markEventComplete','deleteEvent',
-    'openAddTeamModal','openEditTeam','saveTeam','deleteTeam',
-    'saveEventConfig','saveCategoryMultipliers','resetWeights','saveThresholds','importData','clearAllData',
-    'addTrackOption','removeTrackOption'
-  ];
-  guarded.forEach(name => {
+  const byPermission = {
+    contributor: [
+      'startScheduleWizard','generateSchedule','saveSlot','saveEditSlot','deleteSlotFromModal','removeSchedBlock','clearSchedule','exportScheduleToSessions',
+      'openGarageModal','saveGarageAllocation','autoAllocateGarages','openStartSessionModal','startActiveSession','endActiveSession','addFeedNote',
+      'openQueueModal','addToQueue','removeFromQueue','dequeueSession',
+      'calcAndSubmit','resetForm','openAllocModal','saveAllocation','deleteAlloc','autoDistributeTime',
+      'openManualSessionModal','submitManualSession',
+      'openNewEventModal','openEditEventModal','saveEvent','activateEvent','markEventComplete','deleteEvent',
+      'openEditTeam','saveTeam'
+    ],
+    admin: [
+      'openAddTeamModal','deleteTeam',
+      'saveEventConfig','saveCategoryMultipliers','resetWeights','saveThresholds','importData','clearAllData',
+      'addTrackOption','removeTrackOption'
+    ]
+  };
+  const wrapWithPermission = (name, checker, message) => {
     const orig = window[name];
-    if (typeof orig !== 'function' || orig.__guarded) return;
+    if (typeof orig !== 'function' || orig.__rbacGuarded) return;
     const wrapped = function(...args) {
-      if (!requireAdmin('Viewer mode: this action is locked.')) return;
+      if (!checker()) {
+        alert(message);
+        return;
+      }
       return orig.apply(this, args);
     };
-    wrapped.__guarded = true;
+    wrapped.__rbacGuarded = true;
     window[name] = wrapped;
-  });
+  };
+  byPermission.contributor.forEach(name => wrapWithPermission(
+    name,
+    () => canContribute(),
+    'Viewer mode: this action is locked.'
+  ));
+  byPermission.admin.forEach(name => wrapWithPermission(
+    name,
+    () => isAdmin(),
+    'Only admins can perform this action.'
+  ));
 }
 
 function init(){
@@ -7555,6 +7674,7 @@ init();
       <div class="field"><label>Role</label>
         <select id="edit-user-role" onchange="toggleEditAccessChecksDisabled();toggleEditWorkspaceChecksDisabled();">
           <option value="viewer">Viewer</option>
+          <option value="contributor">Contributor</option>
           <option value="admin">Admin</option>
         </select>
       </div>
@@ -7582,7 +7702,7 @@ init();
       <div class="field"><label>Email</label><input type="email" id="um-email" placeholder="user@email.com"></div>
       <div class="field"><label>Password</label><input type="text" id="um-password" placeholder="temporary password"></div>
       <div class="field"><label>Role</label>
-        <select id="um-role" onchange="toggleAccessChecksDisabled();toggleWorkspaceChecksDisabled();"><option value="viewer">Viewer</option><option value="admin">Admin</option></select>
+        <select id="um-role" onchange="toggleAccessChecksDisabled();toggleWorkspaceChecksDisabled();"><option value="viewer">Viewer</option><option value="contributor">Contributor</option><option value="admin">Admin</option></select>
       </div>
     </div>
     <div class="sep" style="margin:12px 0;"></div>

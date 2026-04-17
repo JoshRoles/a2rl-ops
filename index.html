@@ -1577,12 +1577,17 @@ function wk(name) { return `a2rl_${currentWorkspace}_${name}`; }
 const SUPABASE_URL = 'https://rlfwaafrseibtqgjzpnf.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_XC8DB43VUfGRo1RkeDxEiw_wqay3CcW';
 const SUPABASE_STATE_TABLE = 'app_workspace_state';
+const SUPABASE_GLOBAL_KEY = '__global__';
 let supabaseEnabled = false;
 let supabaseSyncTimer = null;
 let supabaseLastPayload = '';
 let supabaseHydrating = false;
 let supabaseSyncInFlight = false;
 let supabaseSyncQueued = false;
+let supabaseGlobalSyncTimer = null;
+let supabaseGlobalLastPayload = '';
+let supabaseGlobalSyncInFlight = false;
+let supabaseGlobalSyncQueued = false;
 function initSupabaseClient() {
   supabaseEnabled = !!(SUPABASE_URL && SUPABASE_ANON_KEY);
 }
@@ -1615,6 +1620,84 @@ function readScopedString(name, fallback, legacyKey='') {
     if (legacy != null) return legacy;
   }
   return fallback;
+}
+function persistUsersState() {
+  localStorage.setItem(GLOBAL_KEYS.users, JSON.stringify(users));
+  scheduleSupabaseGlobalSync();
+}
+function buildGlobalStatePayload() {
+  return { users: Array.isArray(users) ? users : [] };
+}
+function applyGlobalStateToLocal(state) {
+  if (!state || typeof state !== 'object') return;
+  if (Array.isArray(state.users)) {
+    users = state.users;
+    localStorage.setItem(GLOBAL_KEYS.users, JSON.stringify(users));
+  }
+}
+function scheduleSupabaseGlobalSync() {
+  initSupabaseClient();
+  if (!supabaseEnabled) return;
+  if (supabaseGlobalSyncTimer) clearTimeout(supabaseGlobalSyncTimer);
+  supabaseGlobalSyncTimer = setTimeout(syncGlobalStateToSupabase, 500);
+}
+async function syncGlobalStateToSupabase() {
+  initSupabaseClient();
+  if (!supabaseEnabled) return;
+  if (supabaseGlobalSyncInFlight) {
+    supabaseGlobalSyncQueued = true;
+    return;
+  }
+  const payload = buildGlobalStatePayload();
+  const serialized = JSON.stringify(payload);
+  if (serialized === supabaseGlobalLastPayload) return;
+  supabaseGlobalSyncInFlight = true;
+  try {
+    const endpoint = `${SUPABASE_URL}/rest/v1/${SUPABASE_STATE_TABLE}?on_conflict=workspace`;
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: supabaseHeaders({ Prefer: 'resolution=merge-duplicates,return=minimal' }),
+      body: JSON.stringify([{ workspace: SUPABASE_GLOBAL_KEY, state_json: payload, updated_at: new Date().toISOString() }]),
+    });
+    if (!res.ok) {
+      const detail = await res.text();
+      console.error('Supabase global sync failed:', res.status, detail);
+      return;
+    }
+    supabaseGlobalLastPayload = serialized;
+  } catch {
+    console.error('Supabase global sync exception');
+  } finally {
+    supabaseGlobalSyncInFlight = false;
+    if (supabaseGlobalSyncQueued) {
+      supabaseGlobalSyncQueued = false;
+      scheduleSupabaseGlobalSync();
+    }
+  }
+}
+async function loadGlobalStateFromSupabase() {
+  initSupabaseClient();
+  if (!supabaseEnabled) return;
+  try {
+    const endpoint = `${SUPABASE_URL}/rest/v1/${SUPABASE_STATE_TABLE}?select=state_json,updated_at&workspace=eq.${encodeURIComponent(SUPABASE_GLOBAL_KEY)}&limit=1`;
+    const res = await fetch(endpoint, { method: 'GET', headers: supabaseHeaders() });
+    if (!res.ok) {
+      const detail = await res.text();
+      console.error('Supabase global load failed:', res.status, detail);
+      return;
+    }
+    const rows = await res.json();
+    const data = Array.isArray(rows) ? rows[0] : null;
+    if (!data?.state_json || !Array.isArray(data.state_json.users)) {
+      scheduleSupabaseGlobalSync();
+      return;
+    }
+    applyGlobalStateToLocal(data.state_json);
+    supabaseGlobalLastPayload = JSON.stringify(buildGlobalStatePayload());
+    refreshAuthUI();
+  } catch {
+    console.error('Supabase global load exception');
+  }
 }
 function migrateLegacyWorkspaceData() {
   if (currentWorkspace !== 'ontrack') return;
@@ -2769,6 +2852,24 @@ function persistWorkspaceStateToLocal(state) {
   localStorage.setItem(wk('sched_zoom'), String(state.sched_zoom || 1));
   if (state.active_view) localStorage.setItem(wk('active_view'), String(state.active_view));
 }
+function isWorkspaceStateMeaningful(state) {
+  if (!state || typeof state !== 'object') return false;
+  const hasArray = (k) => Array.isArray(state[k]) && state[k].length > 0;
+  const hasObject = (k) => state[k] && typeof state[k] === 'object' && !Array.isArray(state[k]) && Object.keys(state[k]).length > 0;
+  return (
+    hasArray('sessions') ||
+    hasArray('teams') ||
+    hasArray('weights') ||
+    hasArray('schedule') ||
+    hasArray('runtime_schedule') ||
+    hasArray('events') ||
+    hasObject('event_cfg') ||
+    hasObject('sched_cfg') ||
+    hasObject('schedule_change_log') ||
+    hasObject('garages') ||
+    hasObject('thresh')
+  );
+}
 function scheduleSupabaseSync() {
   if (!currentWorkspace) return;
   initSupabaseClient();
@@ -2834,13 +2935,14 @@ async function loadWorkspaceDataFromSupabase(workspaceId) {
     const rows = await res.json();
     const data = Array.isArray(rows) ? rows[0] : null;
     if (workspaceId !== currentWorkspace) return;
-    if (!data?.state_json) {
+    const remoteState = data?.state_json;
+    if (!remoteState || !isWorkspaceStateMeaningful(remoteState)) {
       // First-time bootstrap: push local workspace state to Supabase.
       scheduleSupabaseSync();
       return;
     }
     supabaseHydrating = true;
-    persistWorkspaceStateToLocal(data.state_json);
+    persistWorkspaceStateToLocal(remoteState);
     loadWorkspaceData({ skipRemote: true });
     supabaseLastPayload = JSON.stringify(buildWorkspaceStatePayload());
     if (currentWorkspace && currentUser) {
@@ -6221,7 +6323,7 @@ function renderUsersManagement() {
   toggleWorkspaceChecksDisabled();
   list.innerHTML = users.map((u, i) => `
     <div style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--border);border-radius:6px;margin-bottom:8px;background:var(--card);">
-      <span style="flex:1;font-size:12px;"><b>${u.email}</b> <span style="color:var(--muted)">(${u.role})</span><br><span style="font-size:10px;color:var(--muted);">Areas: ${(u.allowedViews||[]).join(', ')}</span><br><span style="font-size:10px;color:var(--muted);">Workspaces: ${normalizeUserWorkspaces(u).join(', ')}</span></span>
+      <span style="flex:1;font-size:12px;"><b>${u.username || u.email}</b> <span style="color:var(--muted)">(${u.role})</span><br><span style="font-size:10px;color:var(--muted);">Areas: ${(u.allowedViews||[]).join(', ')}</span><br><span style="font-size:10px;color:var(--muted);">Workspaces: ${normalizeUserWorkspaces(u).join(', ')}</span></span>
       <span style="font-size:11px;color:${u.active===false?'var(--red)':'var(--green)'};">${u.active===false?'Disabled':'Active'}</span>
       <button class="btn sm" onclick="openEditUserPermissions(${i})">Edit Access</button>
       <button class="btn sm" onclick="toggleUserActive(${i})">${u.active===false?'Enable':'Disable'}</button>
@@ -6231,17 +6333,17 @@ function renderUsersManagement() {
 }
 function createUserLogin() {
   if (!requireAdmin('Only admin can create users.')) return;
-  const email = (document.getElementById('um-email')?.value || '').trim();
+  const username = (document.getElementById('um-email')?.value || '').trim();
   const password = (document.getElementById('um-password')?.value || '').trim();
   const role = document.getElementById('um-role')?.value || 'viewer';
   const allowedViews = getSelectedAccessAreas();
-  if (!email || !password) { alert('Email and password required.'); return; }
-  if (users.some(u => (u.email || '').toLowerCase() === email.toLowerCase())) { alert('User already exists.'); return; }
+  if (!username || !password) { alert('User name and password required.'); return; }
+  if (users.some(u => (u.email || '').toLowerCase() === username.toLowerCase())) { alert('User already exists.'); return; }
   if (role !== ROLES.admin && !allowedViews.length) { alert('Select at least one access area.'); return; }
   const allowedWorkspaces = role === ROLES.admin ? [...ALL_WORKSPACES] : getSelectedWorkspaces();
   if (role !== ROLES.admin && !allowedWorkspaces.length) { alert('Select at least one workspace.'); return; }
-  users.push({ email, password, role, active: true, allowedViews: role === ROLES.admin ? [...ACCESS_AREAS] : allowedViews, allowedWorkspaces });
-  localStorage.setItem(GLOBAL_KEYS.users, JSON.stringify(users));
+  users.push({ email: username, username, password, role, active: true, allowedViews: role === ROLES.admin ? [...ACCESS_AREAS] : allowedViews, allowedWorkspaces });
+  persistUsersState();
   document.getElementById('um-email').value = '';
   document.getElementById('um-password').value = '';
   renderUsersManagement();
@@ -6262,7 +6364,7 @@ function deleteUserLogin(i) {
     return;
   }
   users.splice(i, 1);
-  localStorage.setItem(GLOBAL_KEYS.users, JSON.stringify(users));
+  persistUsersState();
   renderUsersManagement();
 }
 function toggleUserActive(i) {
@@ -6277,7 +6379,7 @@ function toggleUserActive(i) {
     return;
   }
   users[i].active = users[i].active === false ? true : false;
-  localStorage.setItem(GLOBAL_KEYS.users, JSON.stringify(users));
+  persistUsersState();
   renderUsersManagement();
 }
 function openEditUserPermissions(i) {
@@ -6367,7 +6469,7 @@ function saveEditedUserPermissions() {
   users[idx].role = role;
   users[idx].allowedViews = allowedViews;
   users[idx].allowedWorkspaces = allowedWorkspaces;
-  localStorage.setItem(GLOBAL_KEYS.users, JSON.stringify(users));
+  persistUsersState();
   if (currentUser && (currentUser.email || '').toLowerCase() === (users[idx].email || '').toLowerCase()) {
     currentUser = { ...currentUser, role, allowedViews, allowedWorkspaces: normalizeUserWorkspaces(users[idx]) };
     localStorage.setItem(GLOBAL_KEYS.currentUser, JSON.stringify(currentUser));
@@ -7532,7 +7634,11 @@ function exportInsurance() {
 // EVENTS MANAGEMENT
 // ═══════════════════════════════════════════════════════════════════════
 let events = [];
-function saveEvents() { if (currentWorkspace) localStorage.setItem(wk('events'), JSON.stringify(events)); }
+function saveEvents() {
+  if (!currentWorkspace) return;
+  localStorage.setItem(wk('events'), JSON.stringify(events));
+  scheduleSupabaseSync();
+}
 function refreshEventStatusesFromDate() {
   if (!Array.isArray(events) || !events.length) return false;
   const today = new Date();
@@ -8100,8 +8206,9 @@ function applyRoleGuards() {
   ));
 }
 
-function init(){
+async function init(){
   initSupabaseClient();
+  await loadGlobalStateFromSupabase();
   if (!currentUser) {
     currentWorkspace = '';
     localStorage.removeItem(GLOBAL_KEYS.workspace);

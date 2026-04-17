@@ -1928,13 +1928,19 @@ function requireAdmin(msg) {
   return false;
 }
 function refreshAuthUI() {
+  const qgMode = isQGWorkspace();
   const badge = document.getElementById('auth-user-badge');
   if (badge) badge.textContent = currentUser ? `${currentUser.email} · ${currentUser.role.toUpperCase()}` : 'Guest';
   document.querySelectorAll('.nav-item[onclick*="showView"]').forEach(n => {
     const m = (n.getAttribute('onclick') || '').match(/showView\('([^']+)'\)/);
     if (!m) return;
-    n.style.display = canAccessView(m[1]) ? 'flex' : 'none';
+    n.style.display = qgMode ? 'none' : (canAccessView(m[1]) ? 'flex' : 'none');
   });
+  if (qgMode) {
+    document.querySelectorAll('.sidebar .sidebar-section-label').forEach(el => { el.style.display = 'none'; });
+    const sidebarLive = document.querySelector('.sidebar-live');
+    if (sidebarLive) sidebarLive.style.display = 'none';
+  }
   const wsSel = document.getElementById('workspace-switcher');
   if (wsSel) {
     Array.from(wsSel.options).forEach(opt => {

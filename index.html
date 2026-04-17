@@ -1574,8 +1574,8 @@ const DEFAULT_HISTORY_COLUMNS = [
 ];
 let currentWorkspace = localStorage.getItem(GLOBAL_KEYS.workspace) || '';
 function wk(name) { return `a2rl_${currentWorkspace}_${name}`; }
-const SUPABASE_URL = 'https://rlfwaafrseibtqgjzpnf.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_XC8DB43VUfGRo1RkeDxEiw_wqay3CcW';
+const SUPABASE_URL = 'https://woetnpjlmmrqgdjypztt.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_Ifi6rpaZzZq0Wzd9u1XGOQ_BJijf3L9';
 const SUPABASE_STATE_TABLE = 'app_workspace_state';
 const SUPABASE_GLOBAL_KEY = '__global__';
 let supabaseEnabled = false;
@@ -1588,6 +1588,8 @@ let supabaseGlobalSyncTimer = null;
 let supabaseGlobalLastPayload = '';
 let supabaseGlobalSyncInFlight = false;
 let supabaseGlobalSyncQueued = false;
+let supabaseWorkspaceLastUpdatedAt = '';
+let supabasePollTimer = null;
 function initSupabaseClient() {
   supabaseEnabled = !!(SUPABASE_URL && SUPABASE_ANON_KEY);
 }
@@ -2877,6 +2879,15 @@ function scheduleSupabaseSync() {
   if (supabaseSyncTimer) clearTimeout(supabaseSyncTimer);
   supabaseSyncTimer = setTimeout(syncWorkspaceToSupabase, 900);
 }
+function startSupabasePolling() {
+  if (supabasePollTimer) clearInterval(supabasePollTimer);
+  if (!supabaseEnabled) return;
+  supabasePollTimer = setInterval(() => {
+    if (!currentWorkspace || !currentUser) return;
+    loadWorkspaceDataFromSupabase(currentWorkspace);
+    loadGlobalStateFromSupabase();
+  }, 7000);
+}
 async function syncWorkspaceToSupabase() {
   if (!currentWorkspace || supabaseHydrating) return;
   initSupabaseClient();
@@ -2905,6 +2916,7 @@ async function syncWorkspaceToSupabase() {
       console.error('Supabase sync failed:', res.status, detail);
       return;
     }
+    supabaseWorkspaceLastUpdatedAt = new Date().toISOString();
     supabaseLastPayload = serialized;
   } catch {
     console.error('Supabase sync exception');
@@ -2935,6 +2947,8 @@ async function loadWorkspaceDataFromSupabase(workspaceId) {
     const rows = await res.json();
     const data = Array.isArray(rows) ? rows[0] : null;
     if (workspaceId !== currentWorkspace) return;
+    const remoteUpdatedAt = String(data?.updated_at || '');
+    if (remoteUpdatedAt && supabaseWorkspaceLastUpdatedAt && remoteUpdatedAt <= supabaseWorkspaceLastUpdatedAt) return;
     const remoteState = data?.state_json;
     if (!remoteState || !isWorkspaceStateMeaningful(remoteState)) {
       // First-time bootstrap: push local workspace state to Supabase.
@@ -2944,6 +2958,7 @@ async function loadWorkspaceDataFromSupabase(workspaceId) {
     supabaseHydrating = true;
     persistWorkspaceStateToLocal(remoteState);
     loadWorkspaceData({ skipRemote: true });
+    supabaseWorkspaceLastUpdatedAt = remoteUpdatedAt || new Date().toISOString();
     supabaseLastPayload = JSON.stringify(buildWorkspaceStatePayload());
     if (currentWorkspace && currentUser) {
       const activeView = readScopedString('active_view', isQGWorkspace() ? 'qg' : 'live', 'a2rl_active_view');
@@ -8215,6 +8230,7 @@ async function init(){
   }
   if (currentWorkspace) loadWorkspaceData();
   seedAuth();
+  scheduleSupabaseGlobalSync();
   applyRoleGuards();
   refreshWorkspaceUI();
   refreshAuthUI();
@@ -8231,6 +8247,11 @@ async function init(){
   // Keep Garage/Live in sync with schedule (if no manual session running)
   setInterval(syncAutoOnTrack, 1000);
   syncAutoOnTrack();
+  startSupabasePolling();
+  window.addEventListener('focus', () => {
+    if (currentWorkspace) loadWorkspaceDataFromSupabase(currentWorkspace);
+    loadGlobalStateFromSupabase();
+  });
 }
 
 init();

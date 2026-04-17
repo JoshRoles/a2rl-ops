@@ -1670,6 +1670,13 @@ function currentRole() {
   if (r === ROLES.admin || r === ROLES.contributor || r === ROLES.viewer) return r;
   return ROLES.viewer;
 }
+function currentUserName() {
+  const explicit = String(currentUser?.username || '').trim();
+  if (explicit) return explicit;
+  const raw = String(currentUser?.email || '').trim();
+  if (!raw) return 'System';
+  return raw.includes('@') ? raw.split('@')[0] : raw;
+}
 function isViewer() { return currentRole() === ROLES.viewer; }
 function isContributor() { return currentRole() === ROLES.contributor; }
 function normalizeUserWorkspaces(u) {
@@ -2392,12 +2399,19 @@ function resetScheduleChangeLogForDay(dayIdx = currentSchedDay, eventId = null, 
   if (!scheduleChangeLog || typeof scheduleChangeLog !== 'object') scheduleChangeLog = {};
   const evId = String(eventId || schedCfg?.eventId || '');
   const evName = String(eventName || schedCfg?.eventName || '');
-  const keys = new Set();
-  if (evId) keys.add(`${evId}::day-${dayIdx}`);
-  if (evName) keys.add(`${evName}::day-${dayIdx}`);
-  if (!keys.size) keys.add(getScheduleChangeLogKey(dayIdx));
-  keys.forEach(k => {
-    if (scheduleChangeLog[k]) delete scheduleChangeLog[k];
+  const daySuffix = `::day-${dayIdx}`;
+  const idLower = evId.toLowerCase();
+  const nameLower = evName.toLowerCase();
+  Object.keys(scheduleChangeLog).forEach(k => {
+    if (!String(k).endsWith(daySuffix)) return;
+    const bucket = scheduleChangeLog[k] || {};
+    const keyLower = String(k || '').toLowerCase();
+    const bucketId = String(bucket.eventId || '').toLowerCase();
+    const bucketName = String(bucket.eventName || '').toLowerCase();
+    const matchById = !!idLower && (keyLower.startsWith(idLower + '::') || bucketId === idLower);
+    const matchByName = !!nameLower && (keyLower.startsWith(nameLower + '::') || bucketName === nameLower);
+    const noEventHint = !idLower && !nameLower;
+    if (matchById || matchByName || noEventHint) delete scheduleChangeLog[k];
   });
 }
 function getScheduleLogBucketForEventDay(ev, dayIdx) {
@@ -2474,7 +2488,7 @@ function ensureScheduleVersion(reason, opts = {}) {
     day: dayIdx,
     eventName: schedCfg?.eventName || bucket.eventName || '—',
     generatedAt: new Date().toISOString(),
-    generatedBy: currentUser?.email || 'System',
+    generatedBy: currentUserName(),
     reason: reason || (bucket.versions.length ? 'Schedule updated' : 'Initial schedule issue'),
     changes: changeLines.length ? changeLines : ['No row-level differences detected.'],
     snapshot: currSnapshot,
@@ -2555,7 +2569,7 @@ async function downloadScheduleChangeNotes() {
       version: 1,
       eventName: schedCfg.eventName || '—',
       generatedAt: new Date().toISOString(),
-      generatedBy: currentUser?.email || 'System',
+      generatedBy: currentUserName(),
       changes: ['No row-level differences detected.'],
       snapshot: cloneDaySchedule(dayIdx),
     };
@@ -2617,7 +2631,7 @@ async function downloadScheduleChangeNotes() {
       body{font-family:Roboto,Arial,sans-serif;padding:18px;color:#111}
       h1{margin:0 0 8px;font-size:20px} h2{margin:20px 0 8px;font-size:15px}
       .pdf-header{display:flex;align-items:center;justify-content:center;gap:18px;padding:12px 14px;margin-bottom:12px;border:1px solid #d1d5db;background:#fff;border-radius:8px}
-      .pdf-header-logo-a2rl{height:88px;width:auto;object-fit:contain;display:block}
+      .pdf-header-logo-a2rl{height:176px;width:auto;object-fit:contain;display:block}
       .pdf-header-logo-aspire{height:34px;width:auto;object-fit:contain;display:block}
       .pdf-header-main{font-size:18px;font-weight:800;letter-spacing:0.6px;line-height:1.2;color:#111;white-space:nowrap;text-align:center}
       .meta{font-size:12px;color:#333;line-height:1.6}
@@ -2636,7 +2650,7 @@ async function downloadScheduleChangeNotes() {
       <h2 style="margin-top:2px;">Schedule Change Notes</h2>
       <div class="meta">
         Event: ${esc(version.eventName || schedCfg.eventName || '—')} | Version ${version.version} | Generated: ${esc(generated)}<br>
-        Issued by: ${esc(version.generatedBy || currentUser?.email || 'System')} | A2RL Sporting
+        Issued by: ${esc(version.generatedBy || currentUserName())} | A2RL Sporting
       </div>
       <h2>Input change to schedule</h2>
       <ul>${changes || '<li>No row-level differences detected.</li>'}</ul>
@@ -5169,7 +5183,8 @@ function removeSchedBlock(id) {
 function clearSchedule() {
   pushScheduleHistory();
   markScheduleMutation('Schedule day cleared');
-  resetScheduleChangeLogForDay(currentSchedDay);
+  const ev = getScheduleEventById();
+  resetScheduleChangeLogForDay(currentSchedDay, ev?.id || schedCfg?.eventId || null, ev?.name || schedCfg?.eventName || '');
   const before = schedule.length;
   schedule = schedule.filter(b => !(matchSelectedScheduleEvent(b) && (b.day||0) === (currentSchedDay||0)));
   const removed = before - schedule.length;
@@ -8084,7 +8099,7 @@ init();
     <div class="modal-title">Edit User Access</div>
     <input type="hidden" id="edit-user-index">
     <div class="form-grid">
-      <div class="field"><label>Email</label><input type="text" id="edit-user-email" readonly></div>
+      <div class="field"><label>User Name</label><input type="text" id="edit-user-email" readonly></div>
       <div class="field"><label>Role</label>
         <select id="edit-user-role" onchange="toggleEditAccessChecksDisabled();toggleEditWorkspaceChecksDisabled();">
           <option value="viewer">Viewer</option>
@@ -8113,7 +8128,7 @@ init();
     <div class="modal-title">Users &amp; workspace access</div>
     <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Create logins, choose which workspaces they may open (On Track, Sim, QG), then fine-tune area access inside the app.</div>
     <div class="form-grid-3">
-      <div class="field"><label>Email</label><input type="email" id="um-email" placeholder="user@email.com"></div>
+      <div class="field"><label>User Name</label><input type="text" id="um-email" placeholder="username"></div>
       <div class="field"><label>Password</label><input type="text" id="um-password" placeholder="temporary password"></div>
       <div class="field"><label>Role</label>
         <select id="um-role" onchange="toggleAccessChecksDisabled();toggleWorkspaceChecksDisabled();"><option value="viewer">Viewer</option><option value="contributor">Contributor</option><option value="admin">Admin</option></select>

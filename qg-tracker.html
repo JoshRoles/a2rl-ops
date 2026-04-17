@@ -965,7 +965,8 @@ function showView(view, teamId=null, sessionId=null){
 
   if(view==='dashboard'){
     renderDashboard();
-    setMainLayout('full');
+    setMainLayout('full-with-sidebar');
+    renderDashboardSidebar();
   } else if(view==='team'){
     currentTier = (teams.find(t=>t.id===teamId)||{}).tier||'rookie';
     renderTeamProfile();
@@ -997,11 +998,12 @@ function setMainLayout(mode){
 
   const isSession = (mode === 'split');
   const isGatewayAdmin = (mode === 'gateway-admin');
-  sidebar.style.display     = (isSession || isGatewayAdmin) ? '' : 'none';
+  const isFullWithSidebar = (mode === 'full-with-sidebar');
+  sidebar.style.display     = (isSession || isGatewayAdmin || isFullWithSidebar) ? '' : 'none';
   sessionCtrl.style.display = isSession ? '' : 'none';
   breadcrumb.style.display  = isSession ? '' : 'none';
   tierBar.style.display     = 'none'; // tier is locked per session; bar hidden
-  content.style.padding     = (isSession || isGatewayAdmin) ? '22px' : '0';
+  content.style.padding     = (isSession || isGatewayAdmin || isFullWithSidebar) ? '22px' : '0';
 
   // Adjust main height based on visible chrome
   // Header 52px + nav 44px + (breadcrumb 36px + progress 33px when session)
@@ -1009,6 +1011,23 @@ function setMainLayout(mode){
   mainArea.style.height = isSession
     ? 'calc(100vh - 165px)'
     : 'calc(100vh - 96px)';
+}
+
+function renderDashboardSidebar(){
+  let html = `<div class="sidebar-section-label">Gateway Setup</div>
+    <div class="gw-item" onclick="gatewayAdminTier='rookie';showView('gateway-admin')">
+      <span class="gw-code rookie">ROOKIE</span>
+      <span class="gw-title-short">Manage Rookie gateways</span>
+    </div>
+    <div class="gw-item" onclick="gatewayAdminTier='challenger';showView('gateway-admin')">
+      <span class="gw-code challenger">CHALLENGER</span>
+      <span class="gw-title-short">Manage Challenger gateways</span>
+    </div>
+    <div class="gw-item" onclick="gatewayAdminTier='pro';showView('gateway-admin')">
+      <span class="gw-code pro">PRO</span>
+      <span class="gw-title-short">Manage PRO gateways</span>
+    </div>`;
+  document.getElementById('sidebar').innerHTML = html;
 }
 
 function setTierUI(tier){

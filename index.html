@@ -1264,6 +1264,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
     <div class="view" id="view-events">
       <div style="display:flex;gap:10px;margin-bottom:18px;align-items:center;">
         <button class="btn primary" onclick="openNewEventModal()">+ New Event</button>
+        <button class="btn" onclick="openEventScheduleChangeLogs()">Event Schedule Change Logs</button>
         <span style="font-size:12px;color:var(--muted);" id="events-count-label"></span>
       </div>
       <div id="events-list" style="display:flex;flex-direction:column;gap:12px;"></div>
@@ -1619,6 +1620,7 @@ let sessions = [];
 let teams = [];
 let weights = [];
 let schedule = [];
+let runtimeSchedule = [];
 let trackAlloc = [];
 let garages = {};
 let thresholds = {};
@@ -1746,6 +1748,10 @@ function loadWorkspaceData() {
   teams = readScopedJson('teams', JSON.parse(JSON.stringify(DEFAULT_TEAMS)), 'a2rl_teams');
   weights = readScopedJson('weights', JSON.parse(JSON.stringify(DEFAULT_WEIGHTS)), 'a2rl_weights');
   schedule = readScopedJson('schedule', [], 'a2rl_schedule');
+  runtimeSchedule = readScopedJson('runtime_schedule', [], '');
+  if ((!Array.isArray(runtimeSchedule) || runtimeSchedule.length === 0) && Array.isArray(schedule) && schedule.some(b => !!b.published)) {
+    runtimeSchedule = JSON.parse(JSON.stringify(schedule));
+  }
   trackAlloc = readScopedJson('trackalloc', [], 'a2rl_trackalloc');
   garages = readScopedJson('garages', {}, 'a2rl_garages');
   thresholds = readScopedJson('thresh', {low:30,med:55,high:75,maxDamage:100000}, 'a2rl_thresh');
@@ -2121,20 +2127,8 @@ function renderScheduleEventSelector() {
   if (schedCfg.eventId && visibleEvents.some(e=>e.id===schedCfg.eventId)) {
     sel.value = schedCfg.eventId;
   } else {
-    const active = getActiveEvent();
-    const fallback = (active && visibleEvents.some(e=>e.id===active.id)) ? active : (visibleEvents[0] || null);
-    sel.value = fallback?.id || '';
-    if (fallback?.id) {
-      if (schedCfg.eventId && schedCfg.eventId !== fallback.id) {
-        currentSchedDay = 0;
-      }
-      schedCfg.eventId = fallback.id;
-      schedCfg.eventName = fallback.name || schedCfg.eventName;
-      schedCfg.eventStart = fallback.startDate || null;
-      schedCfg.days = fallback.days || schedCfg.days || 1;
-    } else {
-      schedCfg.eventId = null;
-    }
+    sel.value = '';
+    schedCfg.eventId = null;
   }
 }
 function onScheduleEventChange() {
@@ -2142,7 +2136,9 @@ function onScheduleEventChange() {
   const evId = sel?.value || '';
   if (!evId) {
     schedCfg.eventId = null;
+    schedCfg.eventStart = null;
     save();
+    renderScheduleView();
     return;
   }
   const ev = (events||[]).find(e=>e.id===evId);
@@ -2188,8 +2184,8 @@ function computeScheduleLive(now=new Date()) {
   dayDate.setDate(dayDate.getDate() + dayIdx);
   const dateStr = toLocalDateStr(dayDate);
 
-  const blocks = schedule
-    .filter(b => b.eventId === ev.id && (b.day||0) === dayIdx && b.type !== 'break' && b.type !== 'reserve')
+  const blocks = getRuntimeSchedule()
+    .filter(b => b.published && b.eventId === ev.id && (b.day||0) === dayIdx && b.type !== 'break' && b.type !== 'reserve')
     .map(b => {
       const startM = _toM(b.time);
       const endM = startM + (b.duration||0);
@@ -2267,7 +2263,7 @@ function syncAutoOnTrack() {
     syncGarageCaptureFromLive();
     renderGarageCaptureTabs();
     if (garageCaptureActiveBlockId) {
-      const b = schedule.find(x => x.id === garageCaptureActiveBlockId);
+      const b = findRuntimeBlockById(garageCaptureActiveBlockId) || schedule.find(x => x.id === garageCaptureActiveBlockId);
       if (b) loadGarageCaptureFromBlock(b, garageCaptureActiveTeam);
     }
     renderPublishedTodayPlan();
@@ -2393,10 +2389,39 @@ function getScheduleChangeLogKey(dayIdx = currentSchedDay) {
   const evKey = String(schedCfg?.eventId || schedCfg?.eventName || 'unassigned-event');
   return `${evKey}::day-${dayIdx}`;
 }
+function resetScheduleChangeLogForDay(dayIdx = currentSchedDay, eventId = null, eventName = '') {
+  if (!scheduleChangeLog || typeof scheduleChangeLog !== 'object') scheduleChangeLog = {};
+  const evId = String(eventId || schedCfg?.eventId || '');
+  const evName = String(eventName || schedCfg?.eventName || '');
+  const keys = new Set();
+  if (evId) keys.add(`${evId}::day-${dayIdx}`);
+  if (evName) keys.add(`${evName}::day-${dayIdx}`);
+  if (!keys.size) keys.add(getScheduleChangeLogKey(dayIdx));
+  keys.forEach(k => {
+    if (scheduleChangeLog[k]) delete scheduleChangeLog[k];
+  });
+}
+function getScheduleLogBucketForEventDay(ev, dayIdx) {
+  if (!ev || !scheduleChangeLog || typeof scheduleChangeLog !== 'object') return null;
+  const keys = [
+    `${String(ev.id || '')}::day-${dayIdx}`,
+    `${String(ev.name || '')}::day-${dayIdx}`,
+  ];
+  for (const k of keys) {
+    if (scheduleChangeLog[k]) return scheduleChangeLog[k];
+  }
+  return null;
+}
 function getScheduleBlocksForDay(dayIdx = currentSchedDay) {
   return (schedule || [])
     .filter(b => matchSelectedScheduleEvent(b) && (b.day || 0) === dayIdx)
     .sort((a,b)=>_toM(a.time)-_toM(b.time));
+}
+function getRuntimeSchedule() {
+  return Array.isArray(runtimeSchedule) ? runtimeSchedule : [];
+}
+function findRuntimeBlockById(id) {
+  return getRuntimeSchedule().find(b => String(b.id) === String(id)) || null;
 }
 function cloneDaySchedule(dayIdx = currentSchedDay) {
   return JSON.parse(JSON.stringify(getScheduleBlocksForDay(dayIdx)));
@@ -2612,6 +2637,7 @@ function save() {
   localStorage.setItem(wk('teams'), JSON.stringify(teams));
   localStorage.setItem(wk('weights'), JSON.stringify(weights));
   localStorage.setItem(wk('schedule'), JSON.stringify(schedule));
+  localStorage.setItem(wk('runtime_schedule'), JSON.stringify(runtimeSchedule));
   localStorage.setItem(wk('trackalloc'), JSON.stringify(trackAlloc));
   localStorage.setItem(wk('garages'), JSON.stringify(garages));
   localStorage.setItem(wk('thresh'), JSON.stringify(thresholds));
@@ -4716,6 +4742,21 @@ function renderScheduleDayTabs() {
 function renderScheduleView() {
   renderScheduleEventSelector();
   const ev = getScheduleEventById();
+  if (!schedCfg.eventId || !ev) {
+    const grid = document.getElementById('schedule-grid');
+    if (grid) grid.innerHTML = '<div class="sched-empty" style="padding:18px;color:var(--muted);font-size:12px;border:1px dashed var(--border2);border-radius:6px;">No event selected. Select an event from the dropdown to view schedule and data.</div>';
+    const lbl = document.getElementById('sched-day-label');
+    if (lbl) lbl.textContent = 'Day —';
+    const tabs = document.getElementById('sched-day-tabs');
+    if (tabs) tabs.innerHTML = '';
+    const statsRow = document.getElementById('sched-stats-row');
+    if (statsRow) statsRow.innerHTML = '';
+    const teamSummary = document.getElementById('sched-team-summary-tbody');
+    if (teamSummary) teamSummary.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:14px;">No event selected.</td></tr>';
+    const publishedTb = document.getElementById('sched-published-tbody');
+    if (publishedTb) publishedTb.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:14px;">No event selected.</td></tr>';
+    return;
+  }
   if (ev) {
     schedCfg.eventName = ev.name || schedCfg.eventName;
     schedCfg.track = ev.track || schedCfg.track;
@@ -4890,8 +4931,8 @@ function renderScheduleView() {
 function renderPublishedSessionsTable() {
   const tb = document.getElementById('sched-published-tbody');
   if (!tb) return;
-  const rows = schedule
-    .filter(b => matchSelectedScheduleEvent(b) && (b.day||0)===currentSchedDay && b.type !== 'break' && b.type !== 'reserve' && (b.teams||[]).length)
+  const rows = getRuntimeSchedule()
+    .filter(b => matchSelectedScheduleEvent(b) && b.published && (b.day||0)===currentSchedDay && b.type !== 'break' && b.type !== 'reserve' && (b.teams||[]).length)
     .sort((a,b)=>((a.day||0)-(b.day||0)) || (_toM(a.time)-_toM(b.time)));
   if (!rows.length) {
     tb.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:14px;">No scheduled sessions for this selected day.</td></tr>';
@@ -4926,7 +4967,7 @@ function renderPublishedSessionsTable() {
 function renderSessionOverviewTable() {
   const tb = document.getElementById('session-overview-tbody');
   if (!tb) return;
-  const rows = schedule.filter(b => matchSelectedScheduleEvent(b) && b.published && b.type !== 'break' && b.type !== 'reserve' && (b.teams||[]).length);
+  const rows = getRuntimeSchedule().filter(b => matchSelectedScheduleEvent(b) && b.published && b.type !== 'break' && b.type !== 'reserve' && (b.teams||[]).length);
   if (!rows.length) {
     tb.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:14px;">No published sessions yet.</td></tr>';
     return;
@@ -4983,7 +5024,7 @@ function toggleSessionDayDetail(id) {
   el.style.display = el.style.display === 'none' ? '' : 'none';
 }
 function downloadScheduleForOrganisation() {
-  const rows = schedule
+  const rows = getRuntimeSchedule()
     .filter(b => matchSelectedScheduleEvent(b) && b.published && b.type !== 'break' && b.type !== 'reserve' && (b.teams||[]).length)
     .sort((a,b)=>((a.day||0)-(b.day||0)) || (_toM(a.time)-_toM(b.time)));
   if (!rows.length) {
@@ -5014,7 +5055,7 @@ function downloadScheduleForOrganisation() {
 }
 
 function pushDayToOnTrack(dayIdx) {
-  const blocks = schedule
+  const blocks = getRuntimeSchedule()
     .filter(b => matchSelectedScheduleEvent(b) && (b.day||0)===dayIdx && b.published && !b.completed && !b.onTrackQueued && b.type!=='break' && b.type!=='reserve' && (b.teams||[]).length)
     .sort((a,b)=>_toM(a.time)-_toM(b.time));
   if (!blocks.length) return;
@@ -5036,7 +5077,7 @@ function pushDayToOnTrack(dayIdx) {
 }
 
 function pushBlockToOnTrack(blockId) {
-  const b = schedule.find(x => x.id === blockId);
+  const b = findRuntimeBlockById(blockId);
   if (!b || b.completed || b.onTrackQueued) return;
   const typeMap = { single:'Single Car', multi:'Multi Car', open:'Open Pit Lane' };
   sessionQueue.push({
@@ -5069,6 +5110,7 @@ function removeSchedBlock(id) {
 function clearSchedule() {
   pushScheduleHistory();
   markScheduleMutation('Schedule day cleared');
+  resetScheduleChangeLogForDay(currentSchedDay);
   const before = schedule.length;
   schedule = schedule.filter(b => !(matchSelectedScheduleEvent(b) && (b.day||0) === (currentSchedDay||0)));
   const removed = before - schedule.length;
@@ -5136,15 +5178,41 @@ function nextSchedDay() {
 function exportScheduleToSessions() {
   const blocks = schedule.filter(b=>matchSelectedScheduleEvent(b) && b.type!=='break' && b.type!=='reserve' && b.teams && b.teams.length>0);
   if (!blocks.length) { alert('No session blocks to push. Build a schedule first.'); return; }
-  blocks.forEach(b => {
-    b.published = true;
-    b.completed = false;
-    b.completedTeams = [];
-    b.runStarted = false;
+  const prevById = Object.fromEntries(getRuntimeSchedule().map(b => [String(b.id), b]));
+  const liveId = String(liveSession?.schedBlockId || scheduleLive?.current?.id || '');
+  runtimeSchedule = JSON.parse(JSON.stringify(schedule || [])).map(b => {
+    const withFlags = { ...b };
+    const isSessionRow = b.type !== 'break' && b.type !== 'reserve' && (b.teams || []).length;
+    if (isSessionRow) {
+      withFlags.published = true;
+      withFlags.completed = false;
+      withFlags.completedTeams = [];
+      withFlags.runStarted = false;
+      withFlags.onTrackQueued = false;
+    }
+    const prev = prevById[String(b.id)];
+    if (prev) {
+      // Keep operational state for rows already queued/running/completed.
+      if (prev.onTrackQueued || prev.runStarted || prev.completed) {
+        withFlags.onTrackQueued = !!prev.onTrackQueued;
+        withFlags.runStarted = !!prev.runStarted;
+        withFlags.completed = !!prev.completed;
+        withFlags.completedTeams = Array.isArray(prev.completedTeams) ? prev.completedTeams.slice() : [];
+      }
+      // Never rewrite the live block while it is active.
+      if (liveId && String(prev.id) === liveId) {
+        return { ...prev };
+      }
+    }
+    return withFlags;
   });
   lastChangeNotesBase = JSON.parse(JSON.stringify(schedule));
   markScheduleMutation('Initial issued schedule');
   save();
+  renderPublishedSessionsTable();
+  renderSessionOverviewTable();
+  renderPublishedTodayPlan();
+  renderActivityLog();
   alert('Schedule published. Sessions will be added to Session History only after risk data is submitted.');
 }
 
@@ -5181,7 +5249,7 @@ function renderGarage() {
   syncGarageCaptureFromLive();
   renderGarageCaptureTabs();
   if (garageCaptureActiveBlockId) {
-    const b = schedule.find(x => x.id === garageCaptureActiveBlockId);
+    const b = findRuntimeBlockById(garageCaptureActiveBlockId) || schedule.find(x => x.id === garageCaptureActiveBlockId);
     if (b) loadGarageCaptureFromBlock(b, garageCaptureActiveTeam);
   }
   renderSessionQueue();
@@ -5195,7 +5263,7 @@ function syncGarageCaptureFromLive() {
   const teamSel = document.getElementById('g-team');
   if (!teamSel) return;
   if (liveBlk && (liveBlk.teams||[]).length) {
-    const sb = schedule.find(x => x.id === liveBlk.id);
+    const sb = findRuntimeBlockById(liveBlk.id);
     if (sb && sb.published && !sb.completed) {
       sb.runStarted = true;
       // Keep manual tab choice; only auto-focus when nothing valid is selected.
@@ -5230,7 +5298,7 @@ function getSessionOrdinalForBlock(block) {
   if (!block || !(block.teams||[]).length) return 1;
   const team = (block.teams||[])[0];
   const day = block.day || 0;
-  const all = schedule
+  const all = getRuntimeSchedule()
     .filter(b => (b.day||0)===day && b.type!=='break' && b.type!=='reserve' && (b.teams||[])[0]===team)
     .sort((a,b)=>_toM(a.time)-_toM(b.time));
   const idx = all.findIndex(b => b.id === block.id);
@@ -5266,7 +5334,7 @@ function recomputeBlockCompletion(block) {
 }
 function upsertPendingSessionFromLive(live) {
   if (!live || !live.team) return;
-  const sb = live.schedBlockId ? (schedule.find(x => x.id === live.schedBlockId) || null) : null;
+  const sb = live.schedBlockId ? (findRuntimeBlockById(live.schedBlockId) || null) : null;
   const capKey = sb ? buildCaptureKey(sb.id, live.team) : '';
   const alreadyReal = sessions.some(s => !s.stub && (
     (capKey && String(s.schedCaptureKey || '') === capKey) ||
@@ -5311,7 +5379,7 @@ function upsertPendingSessionFromLive(live) {
 
 function getPendingCaptureBlocksForToday() {
   const dayIdx = getTodayScheduleDayIndex();
-  const blocks = schedule
+  const blocks = getRuntimeSchedule()
     .filter(b => (b.day||0)===dayIdx && b.published && !!b.runStarted && b.type!=='break' && b.type!=='reserve' && (b.teams||[]).length)
     .sort((a,b)=>_toM(a.time)-_toM(b.time));
   const items = [];
@@ -5360,7 +5428,7 @@ function saveGarageCaptureDraftFromInputs() {
 }
 
 function selectGarageCaptureTab(blockId, team='') {
-  const block = schedule.find(b => b.id === blockId);
+  const block = findRuntimeBlockById(blockId) || schedule.find(b => b.id === blockId);
   const resolvedTeam = team || ((block?.teams||[])[0] || '');
   garageCaptureActiveTeam = resolvedTeam;
   garageCaptureActiveBlockId = blockId;
@@ -5406,7 +5474,7 @@ function renderPublishedTodayPlan() {
   const el = document.getElementById('garage-published-today');
   if (!el) return;
   const dayIdx = getTodayScheduleDayIndex();
-  const blocks = schedule
+  const blocks = getRuntimeSchedule()
     .filter(b => (b.day||0) === dayIdx && b.published && b.type !== 'break' && b.type !== 'reserve' && (b.teams||[]).length)
     .sort((a,b)=>_toM(a.time)-_toM(b.time));
   if (!blocks.length) {
@@ -5539,11 +5607,11 @@ function startActiveSession(opts) {
   if (document.getElementById('view-garage')) showView('garage');
   const liveBlk = scheduleLive?.current;
   let sb = null;
-  if (opts?.schedBlockId) sb = schedule.find(x => x.id === opts.schedBlockId) || null;
-  if (!sb && liveBlk && (liveBlk.teams||[]).includes(team)) sb = schedule.find(x => x.id === liveBlk.id) || null;
+  if (opts?.schedBlockId) sb = findRuntimeBlockById(opts.schedBlockId);
+  if (!sb && liveBlk && (liveBlk.teams||[]).includes(team)) sb = findRuntimeBlockById(liveBlk.id);
   if (!sb) {
     const dayIdx = getTodayScheduleDayIndex();
-    sb = schedule
+    sb = getRuntimeSchedule()
       .filter(b => (b.day||0)===dayIdx && b.published && !b.completed && (b.teams||[]).includes(team) && b.type!=='break' && b.type!=='reserve')
       .sort((a,b)=>_toM(a.time)-_toM(b.time))[0] || null;
   }
@@ -5679,7 +5747,7 @@ function renderActivityLog() {
   const tbody = document.getElementById('activity-tbody');
   if (!tbody) return;
   const dayIdx = getTodayScheduleDayIndex();
-  const schedRows = schedule
+  const schedRows = getRuntimeSchedule()
     .filter(b => (b.day||0)===dayIdx && b.published && b.type!=='break' && b.type!=='reserve' && (b.teams||[]).length)
     .map((b, i) => ({
       _sched: true,
@@ -5726,14 +5794,14 @@ function renderTrackTime() {
   const selectedEventId = (evSel?.value && evSel.value !== '__all__') ? evSel.value : null;
   const teamNames = new Set();
   teams.forEach(t => { if (t.active) teamNames.add(t.name); });
-  schedule
+  getRuntimeSchedule()
     .filter(b => b.published && (!selectedEventId || String(b.eventId || '') === String(selectedEventId)))
     .forEach(b => (b.teams||[]).forEach(n => teamNames.add(n)));
   sessions
     .filter(s => !selectedEventId || String(s.eventId || '') === String(selectedEventId))
     .forEach(s => { if (s.team) teamNames.add(s.team); });
   const rows = Array.from(teamNames).map(name => {
-    const schedMins = schedule
+    const schedMins = getRuntimeSchedule()
       .filter(b => b.published && b.type!=='break' && b.type!=='reserve' && (!selectedEventId || String(b.eventId || '') === String(selectedEventId)) && (b.teams||[]).includes(name))
       .reduce((a,b)=>a+(parseInt(b.duration,10)||0),0);
     const usedMins = sessions
@@ -7410,6 +7478,80 @@ function deleteEvent(i) {
   events.splice(i,1); saveEvents(); renderEventsView();
 }
 
+let eventLogViewerState = { eventId: '', dayIdx: 0 };
+function openEventScheduleChangeLogs() {
+  const sel = document.getElementById('event-log-event-select');
+  if (!sel) return;
+  if (!events.length) {
+    alert('No events available.');
+    return;
+  }
+  const opts = events.map(ev => `<option value="${ev.id}">${ev.name || ('Event ' + (ev.num || '?'))}</option>`);
+  sel.innerHTML = opts.join('');
+  const preferred = (events.find(e => String(e.id) === String(schedCfg.eventId || '')) || events[0] || null);
+  eventLogViewerState.eventId = preferred ? String(preferred.id) : '';
+  if (eventLogViewerState.eventId) sel.value = eventLogViewerState.eventId;
+  eventLogViewerState.dayIdx = 0;
+  renderEventScheduleChangeLogs();
+  openModal('modal-event-schedule-logs');
+}
+function setEventLogEvent() {
+  const sel = document.getElementById('event-log-event-select');
+  eventLogViewerState.eventId = String(sel?.value || '');
+  eventLogViewerState.dayIdx = 0;
+  renderEventScheduleChangeLogs();
+}
+function setEventLogDay(dayIdx) {
+  eventLogViewerState.dayIdx = Math.max(0, parseInt(dayIdx, 10) || 0);
+  renderEventScheduleChangeLogs();
+}
+function renderEventScheduleChangeLogs() {
+  const tabs = document.getElementById('event-log-day-tabs');
+  const body = document.getElementById('event-log-body');
+  const meta = document.getElementById('event-log-meta');
+  if (!tabs || !body || !meta) return;
+  const ev = events.find(e => String(e.id) === String(eventLogViewerState.eventId || '')) || null;
+  if (!ev) {
+    tabs.innerHTML = '';
+    body.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 2px;">Select an event to view schedule change logs.</div>';
+    meta.textContent = '';
+    return;
+  }
+  const days = Math.max(1, parseInt(ev.days, 10) || 1);
+  const dayIdx = Math.max(0, Math.min(days - 1, eventLogViewerState.dayIdx || 0));
+  eventLogViewerState.dayIdx = dayIdx;
+  tabs.innerHTML = Array.from({ length: days }, (_, i) => {
+    const active = i === dayIdx;
+    return `<button class="btn sm${active ? ' primary' : ''}" onclick="setEventLogDay(${i})">Day ${i + 1}</button>`;
+  }).join('');
+  const bucket = getScheduleLogBucketForEventDay(ev, dayIdx);
+  meta.textContent = `Event: ${ev.name || '—'} | Day ${dayIdx + 1}`;
+  if (!bucket || !Array.isArray(bucket.versions) || !bucket.versions.length) {
+    body.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 2px;">No schedule versions saved for this day yet.</div>';
+    return;
+  }
+  const items = [...bucket.versions].sort((a,b) => (b.version || 0) - (a.version || 0));
+  body.innerHTML = items.map(v => {
+    const lines = Array.isArray(v.changes) && v.changes.length ? v.changes : ['No row-level differences detected.'];
+    const changeList = lines.map(line => `<li>${String(line).replace(/</g,'&lt;').replace(/>/g,'&gt;')}</li>`).join('');
+    const when = new Date(v.generatedAt || Date.now()).toLocaleString();
+    return `<div class="panel" style="margin:0 0 10px 0;">
+      <div class="panel-head">
+        <div class="panel-title">Version ${v.version}</div>
+        <div style="font-size:11px;color:var(--muted);">Issued ${when}</div>
+      </div>
+      <div class="panel-body" style="font-size:12px;">
+        <div style="display:flex;gap:18px;flex-wrap:wrap;color:var(--muted);margin-bottom:8px;">
+          <span>Issued by: <span style="color:var(--text);">${(v.generatedBy || 'System').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span></span>
+          <span>Reason: <span style="color:var(--text);">${(v.reason || 'Schedule updated').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span></span>
+        </div>
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Changes in this issued version</div>
+        <ul style="margin:0 0 0 18px;line-height:1.5;">${changeList}</ul>
+      </div>
+    </div>`;
+  }).join('');
+}
+
 // Hook showView for events tab
 const _baseShowView = showView;
 showView = function(id) {
@@ -7949,6 +8091,24 @@ init();
     <div id="schedule-versions-body"></div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modal-schedule-versions')">Close</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="modal-event-schedule-logs">
+  <div class="modal" style="width:min(980px,96vw);max-height:90vh;overflow-y:auto;">
+    <button class="modal-close" onclick="closeModal('modal-event-schedule-logs')">✕</button>
+    <div class="modal-title">Event Schedule Change Logs</div>
+    <div class="form-grid" style="margin-bottom:10px;">
+      <div class="field">
+        <label>Event</label>
+        <select id="event-log-event-select" onchange="setEventLogEvent()"></select>
+      </div>
+    </div>
+    <div id="event-log-meta" style="font-size:12px;color:var(--muted);margin-bottom:10px;"></div>
+    <div id="event-log-day-tabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;"></div>
+    <div id="event-log-body"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-event-schedule-logs')">Close</button>
     </div>
   </div>
 </div>

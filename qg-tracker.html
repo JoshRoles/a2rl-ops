@@ -333,10 +333,12 @@
         <img src="assets/a2rl-logo-home.png" alt="Abu Dhabi Autonomous Racing League — A2RL" class="header-brand-img">
       </div>
     </a>
+    <a href="index.html" class="header-brand-link" onclick="qgLogoGoHome(event)" title="Return to workspace home">
     <div class="header-title">
       <div class="header-title-main">A2RL Operations Command Center</div>
       <div class="header-title-sub">QG Tracker</div>
     </div>
+    </a>
   </div>
   <div class="header-right">
     <button class="summary-btn" id="gatewayAdminBtn" onclick="showView('gateway-admin')">⚙ Gateway Setup</button>
@@ -963,8 +965,7 @@ function showView(view, teamId=null, sessionId=null){
 
   if(view==='dashboard'){
     renderDashboard();
-    setMainLayout('full-with-sidebar');
-    renderDashboardSidebar();
+    setMainLayout('full');
   } else if(view==='team'){
     currentTier = (teams.find(t=>t.id===teamId)||{}).tier||'rookie';
     renderTeamProfile();
@@ -996,12 +997,11 @@ function setMainLayout(mode){
 
   const isSession = (mode === 'split');
   const isGatewayAdmin = (mode === 'gateway-admin');
-  const isFullWithSidebar = (mode === 'full-with-sidebar');
-  sidebar.style.display     = (isSession || isGatewayAdmin || isFullWithSidebar) ? '' : 'none';
+  sidebar.style.display     = (isSession || isGatewayAdmin) ? '' : 'none';
   sessionCtrl.style.display = isSession ? '' : 'none';
   breadcrumb.style.display  = isSession ? '' : 'none';
   tierBar.style.display     = 'none'; // tier is locked per session; bar hidden
-  content.style.padding     = (isSession || isGatewayAdmin || isFullWithSidebar) ? '22px' : '0';
+  content.style.padding     = (isSession || isGatewayAdmin) ? '22px' : '0';
 
   // Adjust main height based on visible chrome
   // Header 52px + nav 44px + (breadcrumb 36px + progress 33px when session)
@@ -1009,29 +1009,6 @@ function setMainLayout(mode){
   mainArea.style.height = isSession
     ? 'calc(100vh - 165px)'
     : 'calc(100vh - 96px)';
-}
-
-function renderDashboardSidebar(){
-  let html = `<div class="sidebar-section-label">Gateway Setup</div>
-    <div class="gw-item" onclick="gatewayAdminTier='rookie';showView('gateway-admin')">
-      <span class="gw-code rookie">ROOKIE</span>
-      <span class="gw-title-short">Manage Rookie gateways</span>
-    </div>
-    <div class="gw-item" onclick="gatewayAdminTier='challenger';showView('gateway-admin')">
-      <span class="gw-code challenger">CHALLENGER</span>
-      <span class="gw-title-short">Manage Challenger gateways</span>
-    </div>
-    <div class="gw-item" onclick="gatewayAdminTier='pro';showView('gateway-admin')">
-      <span class="gw-code pro">PRO</span>
-      <span class="gw-title-short">Manage PRO gateways</span>
-    </div>`;
-  const teamCount = teams.length;
-  html += `<div class="sidebar-section-label">Overview</div>
-    <div class="gw-item" onclick="showView('dashboard')">
-      <span class="gw-code rookie">ALL</span>
-      <span class="gw-title-short">${teamCount} team${teamCount===1?'':'s'} registered</span>
-    </div>`;
-  document.getElementById('sidebar').innerHTML = html;
 }
 
 function setTierUI(tier){

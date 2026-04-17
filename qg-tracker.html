@@ -29,8 +29,12 @@
   .header-title{display:flex;flex-direction:column;gap:2px;}
   .header-title-main{font-family:'Roboto',sans-serif;font-size:19px;font-weight:700;line-height:1;color:var(--text);}
   .header-title-sub{font-size:11px;color:#4ade80;text-shadow:0 0 10px rgba(34,197,94,0.55);}
-  .header-right{display:flex;align-items:center;gap:10px;}
+  .header-right{display:flex;align-items:center;gap:10px;position:relative;}
   .header-date{font-family:'Roboto Mono',monospace;font-size:11px;color:var(--text-muted);}
+  .settings-menu{position:absolute;top:34px;right:84px;min-width:170px;background:var(--surface);border:1px solid var(--border-bright);border-radius:6px;box-shadow:0 12px 24px rgba(0,0,0,0.45);display:none;z-index:300;}
+  .settings-menu.show{display:block;}
+  .settings-menu-item{width:100%;text-align:left;background:none;border:none;color:var(--text);padding:9px 12px;font-size:12px;cursor:pointer;}
+  .settings-menu-item:hover{background:rgba(255,255,255,0.05);}
 
   /* ── NAV ── */
   .nav-strip{display:none;}
@@ -341,7 +345,10 @@
     </a>
   </div>
   <div class="header-right">
-    <button class="summary-btn" id="gatewayAdminBtn" onclick="showView('gateway-admin')">⚙ Gateway Setup</button>
+    <button class="summary-btn" id="settingsCogBtn" onclick="toggleQgSettingsMenu(event)" title="Settings">⚙</button>
+    <div class="settings-menu" id="qgSettingsMenu">
+      <button class="settings-menu-item" onclick="openGatewayAdminFromMenu()">Gateway Setup</button>
+    </div>
     <div class="header-date" id="liveDate"></div>
   </div>
 </div>
@@ -960,13 +967,14 @@ function showView(view, teamId=null, sessionId=null){
       summaryBtn.textContent='📋 Summary';
     }
   }
-  const gatewayAdminBtn = document.getElementById('gatewayAdminBtn');
-  if(gatewayAdminBtn) gatewayAdminBtn.classList.toggle('active', view==='gateway-admin');
+  const settingsCogBtn = document.getElementById('settingsCogBtn');
+  if(settingsCogBtn) settingsCogBtn.classList.toggle('active', view==='gateway-admin');
+  const qgSettingsMenu = document.getElementById('qgSettingsMenu');
+  if(qgSettingsMenu) qgSettingsMenu.classList.remove('show');
 
   if(view==='dashboard'){
     renderDashboard();
-    setMainLayout('full-with-sidebar');
-    renderDashboardSidebar();
+    setMainLayout('full');
   } else if(view==='team'){
     currentTier = (teams.find(t=>t.id===teamId)||{}).tier||'rookie';
     renderTeamProfile();
@@ -998,12 +1006,11 @@ function setMainLayout(mode){
 
   const isSession = (mode === 'split');
   const isGatewayAdmin = (mode === 'gateway-admin');
-  const isFullWithSidebar = (mode === 'full-with-sidebar');
-  sidebar.style.display     = (isSession || isGatewayAdmin || isFullWithSidebar) ? '' : 'none';
+  sidebar.style.display     = (isSession || isGatewayAdmin) ? '' : 'none';
   sessionCtrl.style.display = isSession ? '' : 'none';
   breadcrumb.style.display  = isSession ? '' : 'none';
   tierBar.style.display     = 'none'; // tier is locked per session; bar hidden
-  content.style.padding     = (isSession || isGatewayAdmin || isFullWithSidebar) ? '22px' : '0';
+  content.style.padding     = (isSession || isGatewayAdmin) ? '22px' : '0';
 
   // Adjust main height based on visible chrome
   // Header 52px + nav 44px + (breadcrumb 36px + progress 33px when session)
@@ -1011,26 +1018,6 @@ function setMainLayout(mode){
   mainArea.style.height = isSession
     ? 'calc(100vh - 165px)'
     : 'calc(100vh - 96px)';
-}
-
-function renderDashboardSidebar(){
-  document.getElementById('sidebar').innerHTML = renderGatewayTabsSidebar();
-}
-
-function renderGatewayTabsSidebar(){
-  return `<div class="sidebar-section-label">Gateway Categories</div>
-    <div class="gw-item" onclick="gatewayAdminTier='rookie';showView('gateway-admin')">
-      <span class="gw-code rookie">ROOKIE</span>
-      <span class="gw-title-short">Rookie</span>
-    </div>
-    <div class="gw-item" onclick="gatewayAdminTier='challenger';showView('gateway-admin')">
-      <span class="gw-code challenger">CHALLENGER</span>
-      <span class="gw-title-short">Challenger</span>
-    </div>
-    <div class="gw-item" onclick="gatewayAdminTier='pro';showView('gateway-admin')">
-      <span class="gw-code pro">PRO</span>
-      <span class="gw-title-short">Pro</span>
-    </div>`;
 }
 
 function setTierUI(tier){
@@ -1317,7 +1304,7 @@ function renderSessionSidebar(){
   if(!sess) return;
   const tier = sess.tier;
   const t = gateways[tier];
-  let html = renderGatewayTabsSidebar();
+  let html = '';
 
   const renderSection = (label,items)=>{
     if(!items||!items.length) return;
@@ -1547,6 +1534,19 @@ function setTier(tier){
   if(currentView==='session') return;
   currentTier=tier;
   setTierUI(tier);
+}
+
+function toggleQgSettingsMenu(ev){
+  if(ev) ev.stopPropagation();
+  const menu = document.getElementById('qgSettingsMenu');
+  if(!menu) return;
+  menu.classList.toggle('show');
+}
+
+function openGatewayAdminFromMenu(){
+  const menu = document.getElementById('qgSettingsMenu');
+  if(menu) menu.classList.remove('show');
+  showView('gateway-admin');
 }
 
 function textAreaList(value){
@@ -2072,6 +2072,16 @@ async function init(){
   await loadFromStorage();
   showView('dashboard');
 }
+document.addEventListener('click', function(ev){
+  const menu = document.getElementById('qgSettingsMenu');
+  const btn = document.getElementById('settingsCogBtn');
+  if(!menu || !btn) return;
+  const insideMenu = menu.contains(ev.target);
+  const onButton = btn.contains(ev.target);
+  if(!insideMenu && !onButton){
+    menu.classList.remove('show');
+  }
+});
 init();
 </script>
 </body>

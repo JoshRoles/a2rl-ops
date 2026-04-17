@@ -7571,6 +7571,7 @@ function clamp01(v) {
 }
 const CSV_IMPORT_FIELDS = [
   { key:'team', label:'Team', aliases:['team', 'teamname', 'constructor'], required:true },
+  { key:'track', label:'Track', aliases:['track', 'trackname', 'circuit', 'venue'], required:false },
   { key:'timestamp', label:'Timestamp', aliases:['timestamp', 'datetime', 'date_time', 'sessiontimestamp'], required:false },
   { key:'date', label:'Date', aliases:['date', 'rundate', 'trackdate'], required:false },
   { key:'time', label:'Time', aliases:['time', 'runtime', 'tracktime'], required:false },
@@ -7693,7 +7694,8 @@ function confirmCsvImport() {
       const s = {
         id: Date.now() + idx + Math.floor(Math.random() * 1000),
         team,
-            eventType: raw('eventType') || defaultEventType(),
+        track: raw('track') || schedCfg.track || '',
+        eventType: raw('eventType') || defaultEventType(),
         sessType: raw('sessType') || 'Single Car',
         sessNum: parseInt(parseCsvNumber(raw('sessNum')) || 1, 10) || 1,
         timestamp: trackTs,

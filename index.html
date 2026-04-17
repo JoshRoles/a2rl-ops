@@ -6895,7 +6895,10 @@ function initLiveCharts() {
   const active = teams.filter(t=>t.active);
 
   // Risk history: per-team series from real sessions
-  const labels = real.map((s,i)=>'#'+(i+1));
+  const labels = real.map(s => {
+    const dt = getSessionDateObj(s);
+    return isNaN(dt) ? '—' : dt.toLocaleDateString('en-GB', { day:'2-digit', month:'short' });
+  });
   const byTeam = {};
   active.forEach(t => { byTeam[t.name] = []; });
   real.forEach(s => {
@@ -6920,7 +6923,21 @@ function initLiveCharts() {
         pointRadius:0
       }))
     },
-    options:{...chartCfg, responsive:true, maintainAspectRatio:false, plugins:{legend:{display:true}}}
+    options:{
+      ...chartCfg,
+      responsive:true,
+      maintainAspectRatio:false,
+      scales:{
+        x:{
+          ...chartCfg.scales.x,
+          title:{ display:true, text:'Date', color:'#6b7a99' }
+        },
+        y:{
+          ...chartCfg.scales.y
+        }
+      },
+      plugins:{legend:{display:true}}
+    }
   });
 
   // DQI: aggregate totals from real sessions (fleet)

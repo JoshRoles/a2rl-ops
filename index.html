@@ -1802,6 +1802,7 @@ function applyWorkspaceUI() {
   const garageModalTitle = document.getElementById('garage-modal-title');
   const topbarSessionBadge = document.getElementById('topbar-session-badge');
   const topbarExportBtn = document.getElementById('topbar-export-btn');
+  const sidebarLive = document.querySelector('.sidebar-live');
   const content = document.querySelector('.content');
   const qgMode = isQGWorkspace();
   if (shell) shell.classList.toggle('qg-mode', qgMode);
@@ -1836,7 +1837,10 @@ function applyWorkspaceUI() {
   if (newTrackName) newTrackName.placeholder = currentWorkspace === 'sim' ? 'Add simulation venue...' : 'Add track name...';
   if (buildScheduleModalTitle) buildScheduleModalTitle.textContent = currentWorkspace === 'sim' ? 'Build Simulation Session Plan' : 'Build Track Schedule';
   if (garageModalTitle) garageModalTitle.textContent = currentWorkspace === 'sim' ? 'Edit Sim Paddock Allocation' : 'Edit Garage Allocation';
-  document.querySelectorAll('[data-core-nav="1"]').forEach(el => { el.style.display = qgMode ? 'none' : ''; });
+  document.querySelectorAll('.sidebar .nav-item, .sidebar .sidebar-section-label').forEach(el => {
+    el.style.display = qgMode ? 'none' : '';
+  });
+  if (sidebarLive) sidebarLive.style.display = qgMode ? 'none' : 'flex';
   if (topbarSessionBadge) topbarSessionBadge.style.display = qgMode ? 'none' : 'flex';
   if (topbarExportBtn) topbarExportBtn.style.display = qgMode ? 'none' : '';
   if (topbarLive) topbarLive.style.display = qgMode ? 'none' : topbarLive.style.display;

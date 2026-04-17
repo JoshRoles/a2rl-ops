@@ -2881,6 +2881,8 @@ function openAllScheduleVersions() {
 }
 
 function buildWorkspaceStatePayload() {
+  let qgTrackerState = {};
+  try { qgTrackerState = JSON.parse(localStorage.getItem(wk('qg_tracker_state')) || '{}') || {}; } catch {}
   return {
     sessions,
     teams,
@@ -2900,6 +2902,7 @@ function buildWorkspaceStatePayload() {
     schedule_change_log: scheduleChangeLog || {},
     cat_mult: CAT_MULT,
     events,
+    qg_tracker_state: qgTrackerState,
     sched_zoom: schedZoom,
     active_view: currentWorkspace ? localStorage.getItem(wk('active_view')) : null,
   };
@@ -2925,6 +2928,7 @@ function persistWorkspaceStateToLocal(state) {
   put('schedule_change_log', state.schedule_change_log || {});
   put('cat_mult', state.cat_mult || { rookie: 1.0, challenger: 0.8, pro: 0.6 });
   put('events', state.events || []);
+  put('qg_tracker_state', state.qg_tracker_state || {});
   localStorage.setItem(wk('sched_zoom'), String(state.sched_zoom || 1));
   if (state.active_view) localStorage.setItem(wk('active_view'), String(state.active_view));
 }
@@ -2939,6 +2943,7 @@ function isWorkspaceStateMeaningful(state) {
     hasArray('schedule') ||
     hasArray('runtime_schedule') ||
     hasArray('events') ||
+    hasObject('qg_tracker_state') ||
     hasObject('event_cfg') ||
     hasObject('sched_cfg') ||
     hasObject('schedule_change_log') ||
@@ -3279,7 +3284,7 @@ function renderLiveTable() {
     team: t,
     score: liveRisks[t.name] || 0,
     ttc: 0, estops: 0
-  })).sort((a,b) => a.score - b.score);
+  })).sort((a,b) => b.score - a.score);
   const hasRealRisk = sessions.some(s => (s.riskScore || 0) > 0 && !s.stub);
 
   let rank = 1;
@@ -3334,7 +3339,7 @@ function renderLiveTable() {
   arcEl.setAttribute('stroke-dasharray', `${263*(avg/100)} 377`);
   arcEl.setAttribute('stroke', avg < thresholds.low ? '#00e87a' : avg < thresholds.med ? '#ffaa00' : '#ff3c3c');
 
-  const highest = hasRealRisk ? sorted[sorted.length-1] : null;
+  const highest = hasRealRisk ? sorted[0] : null;
   if (highest && highest.score > 0) {
     document.getElementById('stat-highest').textContent = `${highest.team.name} · ${highest.score.toFixed(1)}`;
     const tier = riskTier(highest.score);

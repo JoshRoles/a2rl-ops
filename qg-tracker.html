@@ -773,6 +773,48 @@ function lsGet(key){
 function lsSet(key, val){
   try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){}
 }
+function getSharedQGStateKey(){
+  try{
+    if (window.parent && window.parent !== window) {
+      if (typeof window.parent.wk === 'function') return window.parent.wk('qg_tracker_state');
+      if (String(window.parent.currentWorkspace || '') === 'qg') return 'a2rl_qg_qg_tracker_state';
+    }
+  }catch(e){}
+  return '';
+}
+function loadSharedQGState(){
+  const key = getSharedQGStateKey();
+  if (!key) return null;
+  return lsGet(key);
+}
+function saveSharedQGState(state){
+  const key = getSharedQGStateKey();
+  if (!key) return;
+  lsSet(key, state);
+  try{
+    if (window.parent && window.parent !== window && typeof window.parent.scheduleSupabaseSync === 'function') {
+      window.parent.scheduleSupabaseSync();
+    }
+  }catch(e){}
+}
+function exportQGState(){
+  return {
+    teams: Array.isArray(teams) ? teams : [],
+    sessions: Array.isArray(sessions) ? sessions : [],
+    attempts: Array.isArray(attempts) ? attempts : [],
+    licenses: licenses && typeof licenses === 'object' ? licenses : {},
+    gateways
+  };
+}
+function applyQGState(state){
+  if (!state || typeof state !== 'object') return false;
+  teams = Array.isArray(state.teams) ? state.teams : [];
+  sessions = Array.isArray(state.sessions) ? state.sessions : [];
+  attempts = Array.isArray(state.attempts) ? state.attempts : [];
+  licenses = state.licenses && typeof state.licenses === 'object' ? state.licenses : {};
+  applyGatewayState(state.gateways || lsGet('a2rl-qg-gateways') || {});
+  return true;
+}
 
 function normalizeGatewayItem(raw){
   const g = raw && typeof raw === 'object' ? raw : {};
@@ -822,6 +864,8 @@ function applyGatewayState(rawState){
 }
 
 async function loadFromStorage(){
+  const shared = loadSharedQGState();
+  if (applyQGState(shared)) return;
   if(hasArtifactStorage()){
     try{ const r=await window.storage.get('a2rl-qg-teams');    if(r) teams=JSON.parse(r.value);    }catch(e){}
     try{ const r=await window.storage.get('a2rl-qg-sessions'); if(r) sessions=JSON.parse(r.value); }catch(e){}
@@ -838,6 +882,7 @@ async function loadFromStorage(){
 }
 
 async function saveToStorage(){
+  saveSharedQGState(exportQGState());
   if(hasArtifactStorage()){
     try{
       await window.storage.set('a2rl-qg-teams',    JSON.stringify(teams));
@@ -890,7 +935,8 @@ function canViewQG(){
   if (!u) return !isEmbeddedInOpsShell();
   if (String(u.role || '').toLowerCase() === 'admin') return true;
   const allowed = Array.isArray(u.allowedViews) ? u.allowedViews : [];
-  return allowed.includes('qg') || allowed.includes('qg_view');
+  const workspaces = Array.isArray(u.allowedWorkspaces) ? u.allowedWorkspaces : [];
+  return allowed.includes('qg') || allowed.includes('qg_view') || workspaces.includes('qg');
 }
 function canCertificateQG(){
   const u = getParentCurrentUser();
@@ -2174,6 +2220,13 @@ document.addEventListener('click', function(ev){
   if(!insideMenu && !onButton){
     menu.classList.remove('show');
   }
+});
+window.addEventListener('storage', function(ev){
+  const key = getSharedQGStateKey();
+  if (!key || ev.key !== key) return;
+  loadFromStorage().then(() => {
+    showView(currentView || 'dashboard', currentTeamId, currentSessionId);
+  });
 });
 init();
 </script>

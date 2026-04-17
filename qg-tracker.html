@@ -886,6 +886,11 @@ function canCertificateQG(){
   const allowed = Array.isArray(u.allowedViews) ? u.allowedViews : [];
   return allowed.includes('qg_certificate');
 }
+function requireCertificateQG(msg){
+  if (canCertificateQG()) return true;
+  alert(msg || 'You do not have permission to certificate QG.');
+  return false;
+}
 function applyQGPermissionUI(){
   const settingsBtn = document.getElementById('settingsCogBtn');
   if (settingsBtn) settingsBtn.style.display = isParentAdmin() ? '' : 'none';
@@ -1144,20 +1149,14 @@ function renderDashboard(){
 // TEAM PROFILE
 // ══════════════════════════════════════════════════════════════
 function issueLicense(teamId, verdict, rcOfficer, notes){
-  if(!canCertificateQG()){
-    alert('You do not have permission to certificate QG.');
-    return;
-  }
+  if(!requireCertificateQG('You do not have permission to certificate QG.')) return;
   licenses[teamId] = {verdict, issuedBy: rcOfficer, issuedAt: Date.now(), notes: notes||''};
   saveToStorage();
   renderTeamProfile();
 }
 
 function revokeLicense(teamId){
-  if(!canCertificateQG()){
-    alert('You do not have permission to certificate QG.');
-    return;
-  }
+  if(!requireCertificateQG('You do not have permission to certificate QG.')) return;
   if(!confirm('Revoke this license decision? The team will return to eligible/incomplete status.')) return;
   delete licenses[teamId];
   saveToStorage();
@@ -1479,6 +1478,7 @@ function renderGateway(gw){
   const latest = latestAttempt(currentSessionId, gw.id);
   const history = gwAttempts(currentSessionId, gw.id);
   const d = latest || {verdict:'pending', notes:''};
+  const canMutate = canCertificateQG();
 
   let tags='';
   if(gw.mandatory!==false) tags+='<span class="tag-mandatory">Mandatory</span> ';
@@ -1541,11 +1541,12 @@ function renderGateway(gw){
       <div class="decision-panel">
         <div class="decision-label">Record Attempt</div>
         <div class="decision-btns">
-          <button class="decision-btn pass-btn" onclick="recordAttempt('${gw.id}','pass')">✓ Pass</button>
-          <button class="decision-btn nopass-btn" onclick="recordAttempt('${gw.id}','nopass')">✗ No Pass</button>
-          <button class="decision-btn pending-btn" onclick="recordAttempt('${gw.id}','pending')">⏳ Pending</button>
+          <button class="decision-btn pass-btn" ${canMutate ? `onclick="recordAttempt('${gw.id}','pass')"` : 'disabled'}>✓ Pass</button>
+          <button class="decision-btn nopass-btn" ${canMutate ? `onclick="recordAttempt('${gw.id}','nopass')"` : 'disabled'}>✗ No Pass</button>
+          <button class="decision-btn pending-btn" ${canMutate ? `onclick="recordAttempt('${gw.id}','pending')"` : 'disabled'}>⏳ Pending</button>
         </div>
-        <textarea class="notes-input" id="attemptNotes" placeholder="RC notes, multi-vehicle roles, conditions, observations…">${d.notes||''}</textarea>
+        <textarea class="notes-input" id="attemptNotes" placeholder="RC notes, multi-vehicle roles, conditions, observations…" ${canMutate ? '' : 'readonly'}>${d.notes||''}</textarea>
+        ${canMutate ? '' : '<div style="font-size:12px;color:var(--text-muted);margin-top:8px">Certificate QG permission is required to record gateway attempts.</div>'}
         <div class="result-banner ${banCls}" id="resultBanner">${banTxt}</div>
       </div>
       ${histHtml}
@@ -1553,6 +1554,7 @@ function renderGateway(gw){
 }
 
 function recordAttempt(gwId, verdict){
+  if(!requireCertificateQG('You do not have permission to record gateway attempts.')) return;
   if(!currentSessionId) return;
   const sess = sessions.find(s=>s.id===currentSessionId);
   if(!sess) return;
@@ -1762,6 +1764,7 @@ function removeGateway(tier, section, gwId){
 // ADD/EDIT TEAM MODAL
 // ══════════════════════════════════════════════════════════════
 function openAddTeam(){
+  if(!requireCertificateQG('You do not have permission to edit QG data.')) return;
   document.getElementById('addTeamTitle').textContent='Register Team';
   document.getElementById('newTeamName').value='';
   document.getElementById('newCarNo').value='';
@@ -1772,6 +1775,7 @@ function openAddTeam(){
 }
 
 function openEditTeam(id){
+  if(!requireCertificateQG('You do not have permission to edit QG data.')) return;
   const team=teams.find(t=>t.id===id);
   if(!team) return;
   document.getElementById('addTeamTitle').textContent='Edit Team';
@@ -1789,6 +1793,7 @@ function closeAddTeam(e){
 }
 
 function confirmAddTeam(){
+  if(!requireCertificateQG('You do not have permission to edit QG data.')) return;
   const name=document.getElementById('newTeamName').value.trim();
   if(!name){document.getElementById('newTeamName').focus();return;}
   const carNo=document.getElementById('newCarNo').value.trim();
@@ -1808,6 +1813,7 @@ function confirmAddTeam(){
 }
 
 function confirmRemoveTeam(id){
+  if(!requireCertificateQG('You do not have permission to edit QG data.')) return;
   if(!confirm('Remove this team and ALL their sessions and attempts?')) return;
   teams=teams.filter(t=>t.id!==id);
   sessions=sessions.filter(s=>s.teamId!==id);
@@ -1820,6 +1826,7 @@ function confirmRemoveTeam(id){
 // NEW SESSION MODAL
 // ══════════════════════════════════════════════════════════════
 function openNewSession(teamId){
+  if(!requireCertificateQG('You do not have permission to edit QG data.')) return;
   const team=teams.find(t=>t.id===teamId);
   if(!team) return;
   document.getElementById('nsTeamId').value=teamId;
@@ -1838,6 +1845,7 @@ function closeNewSession(e){
 }
 
 function confirmNewSession(){
+  if(!requireCertificateQG('You do not have permission to edit QG data.')) return;
   const teamId=document.getElementById('nsTeamId').value;
   const sessionCode=document.getElementById('nsCode').value.trim();
   const rcOfficer=document.getElementById('nsRcOfficer').value.trim();

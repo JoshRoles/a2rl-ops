@@ -963,8 +963,7 @@ function showView(view, teamId=null, sessionId=null){
 
   if(view==='dashboard'){
     renderDashboard();
-    setMainLayout('full-with-sidebar');
-    renderGatewayQuickSidebar();
+    setMainLayout('full');
   } else if(view==='team'){
     currentTier = (teams.find(t=>t.id===teamId)||{}).tier||'rookie';
     renderTeamProfile();
@@ -996,12 +995,11 @@ function setMainLayout(mode){
 
   const isSession = (mode === 'split');
   const isGatewayAdmin = (mode === 'gateway-admin');
-  const isFullSidebar = (mode === 'full-with-sidebar');
-  sidebar.style.display     = (isSession || isGatewayAdmin || isFullSidebar) ? '' : 'none';
+  sidebar.style.display     = (isSession || isGatewayAdmin) ? '' : 'none';
   sessionCtrl.style.display = isSession ? '' : 'none';
   breadcrumb.style.display  = isSession ? '' : 'none';
   tierBar.style.display     = 'none'; // tier is locked per session; bar hidden
-  content.style.padding     = (isSession || isGatewayAdmin || isFullSidebar) ? '22px' : '0';
+  content.style.padding     = (isSession || isGatewayAdmin) ? '22px' : '0';
 
   // Adjust main height based on visible chrome
   // Header 52px + nav 44px + (breadcrumb 36px + progress 33px when session)
@@ -1009,22 +1007,6 @@ function setMainLayout(mode){
   mainArea.style.height = isSession
     ? 'calc(100vh - 165px)'
     : 'calc(100vh - 96px)';
-}
-
-function renderGatewayQuickSidebar(){
-  const tiers = [
-    {id:'rookie',label:'Rookie'},
-    {id:'challenger',label:'Challenger'},
-    {id:'pro',label:'PRO'}
-  ];
-  let html = `<div class="sidebar-section-label">Gateway Setup</div>`;
-  tiers.forEach(t=>{
-    html += `<div class="gw-item" onclick="gatewayAdminTier='${t.id}';showView('gateway-admin')">
-      <span class="gw-code ${t.id}">${t.label.toUpperCase()}</span>
-      <span class="gw-title-short">Manage ${t.label} gateways</span>
-    </div>`;
-  });
-  document.getElementById('sidebar').innerHTML = html;
 }
 
 function setTierUI(tier){
@@ -1311,7 +1293,19 @@ function renderSessionSidebar(){
   if(!sess) return;
   const tier = sess.tier;
   const t = gateways[tier];
-  let html = '';
+  let html = `<div class="sidebar-section-label">Gateway Setup</div>
+    <div class="gw-item" onclick="gatewayAdminTier='rookie';showView('gateway-admin')">
+      <span class="gw-code rookie">ROOKIE</span>
+      <span class="gw-title-short">Manage Rookie gateways</span>
+    </div>
+    <div class="gw-item" onclick="gatewayAdminTier='challenger';showView('gateway-admin')">
+      <span class="gw-code challenger">CHALLENGER</span>
+      <span class="gw-title-short">Manage Challenger gateways</span>
+    </div>
+    <div class="gw-item" onclick="gatewayAdminTier='pro';showView('gateway-admin')">
+      <span class="gw-code pro">PRO</span>
+      <span class="gw-title-short">Manage PRO gateways</span>
+    </div>`;
 
   const renderSection = (label,items)=>{
     if(!items||!items.length) return;

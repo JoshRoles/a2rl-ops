@@ -319,8 +319,16 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
   background:rgba(245,158,11,0.2);
   border-color:rgba(245,158,11,0.5);
 }
-.workspace-overlay{display:none;position:fixed;inset:0;background:rgba(5,8,14,0.92);z-index:140;align-items:center;justify-content:center;padding:24px;}
-.workspace-shell{max-width:980px;width:100%;}
+.workspace-overlay{display:none;position:fixed;inset:0;background:rgba(5,8,14,0.92);z-index:140;flex-direction:column;align-items:stretch;justify-content:flex-start;padding:0;overflow-y:auto;}
+.workspace-home-bar{flex-shrink:0;background:rgba(8,12,20,0.97);border-bottom:1px solid var(--border);padding:12px 20px;}
+.workspace-home-bar-inner{max-width:1100px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;}
+.workspace-home-kicker{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);}
+#home-auth-guest{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+#home-auth-guest input[type=email],#home-auth-guest input[type=password]{width:min(200px,42vw);padding:7px 10px;font-size:13px;background:rgba(255,255,255,0.04);border:1px solid var(--border2);border-radius:5px;color:var(--text);}
+#home-auth-user{display:none;align-items:center;gap:10px;flex-wrap:wrap;}
+.home-admin-quick{display:none;align-items:center;gap:6px;flex-wrap:wrap;}
+.workspace-card--locked{opacity:0.42;pointer-events:none;}
+.workspace-shell{max-width:980px;width:100%;margin:0 auto;padding:24px;flex:1;}
 .workspace-brand{display:flex;justify-content:center;margin-bottom:18px;}
 .workspace-brand-inner{background:transparent;padding:0;box-shadow:none;}
 .workspace-brand img{max-width:min(520px,92vw);width:100%;height:auto;display:block;filter:drop-shadow(0 12px 40px rgba(0,0,0,0.55));}
@@ -334,19 +342,30 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 </style>
 </head>
 <body>
-<div id="login-overlay" class="auth-overlay">
-  <div class="auth-card">
-    <div class="auth-title">A2RL Ops Login</div>
-    <div class="auth-sub">Sign in with your assigned role account.</div>
-    <div class="field"><label>Email</label><input type="email" id="login-email" placeholder="name@company.com"></div>
-    <div class="field"><label>Password</label><input type="password" id="login-password" placeholder="••••••••"></div>
-    <div style="display:flex;gap:8px;align-items:center;margin-top:12px;">
-      <button class="btn primary" onclick="login()">Sign In</button>
-      <span id="login-msg" style="font-size:11px;color:var(--muted);"></span>
+<div id="workspace-overlay" class="workspace-overlay">
+  <div class="workspace-home-bar">
+    <div class="workspace-home-bar-inner">
+      <span class="workspace-home-kicker">A2RL Operations Command Center</span>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end;">
+        <div id="home-auth-guest">
+          <input type="email" id="login-email" placeholder="Email" autocomplete="username">
+          <input type="password" id="login-password" placeholder="Password" autocomplete="current-password">
+          <button type="button" class="btn primary sm" onclick="login()">Sign in</button>
+          <span id="login-msg" style="font-size:11px;color:var(--muted);max-width:200px;"></span>
+        </div>
+        <div id="home-auth-user" style="display:none;">
+          <span id="home-user-badge" class="session-badge" style="margin:0;"></span>
+          <span id="home-admin-quick" class="home-admin-quick">
+            <button type="button" class="btn sm" onclick="homeAdminOpenView('events')">Events</button>
+            <button type="button" class="btn sm" onclick="homeAdminOpenView('settings')">Settings</button>
+            <button type="button" class="btn sm" onclick="homeAdminOpenView('insurance')">Insurance</button>
+          </span>
+          <button type="button" class="btn sm" id="home-admin-gear" onclick="openHomeAdminModal()" title="Users &amp; workspace access" style="display:none;">⚙</button>
+          <button type="button" class="btn sm" onclick="logout()">Logout</button>
+        </div>
+      </div>
     </div>
   </div>
-</div>
-<div id="workspace-overlay" class="workspace-overlay">
   <div class="workspace-shell">
     <div class="workspace-brand">
       <div class="workspace-brand-inner">
@@ -356,20 +375,20 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
     <div style="text-align:center;margin-bottom:22px;">
       <div class="workspace-kicker">Workspace Selection</div>
       <div class="workspace-name" style="font-size:34px;">Choose Your A2RL Workspace</div>
-      <div class="workspace-copy">Keep operational track events and simulation challenge data fully separated while using the same platform workflows.</div>
+      <div class="workspace-copy">Keep operational track events and simulation challenge data fully separated while using the same platform workflows. Sign in above to continue.</div>
     </div>
     <div class="workspace-grid">
-      <div class="workspace-card" onclick="selectWorkspace('ontrack')">
+      <div class="workspace-card" id="card-ws-ontrack" onclick="trySelectWorkspace('ontrack')">
         <div class="workspace-kicker">Production Workspace</div>
         <div class="workspace-name">A2RL On Track</div>
         <div class="workspace-copy">Track operations, published sessions, garage capture, real-world history, and physical-event analysis.</div>
       </div>
-      <div class="workspace-card" onclick="selectWorkspace('sim')">
+      <div class="workspace-card" id="card-ws-sim" onclick="trySelectWorkspace('sim')">
         <div class="workspace-kicker">Digital Workspace</div>
         <div class="workspace-name">A2RL Sim Challenge</div>
         <div class="workspace-copy">Simulation competition planning, digital sessions, isolated risk scoring, and simulator-only trends.</div>
       </div>
-      <div class="workspace-card" onclick="selectWorkspace('qg')">
+      <div class="workspace-card" id="card-ws-qg" onclick="trySelectWorkspace('qg')">
         <div class="workspace-kicker">Governance Workspace</div>
         <div class="workspace-name">QG Tracker</div>
         <div class="workspace-copy">Quality gateway team tracking, gateway attempts, licensing decisions, and session summaries in a dedicated isolated workspace.</div>
@@ -409,12 +428,6 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
   <div class="nav-item" data-core-nav="1" onclick="showView('history')"><span class="nav-icon">☰</span>Session History</div>
   <div class="nav-item" data-core-nav="1" onclick="showView('teams')"><span class="nav-icon">◈</span>Team Analysis</div>
   <div class="nav-item" data-core-nav="1" onclick="showView('trends')"><span class="nav-icon">∿</span>Risk Trends</div>
-
-  <div class="sidebar-section-label" data-core-nav="1">Admin</div>
-  <div class="nav-item" data-core-nav="1" onclick="showView('events')"><span class="nav-icon">◉</span>Events</div>
-  <div class="nav-item" data-core-nav="1" onclick="showView('users')"><span class="nav-icon">👤</span>User Management</div>
-  <div class="nav-item" data-core-nav="1" onclick="showView('settings')"><span class="nav-icon">⚙</span>Settings & Weights</div>
-  <div class="nav-item" data-core-nav="1" onclick="showView('insurance')"><span class="nav-icon">⊞</span>Insurance Report</div>
 
   <div class="sidebar-footer">
     <span id="workspace-footer-label">A2RL Operations Command</span>
@@ -1233,31 +1246,6 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
       <div id="events-list" style="display:flex;flex-direction:column;gap:12px;"></div>
     </div>
 
-    <!-- ═══════════════════════════════════════════════ USER MANAGEMENT ══ -->
-    <div class="view" id="view-users">
-      <div class="panel">
-        <div class="panel-head"><div class="panel-title">User Access Management</div></div>
-        <div class="panel-body">
-          <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Create users and select what areas they can access. Admin has full access.</div>
-          <div class="form-grid-3">
-            <div class="field"><label>Email</label><input type="email" id="um-email" placeholder="user@email.com"></div>
-            <div class="field"><label>Password</label><input type="text" id="um-password" placeholder="temporary password"></div>
-            <div class="field"><label>Role</label>
-              <select id="um-role" onchange="toggleAccessChecksDisabled()"><option value="viewer">Viewer</option><option value="admin">Admin</option></select>
-            </div>
-          </div>
-          <div class="sep" style="margin:10px 0;"></div>
-          <div class="field">
-            <label>Access Areas</label>
-            <div id="um-access-checks" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;"></div>
-          </div>
-          <div style="margin-top:10px;"><button class="btn primary" onclick="createUserLogin()">Create Login</button></div>
-          <div class="sep" style="margin:14px 0;"></div>
-          <div id="users-list"></div>
-        </div>
-      </div>
-    </div>
-
   </div><!-- /content -->
 </div><!-- /main -->
 </div><!-- /shell -->
@@ -1640,8 +1628,21 @@ let currentUser = JSON.parse(localStorage.getItem(GLOBAL_KEYS.currentUser) || 'n
 
 const DEFAULT_ADMIN_EMAIL = 'Rolesjosh417@gmail.com';
 const DEFAULT_ADMIN_PASSWORD = 'Admin@123';
-const ACCESS_AREAS = ['live','schedule','garagealloc','garage','tracktime','session','history','teams','trends','events','settings','insurance','qg','users'];
+const ACCESS_AREAS = ['live','schedule','garagealloc','garage','tracktime','session','history','teams','trends','events','settings','insurance','qg'];
+const ALL_WORKSPACES = ['ontrack','sim','qg'];
 const VIEWER_DEFAULT_AREAS = ['live','history','teams','trends'];
+function normalizeUserWorkspaces(u) {
+  if (!u) return [...ALL_WORKSPACES];
+  if ((u.role || '') === 'admin') return [...ALL_WORKSPACES];
+  const w = u.allowedWorkspaces;
+  if (!Array.isArray(w) || w.length === 0) return [...ALL_WORKSPACES];
+  return ALL_WORKSPACES.filter(x => w.includes(x));
+}
+function canAccessWorkspace(ws) {
+  if (!currentUser) return false;
+  if (isAdmin()) return true;
+  return normalizeUserWorkspaces(currentUser).includes(ws);
+}
 const WORKSPACE_EVENT_TYPES = {
   ontrack: ['Track Competition','Testing (Track)','Testing (VDA)','Simulator Race','Simulator Testing'],
   sim: ['Sim Challenge Round','Simulator Qualifying','Simulator Practice','Simulator Race','Simulator Testing'],
@@ -1785,9 +1786,18 @@ function refreshWorkspaceUI() {
 function goHome() {
   const overlay = document.getElementById('workspace-overlay');
   if (overlay) overlay.style.display = 'flex';
+  refreshHomeAuthBar();
 }
 function selectWorkspace(workspaceId) {
   if (!WORKSPACE_CONFIG[workspaceId]) return;
+  if (!currentUser) {
+    alert('Please sign in first.');
+    return;
+  }
+  if (!canAccessWorkspace(workspaceId)) {
+    alert('You do not have access to that workspace.');
+    return;
+  }
   if (currentWorkspace === workspaceId) { refreshWorkspaceUI(); return; }
   if (currentWorkspace) save();
   currentWorkspace = workspaceId;
@@ -1810,12 +1820,13 @@ function selectWorkspace(workspaceId) {
 
 function seedAuth() {
   if (!Array.isArray(users) || !users.length) {
-    users = [{ email: DEFAULT_ADMIN_EMAIL, password: DEFAULT_ADMIN_PASSWORD, role: 'admin', active: true, allowedViews: [...ACCESS_AREAS] }];
+    users = [{ email: DEFAULT_ADMIN_EMAIL, password: DEFAULT_ADMIN_PASSWORD, role: 'admin', active: true, allowedViews: [...ACCESS_AREAS], allowedWorkspaces: [...ALL_WORKSPACES] }];
     localStorage.setItem(GLOBAL_KEYS.users, JSON.stringify(users));
   } else {
     users = users.map(u => ({
       ...u,
-      allowedViews: Array.isArray(u.allowedViews) ? u.allowedViews : (u.role === 'admin' ? [...ACCESS_AREAS] : [...VIEWER_DEFAULT_AREAS]),
+      allowedViews: Array.isArray(u.allowedViews) ? u.allowedViews.filter(v => v !== 'users') : (u.role === 'admin' ? [...ACCESS_AREAS] : [...VIEWER_DEFAULT_AREAS]),
+      allowedWorkspaces: Array.isArray(u.allowedWorkspaces) && u.allowedWorkspaces.length ? u.allowedWorkspaces.filter(w => ALL_WORKSPACES.includes(w)) : [...ALL_WORKSPACES],
     }));
     localStorage.setItem(GLOBAL_KEYS.users, JSON.stringify(users));
   }
@@ -1823,8 +1834,8 @@ function seedAuth() {
 function isAdmin() { return (currentUser?.role || '') === 'admin'; }
 function canAccessView(id) {
   if (!currentUser) return false;
-  if (isAdmin()) return true;
   if (id === 'users') return false;
+  if (isAdmin()) return true;
   const allowed = Array.isArray(currentUser.allowedViews) ? currentUser.allowedViews : [];
   return allowed.includes(id);
 }
@@ -1836,15 +1847,76 @@ function requireAdmin(msg) {
 function refreshAuthUI() {
   const badge = document.getElementById('auth-user-badge');
   if (badge) badge.textContent = currentUser ? `${currentUser.email} · ${currentUser.role.toUpperCase()}` : 'Guest';
-  const overlay = document.getElementById('login-overlay');
-  if (overlay) overlay.style.display = currentUser ? 'none' : 'flex';
-  const usersView = document.getElementById('view-users');
-  if (usersView) usersView.style.display = isAdmin() ? '' : 'none';
   document.querySelectorAll('.nav-item[onclick*="showView"]').forEach(n => {
     const m = (n.getAttribute('onclick') || '').match(/showView\('([^']+)'\)/);
     if (!m) return;
     n.style.display = canAccessView(m[1]) ? 'flex' : 'none';
   });
+  const wsSel = document.getElementById('workspace-switcher');
+  if (wsSel) {
+    Array.from(wsSel.options).forEach(opt => {
+      opt.disabled = !canAccessWorkspace(opt.value);
+      opt.hidden = opt.disabled;
+    });
+    if (wsSel.value && !canAccessWorkspace(wsSel.value)) {
+      const first = Array.from(wsSel.options).find(o => !o.disabled);
+      if (first) wsSel.value = first.value;
+    }
+  }
+  refreshHomeAuthBar();
+}
+function refreshHomeAuthBar() {
+  const guest = document.getElementById('home-auth-guest');
+  const userRow = document.getElementById('home-auth-user');
+  const gear = document.getElementById('home-admin-gear');
+  const quick = document.getElementById('home-admin-quick');
+  const hb = document.getElementById('home-user-badge');
+  if (guest) guest.style.display = currentUser ? 'none' : 'flex';
+  if (userRow) userRow.style.display = currentUser ? 'flex' : 'none';
+  if (hb && currentUser) hb.textContent = `${currentUser.email} · ${(currentUser.role || '').toUpperCase()}`;
+  if (gear) gear.style.display = isAdmin() ? 'inline-flex' : 'none';
+  if (quick) quick.style.display = isAdmin() ? 'inline-flex' : 'none';
+  refreshWorkspaceCards();
+}
+function refreshWorkspaceCards() {
+  [['ontrack','card-ws-ontrack'],['sim','card-ws-sim'],['qg','card-ws-qg']].forEach(([ws, id]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const ok = currentUser && canAccessWorkspace(ws);
+    el.classList.toggle('workspace-card--locked', !ok);
+  });
+}
+function trySelectWorkspace(ws) {
+  if (!currentUser) {
+    alert('Please sign in above to open a workspace.');
+    return;
+  }
+  if (!canAccessWorkspace(ws)) {
+    alert('You do not have access to this workspace. Ask an administrator to grant access on the home screen.');
+    return;
+  }
+  selectWorkspace(ws);
+}
+function openHomeAdminModal() {
+  if (!requireAdmin('Only administrators can manage users and access.')) return;
+  renderUsersManagement();
+  openModal('modal-home-admin');
+}
+function homeAdminOpenView(viewId) {
+  if (!requireAdmin()) return;
+  if (!canAccessView(viewId)) {
+    alert('Your role does not include access to that area.');
+    return;
+  }
+  const pickWs = () => {
+    if (currentWorkspace && canAccessWorkspace(currentWorkspace)) return currentWorkspace;
+    return normalizeUserWorkspaces(currentUser)[0] || 'ontrack';
+  };
+  const ws = pickWs();
+  selectWorkspace(ws);
+  const ov = document.getElementById('workspace-overlay');
+  if (ov) ov.style.display = 'none';
+  showView(viewId);
 }
 function login() {
   const email = (document.getElementById('login-email')?.value || '').trim().toLowerCase();
@@ -1855,26 +1927,40 @@ function login() {
     if (msg) msg.textContent = 'Invalid credentials';
     return;
   }
-  currentUser = { email: u.email, role: u.role || 'viewer', allowedViews: Array.isArray(u.allowedViews) ? u.allowedViews : (u.role==='admin'?[...ACCESS_AREAS]:[...VIEWER_DEFAULT_AREAS]) };
+  const allowedViews = Array.isArray(u.allowedViews) ? u.allowedViews.filter(v => v !== 'users') : (u.role === 'admin' ? [...ACCESS_AREAS] : [...VIEWER_DEFAULT_AREAS]);
+  currentUser = {
+    email: u.email,
+    role: u.role || 'viewer',
+    allowedViews,
+    allowedWorkspaces: normalizeUserWorkspaces(u),
+  };
   localStorage.setItem(GLOBAL_KEYS.currentUser, JSON.stringify(currentUser));
   if (msg) msg.textContent = '';
   refreshAuthUI();
   refreshWorkspaceUI();
   if (currentWorkspace) {
-    const savedView = readScopedString('active_view', 'live', 'a2rl_active_view');
-    showView(canAccessView(savedView) ? savedView : 'live');
+    if (!canAccessWorkspace(currentWorkspace)) {
+      currentWorkspace = '';
+      localStorage.removeItem(GLOBAL_KEYS.workspace);
+    } else {
+      const savedView = readScopedString('active_view', 'live', 'a2rl_active_view');
+      showView(canAccessView(savedView) ? savedView : 'live');
+    }
   }
 }
 function logout() {
   currentUser = null;
   localStorage.removeItem(GLOBAL_KEYS.currentUser);
+  currentWorkspace = '';
+  localStorage.removeItem(GLOBAL_KEYS.workspace);
   refreshAuthUI();
+  refreshWorkspaceUI();
 }
 
 function renderUserAccessChecks() {
   const wrap = document.getElementById('um-access-checks');
   if (!wrap) return;
-  wrap.innerHTML = ACCESS_AREAS.filter(v => v !== 'users').map(v =>
+  wrap.innerHTML = ACCESS_AREAS.map(v =>
     `<label style="display:flex;align-items:center;gap:6px;padding:4px 6px;border:1px solid var(--border);border-radius:5px;background:var(--card);">
       <input type="checkbox" value="${v}" data-acc-check checked style="accent-color:var(--accent);">
       <span style="font-size:11px;text-transform:capitalize;">${v}</span>
@@ -1893,6 +1979,30 @@ function getSelectedAccessAreas() {
   const role = document.getElementById('um-role')?.value || 'viewer';
   if (role === 'admin') return [...ACCESS_AREAS];
   return Array.from(document.querySelectorAll('#um-access-checks input[data-acc-check]:checked')).map(cb => cb.value);
+}
+function renderWorkspaceAccessChecksCreate() {
+  const wrap = document.getElementById('um-workspace-checks');
+  if (!wrap) return;
+  const labels = { ontrack: 'On Track', sim: 'Sim Challenge', qg: 'QG Tracker' };
+  wrap.innerHTML = ALL_WORKSPACES.map(ws =>
+    `<label style="display:flex;align-items:center;gap:6px;padding:4px 6px;border:1px solid var(--border);border-radius:5px;background:var(--card);">
+      <input type="checkbox" value="${ws}" data-ws-check checked style="accent-color:var(--accent);">
+      <span style="font-size:11px;">${labels[ws]}</span>
+    </label>`
+  ).join('');
+  toggleWorkspaceChecksDisabled();
+}
+function toggleWorkspaceChecksDisabled() {
+  const role = document.getElementById('um-role')?.value || 'viewer';
+  document.querySelectorAll('#um-workspace-checks input[data-ws-check]').forEach(cb => {
+    if (role === 'admin') { cb.checked = true; cb.disabled = true; }
+    else cb.disabled = false;
+  });
+}
+function getSelectedWorkspaces() {
+  const role = document.getElementById('um-role')?.value || 'viewer';
+  if (role === 'admin') return [...ALL_WORKSPACES];
+  return Array.from(document.querySelectorAll('#um-workspace-checks input[data-ws-check]:checked')).map(cb => cb.value);
 }
 
 // Schedule-driven live detection (from active event + schedule + eventStart)
@@ -2425,6 +2535,11 @@ function showView(id) {
     refreshWorkspaceUI();
     return;
   }
+  if (id === 'users') {
+    if (isAdmin()) openHomeAdminModal();
+    else alert('User management is available from the home screen after you sign in as an administrator.');
+    return;
+  }
   if (isQGWorkspace()) id = 'qg';
   if (!canAccessView(id)) {
     alert('You do not have access to this area.');
@@ -2454,7 +2569,6 @@ function showView(id) {
   if (id === 'tracktime') renderTrackTime();
   if (id === 'garage' || id === 'garagealloc')    renderGarage();
   if (id === 'settings')  renderSettings();
-  if (id === 'users')     renderUsersManagement();
   if (id === 'live')      { renderLiveTable(); }
   if (id === 'session')   { populateTeamDropdowns(); renderSessionOverviewTable(); }
 }
@@ -5529,10 +5643,12 @@ function renderUsersManagement() {
   const list = document.getElementById('users-list');
   if (!list) return;
   renderUserAccessChecks();
+  renderWorkspaceAccessChecksCreate();
   toggleAccessChecksDisabled();
+  toggleWorkspaceChecksDisabled();
   list.innerHTML = users.map((u, i) => `
     <div style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--border);border-radius:6px;margin-bottom:8px;background:var(--card);">
-      <span style="flex:1;font-size:12px;"><b>${u.email}</b> <span style="color:var(--muted)">(${u.role})</span><br><span style="font-size:10px;color:var(--muted);">${(u.allowedViews||[]).join(', ')}</span></span>
+      <span style="flex:1;font-size:12px;"><b>${u.email}</b> <span style="color:var(--muted)">(${u.role})</span><br><span style="font-size:10px;color:var(--muted);">Areas: ${(u.allowedViews||[]).join(', ')}</span><br><span style="font-size:10px;color:var(--muted);">Workspaces: ${normalizeUserWorkspaces(u).join(', ')}</span></span>
       <span style="font-size:11px;color:${u.active===false?'var(--red)':'var(--green)'};">${u.active===false?'Disabled':'Active'}</span>
       <button class="btn sm" onclick="openEditUserPermissions(${i})">Edit Access</button>
       <button class="btn sm" onclick="toggleUserActive(${i})">${u.active===false?'Enable':'Disable'}</button>
@@ -5549,7 +5665,9 @@ function createUserLogin() {
   if (!email || !password) { alert('Email and password required.'); return; }
   if (users.some(u => (u.email || '').toLowerCase() === email.toLowerCase())) { alert('User already exists.'); return; }
   if (role !== 'admin' && !allowedViews.length) { alert('Select at least one access area.'); return; }
-  users.push({ email, password, role, active: true, allowedViews: role === 'admin' ? [...ACCESS_AREAS] : allowedViews });
+  const allowedWorkspaces = role === 'admin' ? [...ALL_WORKSPACES] : getSelectedWorkspaces();
+  if (role !== 'admin' && !allowedWorkspaces.length) { alert('Select at least one workspace.'); return; }
+  users.push({ email, password, role, active: true, allowedViews: role === 'admin' ? [...ACCESS_AREAS] : allowedViews, allowedWorkspaces });
   localStorage.setItem(GLOBAL_KEYS.users, JSON.stringify(users));
   document.getElementById('um-email').value = '';
   document.getElementById('um-password').value = '';
@@ -5584,7 +5702,7 @@ function openEditUserPermissions(i) {
   const wrap = document.getElementById('edit-user-access-checks');
   if (wrap) {
     const selected = new Set(Array.isArray(u.allowedViews) ? u.allowedViews : []);
-    wrap.innerHTML = ACCESS_AREAS.filter(v => v !== 'users').map(v => {
+    wrap.innerHTML = ACCESS_AREAS.map(v => {
       const checked = (u.role === 'admin' || selected.has(v)) ? 'checked' : '';
       return `<label style="display:flex;align-items:center;gap:6px;padding:4px 6px;border:1px solid var(--border);border-radius:5px;background:var(--card);">
         <input type="checkbox" value="${v}" data-edit-acc-check ${checked} style="accent-color:var(--accent);">
@@ -5592,13 +5710,33 @@ function openEditUserPermissions(i) {
       </label>`;
     }).join('');
   }
+  const wrapWs = document.getElementById('edit-user-workspace-checks');
+  if (wrapWs) {
+    const sel = new Set(normalizeUserWorkspaces(u));
+    const labels = { ontrack: 'On Track', sim: 'Sim Challenge', qg: 'QG Tracker' };
+    wrapWs.innerHTML = ALL_WORKSPACES.map(ws => {
+      const checked = (u.role === 'admin' || sel.has(ws)) ? 'checked' : '';
+      return `<label style="display:flex;align-items:center;gap:6px;padding:4px 6px;border:1px solid var(--border);border-radius:5px;background:var(--card);">
+        <input type="checkbox" value="${ws}" data-edit-ws-check ${checked} style="accent-color:var(--accent);">
+        <span style="font-size:11px;">${labels[ws]}</span>
+      </label>`;
+    }).join('');
+  }
   toggleEditAccessChecksDisabled();
+  toggleEditWorkspaceChecksDisabled();
   openModal('modal-edit-user');
 }
 function toggleEditAccessChecksDisabled() {
   const role = document.getElementById('edit-user-role')?.value || 'viewer';
   const checks = document.querySelectorAll('#edit-user-access-checks input[data-edit-acc-check]');
   checks.forEach(cb => {
+    if (role === 'admin') { cb.checked = true; cb.disabled = true; }
+    else cb.disabled = false;
+  });
+}
+function toggleEditWorkspaceChecksDisabled() {
+  const role = document.getElementById('edit-user-role')?.value || 'viewer';
+  document.querySelectorAll('#edit-user-workspace-checks input[data-edit-ws-check]').forEach(cb => {
     if (role === 'admin') { cb.checked = true; cb.disabled = true; }
     else cb.disabled = false;
   });
@@ -5620,11 +5758,19 @@ function saveEditedUserPermissions() {
     alert('Select at least one access area.');
     return;
   }
+  let allowedWorkspaces = role === 'admin'
+    ? [...ALL_WORKSPACES]
+    : Array.from(document.querySelectorAll('#edit-user-workspace-checks input[data-edit-ws-check]:checked')).map(cb => cb.value);
+  if (role !== 'admin' && !allowedWorkspaces.length) {
+    alert('Select at least one workspace.');
+    return;
+  }
   users[idx].role = role;
   users[idx].allowedViews = allowedViews;
+  users[idx].allowedWorkspaces = allowedWorkspaces;
   localStorage.setItem(GLOBAL_KEYS.users, JSON.stringify(users));
   if (currentUser && (currentUser.email || '').toLowerCase() === (users[idx].email || '').toLowerCase()) {
-    currentUser = { ...currentUser, role, allowedViews };
+    currentUser = { ...currentUser, role, allowedViews, allowedWorkspaces: normalizeUserWorkspaces(users[idx]) };
     localStorage.setItem(GLOBAL_KEYS.currentUser, JSON.stringify(currentUser));
     refreshAuthUI();
   }
@@ -7254,6 +7400,10 @@ function applyRoleGuards() {
 }
 
 function init(){
+  if (!currentUser) {
+    currentWorkspace = '';
+    localStorage.removeItem(GLOBAL_KEYS.workspace);
+  }
   if (currentWorkspace) loadWorkspaceData();
   seedAuth();
   applyRoleGuards();
@@ -7403,7 +7553,7 @@ init();
     <div class="form-grid">
       <div class="field"><label>Email</label><input type="text" id="edit-user-email" readonly></div>
       <div class="field"><label>Role</label>
-        <select id="edit-user-role" onchange="toggleEditAccessChecksDisabled()">
+        <select id="edit-user-role" onchange="toggleEditAccessChecksDisabled();toggleEditWorkspaceChecksDisabled();">
           <option value="viewer">Viewer</option>
           <option value="admin">Admin</option>
         </select>
@@ -7413,10 +7563,41 @@ init();
       <label>Access Areas</label>
       <div id="edit-user-access-checks" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;max-height:280px;overflow-y:auto;padding:8px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:5px;margin-top:4px;"></div>
     </div>
+    <div class="field" style="margin-top:12px;">
+      <label>Workspaces</label>
+      <div id="edit-user-workspace-checks" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;padding:8px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:5px;margin-top:4px;"></div>
+    </div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modal-edit-user')">Cancel</button>
       <button class="btn primary" onclick="saveEditedUserPermissions()">Save Access</button>
     </div>
+  </div>
+</div>
+<div class="modal-overlay" id="modal-home-admin">
+  <div class="modal" style="width:min(720px,96vw);max-height:90vh;overflow-y:auto;">
+    <button class="modal-close" onclick="closeModal('modal-home-admin')">✕</button>
+    <div class="modal-title">Users &amp; workspace access</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Create logins, choose which workspaces they may open (On Track, Sim, QG), then fine-tune area access inside the app.</div>
+    <div class="form-grid-3">
+      <div class="field"><label>Email</label><input type="email" id="um-email" placeholder="user@email.com"></div>
+      <div class="field"><label>Password</label><input type="text" id="um-password" placeholder="temporary password"></div>
+      <div class="field"><label>Role</label>
+        <select id="um-role" onchange="toggleAccessChecksDisabled();toggleWorkspaceChecksDisabled();"><option value="viewer">Viewer</option><option value="admin">Admin</option></select>
+      </div>
+    </div>
+    <div class="sep" style="margin:12px 0;"></div>
+    <div class="field">
+      <label>Workspaces</label>
+      <div id="um-workspace-checks" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;"></div>
+    </div>
+    <div class="sep" style="margin:12px 0;"></div>
+    <div class="field">
+      <label>Access Areas</label>
+      <div id="um-access-checks" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;"></div>
+    </div>
+    <div style="margin-top:12px;"><button class="btn primary" onclick="createUserLogin()">Create Login</button></div>
+    <div class="sep" style="margin:14px 0;"></div>
+    <div id="users-list"></div>
   </div>
 </div>
 <div class="modal-overlay" id="modal-manual-session">

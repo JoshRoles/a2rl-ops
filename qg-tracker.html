@@ -862,26 +862,39 @@ function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(
 function fmtDate(ts){ return ts?new Date(ts).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):'—'; }
 function fmtDateTime(ts){ return ts?new Date(ts).toLocaleString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'—'; }
 function getParentCurrentUser(){
+  // Prefer same-origin parent app state when exposed.
   try{
-    if (window.parent && window.parent !== window) return window.parent.currentUser || null;
+    if (window.parent && window.parent !== window) {
+      if (window.parent.currentUser) return window.parent.currentUser;
+    }
+  }catch(e){}
+  // Fallback to shared localStorage auth state from index.html.
+  try{
+    const raw = localStorage.getItem('a2rl_current_user');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
   }catch(e){}
   return null;
 }
+function isEmbeddedInOpsShell(){
+  try { return !!(window.parent && window.parent !== window); } catch(e) { return false; }
+}
 function isParentAdmin(){
   const u = getParentCurrentUser();
-  if (!u) return true;
+  if (!u) return !isEmbeddedInOpsShell();
   return String(u.role || '').toLowerCase() === 'admin';
 }
 function canViewQG(){
   const u = getParentCurrentUser();
-  if (!u) return true;
+  if (!u) return !isEmbeddedInOpsShell();
   if (String(u.role || '').toLowerCase() === 'admin') return true;
   const allowed = Array.isArray(u.allowedViews) ? u.allowedViews : [];
   return allowed.includes('qg') || allowed.includes('qg_view');
 }
 function canCertificateQG(){
   const u = getParentCurrentUser();
-  if (!u) return true;
+  if (!u) return !isEmbeddedInOpsShell();
   if (String(u.role || '').toLowerCase() === 'admin') return true;
   const allowed = Array.isArray(u.allowedViews) ? u.allowedViews : [];
   return allowed.includes('qg_certificate');
@@ -1403,6 +1416,7 @@ function renderGatewayAdminSidebar(){
 }
 
 function setGatewayAdminTier(tier){
+  if(!isParentAdmin()) return;
   gatewayAdminTier = tier;
   renderGatewayAdminSidebar();
   renderGatewayAdmin();
@@ -1637,6 +1651,10 @@ function metricsToEditorText(metrics){
 }
 
 function openGatewayEditor(tier, section, gwId=''){
+  if(!isParentAdmin()){
+    alert('Only admins can change QGs.');
+    return;
+  }
   const editing = !!gwId;
   const tierCfg = gateways[tier] || {};
   const list = Array.isArray(tierCfg[section]) ? tierCfg[section] : [];
@@ -1667,6 +1685,10 @@ function closeGatewayEditor(e){
 }
 
 function saveGatewayEdit(){
+  if(!isParentAdmin()){
+    alert('Only admins can change QGs.');
+    return;
+  }
   const originalTier = document.getElementById('gwEditTier').value;
   const originalId = document.getElementById('gwEditOriginalId').value.trim();
   const targetTier = document.getElementById('gwEditTierSelect').value;
@@ -1742,6 +1764,10 @@ function saveGatewayEdit(){
 }
 
 function removeGateway(tier, section, gwId){
+  if(!isParentAdmin()){
+    alert('Only admins can change QGs.');
+    return;
+  }
   const list = (gateways[tier] && Array.isArray(gateways[tier][section])) ? gateways[tier][section] : [];
   const gw = list.find(g=>g.id===gwId);
   if(!gw) return;

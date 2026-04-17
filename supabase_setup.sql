@@ -7,6 +7,9 @@ create table if not exists public.app_workspace_state (
   updated_at timestamptz not null default now()
 );
 
+grant usage on schema public to anon, authenticated;
+grant select, insert, update on table public.app_workspace_state to anon, authenticated;
+
 alter table public.app_workspace_state enable row level security;
 
 -- For now: allow read/write with anon key from the app.

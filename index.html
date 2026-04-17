@@ -2793,8 +2793,13 @@ async function syncWorkspaceToSupabase() {
         { workspace: currentWorkspace, state_json: statePayload, updated_at: new Date().toISOString() },
         { onConflict: 'workspace' }
       );
-    if (!error) supabaseLastPayload = serialized;
+    if (error) {
+      console.error('Supabase sync failed:', error);
+      return;
+    }
+    supabaseLastPayload = serialized;
   } catch {
+    console.error('Supabase sync exception');
     // Keep local storage as fallback when network/db write fails.
   } finally {
     supabaseSyncInFlight = false;
@@ -2814,7 +2819,16 @@ async function loadWorkspaceDataFromSupabase(workspaceId) {
       .select('state_json, updated_at')
       .eq('workspace', workspaceId)
       .maybeSingle();
-    if (error || !data?.state_json || workspaceId !== currentWorkspace) return;
+    if (error) {
+      console.error('Supabase load failed:', error);
+      return;
+    }
+    if (workspaceId !== currentWorkspace) return;
+    if (!data?.state_json) {
+      // First-time bootstrap: push local workspace state to Supabase.
+      scheduleSupabaseSync();
+      return;
+    }
     supabaseHydrating = true;
     persistWorkspaceStateToLocal(data.state_json);
     loadWorkspaceData({ skipRemote: true });

@@ -29,6 +29,7 @@
   .header-title{display:flex;flex-direction:column;gap:2px;}
   .header-title-main{font-family:'Roboto',sans-serif;font-size:19px;font-weight:700;line-height:1;color:var(--text);}
   .header-title-sub{font-size:11px;color:#4ade80;text-shadow:0 0 10px rgba(34,197,94,0.55);}
+  .header-right{display:flex;align-items:center;gap:10px;}
   .header-date{font-family:'Roboto Mono',monospace;font-size:11px;color:var(--text-muted);}
 
   /* ── NAV ── */
@@ -38,6 +39,7 @@
   .nav-btn.active{color:var(--accent);border-color:var(--accent);background:rgba(59,130,246,0.12);}
   .summary-btn{font-family:'Roboto',sans-serif;font-weight:500;font-size:12px;letter-spacing:0.01em;text-transform:none;padding:6px 13px;background:rgba(255,255,255,0.03);border:1px solid var(--border-bright);color:var(--text);border-radius:5px;cursor:pointer;transition:all 0.15s;}
   .summary-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .summary-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(59,130,246,0.12);}
 
   /* ── SESSION BREADCRUMB ── */
   .session-breadcrumb{background:var(--surface2);border-bottom:1px solid var(--border);padding:7px 24px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-height:36px;}
@@ -213,6 +215,22 @@
   .dash-team-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;}
   .dash-team-card{background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:14px 16px;cursor:pointer;transition:border-color 0.15s,background 0.15s;}
   .dash-team-card:hover{border-color:var(--border-bright);background:var(--surface2);}
+  .gateway-admin-wrap{padding:24px;max-width:1000px;}
+  .gateway-admin-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px;}
+  .gateway-admin-title{font-family:'Roboto',sans-serif;font-weight:800;font-size:22px;letter-spacing:0.04em;text-transform:uppercase;}
+  .gateway-admin-sub{font-size:12px;color:var(--text-muted);margin-top:6px;max-width:680px;line-height:1.5;}
+  .gateway-section-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px;}
+  .gateway-section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px;}
+  .gateway-section-title{font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);}
+  .gateway-admin-row{display:grid;grid-template-columns:120px 1fr auto;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--border);}
+  .gateway-admin-row:first-of-type{border-top:none;}
+  .gateway-admin-id{font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;color:var(--text);}
+  .gateway-admin-name{font-size:13px;color:var(--text);}
+  .gateway-admin-actions{display:flex;align-items:center;gap:8px;}
+  .mini-tag{font-family:'Roboto Mono',monospace;font-size:9px;padding:1px 6px;border-radius:10px;border:1px solid var(--border);color:var(--text-muted);}
+  .tiny-btn{font-family:'Roboto',sans-serif;font-size:11px;font-weight:600;padding:5px 10px;border:1px solid var(--border-bright);background:rgba(255,255,255,0.03);color:var(--text);border-radius:4px;cursor:pointer;}
+  .tiny-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .tiny-btn.danger:hover{border-color:var(--nopass);color:var(--nopass);}
   .dash-card-top{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;}
   .dash-card-name{font-family:'Roboto',sans-serif;font-weight:700;font-size:16px;letter-spacing:0.02em;}
   .dash-car-no{font-family:'Roboto Mono',monospace;font-size:11px;color:var(--text-muted);font-weight:400;}
@@ -320,7 +338,10 @@
       <div class="header-title-sub">QG Tracker</div>
     </div>
   </div>
-  <div class="header-date" id="liveDate"></div>
+  <div class="header-right">
+    <button class="summary-btn" id="gatewayAdminBtn" onclick="showView('gateway-admin')">⚙ Gateway Setup</button>
+    <div class="header-date" id="liveDate"></div>
+  </div>
 </div>
 
 <!-- SESSION BREADCRUMB (shown in session view) -->
@@ -366,7 +387,7 @@
 
 <!-- ADD/EDIT TEAM MODAL -->
 <div class="modal-overlay" id="addTeamOverlay" onclick="closeAddTeam(event)">
-  <div class="add-team-form">
+  <div class="add-team-form" style="max-width:860px">
     <h3 id="addTeamTitle">Register Team</h3>
     <p>Team profiles store all sessions and attempt history separately.</p>
     <input type="hidden" id="editTeamId">
@@ -434,6 +455,87 @@
   </div>
 </div>
 
+<!-- GATEWAY ADMIN MODAL -->
+<div class="modal-overlay" id="gatewayEditorOverlay" onclick="closeGatewayEditor(event)">
+  <div class="add-team-form">
+    <h3 id="gatewayEditorTitle">Gateway</h3>
+    <p>Edit gateway metadata for the selected QG category.</p>
+    <input type="hidden" id="gwEditOriginalId">
+    <input type="hidden" id="gwEditTier">
+    <div class="field-row-inline">
+      <div class="field-row">
+        <label class="field-label">Category</label>
+        <select class="field-input" id="gwEditTierSelect">
+          <option value="rookie">Rookie</option>
+          <option value="challenger">Challenger</option>
+          <option value="pro">PRO</option>
+        </select>
+      </div>
+      <div class="field-row">
+        <label class="field-label">Section</label>
+        <select class="field-input" id="gwEditSection">
+          <option value="static">Static</option>
+          <option value="track">Track</option>
+        </select>
+      </div>
+    </div>
+    <div class="field-row-inline">
+      <div class="field-row">
+        <label class="field-label">Gateway ID</label>
+        <input class="field-input" id="gwEditId" placeholder="e.g. T9">
+      </div>
+      <div class="field-row">
+        <label class="field-label">Name</label>
+        <input class="field-input" id="gwEditName" placeholder="Gateway name">
+      </div>
+    </div>
+    <div class="field-row-inline">
+      <div class="field-row">
+        <label class="field-label">Mandatory</label>
+        <select class="field-input" id="gwEditMandatory">
+          <option value="true">Yes</option>
+          <option value="false">No</option>
+        </select>
+      </div>
+      <div class="field-row">
+        <label class="field-label">Flags</label>
+        <div style="display:flex;gap:14px;align-items:center;margin-top:7px">
+          <label style="font-size:12px;color:var(--text-muted);display:flex;gap:6px;align-items:center"><input type="checkbox" id="gwEditBridge"> Bridge</label>
+          <label style="font-size:12px;color:var(--text-muted);display:flex;gap:6px;align-items:center"><input type="checkbox" id="gwEditPrereq"> Prereq</label>
+        </div>
+      </div>
+    </div>
+    <div class="field-row">
+      <label class="field-label">Objective</label>
+      <textarea class="field-input" id="gwEditObjective" placeholder="Describe the gateway objective" style="min-height:72px;resize:vertical"></textarea>
+    </div>
+    <div class="field-row-inline">
+      <div class="field-row">
+        <label class="field-label">Conditions (one per line)</label>
+        <textarea class="field-input" id="gwEditConditions" placeholder="Condition 1&#10;Condition 2" style="min-height:120px;resize:vertical"></textarea>
+      </div>
+      <div class="field-row">
+        <label class="field-label">Metrics (one per line as text | value)</label>
+        <textarea class="field-input" id="gwEditMetrics" placeholder="System start time | <= 60 s&#10;Safety checks | Pass" style="min-height:120px;resize:vertical"></textarea>
+      </div>
+    </div>
+    <div class="field-row-inline">
+      <div class="field-row">
+        <label class="field-label">Pass Criteria (one per line)</label>
+        <textarea class="field-input" id="gwEditPass" placeholder="Pass item 1&#10;Pass item 2" style="min-height:120px;resize:vertical"></textarea>
+      </div>
+      <div class="field-row">
+        <label class="field-label">No Pass Criteria (one per line)</label>
+        <textarea class="field-input" id="gwEditNoPass" placeholder="No pass item 1&#10;No pass item 2" style="min-height:120px;resize:vertical"></textarea>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:16px">
+      <button class="modal-btn primary" onclick="saveGatewayEdit()">Save</button>
+      <button class="modal-btn secondary" onclick="closeGatewayEditor()">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <script>
 /** Match index.html sidebar: show workspace picker when embedded; otherwise open ops home. */
 function qgLogoGoHome(ev) {
@@ -450,7 +552,7 @@ function qgLogoGoHome(ev) {
 // ══════════════════════════════════════════════════════════════
 // GATEWAY DATA
 // ══════════════════════════════════════════════════════════════
-const gateways = {
+let gateways = {
   rookie:{
     label:'Rookie',licenseOutcome:'Rookie License — Single-car time trial',failConsequence:'Restricted to Digital Championship only',
     static:[
@@ -641,11 +743,12 @@ let sessions = [];
 let attempts = [];
 let licenses = {}; // {teamId: {verdict:'granted'|'denied'|null, issuedBy:'', issuedAt:0, notes:''}}
 
-let currentView      = 'dashboard'; // 'dashboard' | 'team' | 'session'
+let currentView      = 'dashboard'; // 'dashboard' | 'team' | 'session' | 'gateway-admin'
 let currentTeamId    = null;
 let currentSessionId = null;
 let currentGatewayId = null;
 let currentTier      = 'rookie';
+let gatewayAdminTier = 'rookie';
 
 // ══════════════════════════════════════════════════════════════
 // STORAGE
@@ -674,6 +777,10 @@ async function loadFromStorage(){
     attempts = lsGet('a2rl-qg-attempts') || [];
     licenses = lsGet('a2rl-qg-licenses') || {};
   }
+  const gatewayState = lsGet('a2rl-qg-gateways');
+  if(gatewayState && gatewayState.rookie && gatewayState.challenger && gatewayState.pro){
+    gateways = gatewayState;
+  }
 }
 
 async function saveToStorage(){
@@ -690,6 +797,7 @@ async function saveToStorage(){
     lsSet('a2rl-qg-attempts', attempts);
     lsSet('a2rl-qg-licenses', licenses);
   }
+  lsSet('a2rl-qg-gateways', gateways);
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -805,6 +913,8 @@ function showView(view, teamId=null, sessionId=null){
       summaryBtn.textContent='📋 Summary';
     }
   }
+  const gatewayAdminBtn = document.getElementById('gatewayAdminBtn');
+  if(gatewayAdminBtn) gatewayAdminBtn.classList.toggle('active', view==='gateway-admin');
 
   if(view==='dashboard'){
     renderDashboard();
@@ -822,6 +932,12 @@ function showView(view, teamId=null, sessionId=null){
     renderSessionSidebar();
     renderSessionWelcome();
     updateSessionProgress();
+  } else if(view==='gateway-admin'){
+    gatewayAdminTier = gatewayAdminTier || 'rookie';
+    currentGatewayId = null;
+    setMainLayout('gateway-admin');
+    renderGatewayAdminSidebar();
+    renderGatewayAdmin();
   }
 }
 
@@ -833,11 +949,12 @@ function setMainLayout(mode){
   const tierBar     = document.getElementById('tierBar');
 
   const isSession = (mode === 'split');
-  sidebar.style.display     = isSession ? '' : 'none';
+  const isGatewayAdmin = (mode === 'gateway-admin');
+  sidebar.style.display     = (isSession || isGatewayAdmin) ? '' : 'none';
   sessionCtrl.style.display = isSession ? '' : 'none';
   breadcrumb.style.display  = isSession ? '' : 'none';
   tierBar.style.display     = 'none'; // tier is locked per session; bar hidden
-  content.style.padding     = isSession ? '22px' : '0';
+  content.style.padding     = (isSession || isGatewayAdmin) ? '22px' : '0';
 
   // Adjust main height based on visible chrome
   // Header 52px + nav 44px + (breadcrumb 36px + progress 33px when session)
@@ -1160,6 +1277,77 @@ function renderSessionSidebar(){
   renderSessionBreadcrumb();
 }
 
+function renderGatewayAdminSidebar(){
+  const tiers = [
+    {id:'rookie',label:'Rookie'},
+    {id:'challenger',label:'Challenger'},
+    {id:'pro',label:'PRO'}
+  ];
+  let html = `<div class="sidebar-section-label">Gateway Categories</div>`;
+  tiers.forEach(t=>{
+    const activeCls = gatewayAdminTier===t.id ? `active-${t.id}` : '';
+    html += `<div class="gw-item ${activeCls}" onclick="setGatewayAdminTier('${t.id}')">
+      <span class="gw-code ${t.id}">${t.label.toUpperCase()}</span>
+      <span class="gw-title-short">${esc((gateways[t.id]||{}).licenseOutcome||'Category gateways')}</span>
+    </div>`;
+  });
+  document.getElementById('sidebar').innerHTML = html;
+}
+
+function setGatewayAdminTier(tier){
+  gatewayAdminTier = tier;
+  renderGatewayAdminSidebar();
+  renderGatewayAdmin();
+}
+
+function renderGatewayAdmin(){
+  const tier = gatewayAdminTier || 'rookie';
+  const tierCfg = gateways[tier] || {};
+  const staticItems = Array.isArray(tierCfg.static) ? tierCfg.static : [];
+  const trackItems = Array.isArray(tierCfg.track) ? tierCfg.track : [];
+  const renderRows = (items, section)=> items.length ? items.map(gw=>{
+    const mandatory = gw.mandatory!==false;
+    const flags = [
+      mandatory ? '<span class="mini-tag">Mandatory</span>' : '<span class="mini-tag">Optional</span>',
+      gw.bridge ? '<span class="mini-tag">Bridge</span>' : '',
+      gw.prereq ? '<span class="mini-tag">Prereq</span>' : ''
+    ].join(' ');
+    return `<div class="gateway-admin-row">
+      <div class="gateway-admin-id">${esc(gw.id)}</div>
+      <div class="gateway-admin-name">${esc(gw.name||'Untitled Gateway')} <span style="margin-left:8px">${flags}</span></div>
+      <div class="gateway-admin-actions">
+        <button class="tiny-btn" onclick="openGatewayEditor('${tier}','${section}','${gw.id}')">Edit</button>
+        <button class="tiny-btn danger" onclick="removeGateway('${tier}','${section}','${gw.id}')">Remove</button>
+      </div>
+    </div>`;
+  }).join('') : `<div style="padding:8px 0;font-size:12px;color:var(--text-muted)">No gateways in this section.</div>`;
+
+  document.getElementById('content').innerHTML = `
+    <div class="gateway-admin-wrap">
+      <div class="gateway-admin-head">
+        <div>
+          <div class="gateway-admin-title">${tierLabel(tier)} Gateway Setup</div>
+          <div class="gateway-admin-sub">Add, edit, or remove gateways for this category. Changes apply immediately to new and existing sessions for this tier.</div>
+        </div>
+        <button class="tiny-btn" onclick="showView('dashboard')">← Team Overview</button>
+      </div>
+      <div class="gateway-section-card">
+        <div class="gateway-section-head">
+          <div class="gateway-section-title">Static Gateways</div>
+          <button class="tiny-btn" onclick="openGatewayEditor('${tier}','static')">+ Add Static Gateway</button>
+        </div>
+        ${renderRows(staticItems,'static')}
+      </div>
+      <div class="gateway-section-card">
+        <div class="gateway-section-head">
+          <div class="gateway-section-title">Track Gateways</div>
+          <button class="tiny-btn" onclick="openGatewayEditor('${tier}','track')">+ Add Track Gateway</button>
+        </div>
+        ${renderRows(trackItems,'track')}
+      </div>
+    </div>`;
+}
+
 function renderSessionWelcome(){
   document.getElementById('content').innerHTML = `
     <div class="welcome-pane">
@@ -1184,16 +1372,24 @@ function renderGateway(gw){
   const d = latest || {verdict:'pending', notes:''};
 
   let tags='';
-  if(gw.mandatory) tags+='<span class="tag-mandatory">Mandatory</span> ';
+  if(gw.mandatory!==false) tags+='<span class="tag-mandatory">Mandatory</span> ';
   if(gw.bridge)    tags+='<span class="tag-bridge">Tier Bridge</span> ';
   if(gw.prereq)    tags+='<span class="tag-prereq">Prerequisite for P6 & P8</span> ';
 
-  const metrics = gw.metrics.map(m=>`<div class="metric-row">
-    <span class="metric-icon">◈</span><span class="metric-text">${m.text}</span><span class="metric-value">${m.value}</span>
-  </div>`).join('');
-  const conds = gw.conditions.map(c=>`<div class="condition-line">→ ${c}</div>`).join('');
-  const passH = gw.pass.map(p=>`<div class="verdict-item">${p}</div>`).join('');
-  const nopassH = gw.nopass.map(p=>`<div class="verdict-item">${p}</div>`).join('');
+  const metricsList = Array.isArray(gw.metrics) ? gw.metrics : [];
+  const condList = Array.isArray(gw.conditions) ? gw.conditions : [];
+  const passList = Array.isArray(gw.pass) ? gw.pass : [];
+  const nopassList = Array.isArray(gw.nopass) ? gw.nopass : [];
+  const metrics = metricsList.map(m=>{
+    const metricText = typeof m === 'string' ? m : (m && m.text ? m.text : '');
+    const metricValue = typeof m === 'string' ? '' : (m && m.value ? m.value : '');
+    return `<div class="metric-row">
+    <span class="metric-icon">◈</span><span class="metric-text">${metricText||'Metric'}</span><span class="metric-value">${metricValue||'—'}</span>
+  </div>`;
+  }).join('');
+  const conds = condList.map(c=>`<div class="condition-line">→ ${c}</div>`).join('') || `<div class="condition-line">No conditions defined.</div>`;
+  const passH = passList.map(p=>`<div class="verdict-item">${p}</div>`).join('') || `<div class="verdict-item">No pass criteria defined.</div>`;
+  const nopassH = nopassList.map(p=>`<div class="verdict-item">${p}</div>`).join('') || `<div class="verdict-item">No no-pass criteria defined.</div>`;
   const isCarryover = latest && latest.carryover && !history.find(a=>!a.carryover);
   const banCls = d.verdict==='pass'?'pass show':d.verdict==='nopass'?'nopass show':'';
   const banTxt = d.verdict==='pass'
@@ -1222,7 +1418,7 @@ function renderGateway(gw){
         <div class="gw-id-badge ${tier}">${gw.id}</div>
         <div class="gw-header-text">
           <div class="gw-name">${gw.name} ${tags}</div>
-          <div class="gw-objective">${gw.objective}</div>
+          <div class="gw-objective">${gw.objective||'No objective defined.'}</div>
         </div>
       </div>
       <div class="section"><div class="section-header"><span class="section-icon">⚙</span><span class="section-title">Test Conditions</span></div><div class="section-body">${conds}</div></div>
@@ -1282,6 +1478,157 @@ function setTier(tier){
   if(currentView==='session') return;
   currentTier=tier;
   setTierUI(tier);
+}
+
+function textAreaList(value){
+  return String(value||'')
+    .split(/\r?\n/)
+    .map(v=>v.trim())
+    .filter(Boolean);
+}
+
+function parseMetricsInput(value){
+  return textAreaList(value).map(line=>{
+    const parts = line.split('|');
+    if(parts.length<2){
+      return {text:line.trim(), value:'—'};
+    }
+    const text = parts.shift().trim();
+    const metricValue = parts.join('|').trim();
+    return {text:text||'Metric', value:metricValue||'—'};
+  });
+}
+
+function metricsToEditorText(metrics){
+  if(!Array.isArray(metrics)) return '';
+  return metrics.map(m=>{
+    if(typeof m === 'string') return `${m} | —`;
+    return `${(m&&m.text)||''} | ${(m&&m.value)||'—'}`.trim();
+  }).join('\n');
+}
+
+function openGatewayEditor(tier, section, gwId=''){
+  const editing = !!gwId;
+  const tierCfg = gateways[tier] || {};
+  const list = Array.isArray(tierCfg[section]) ? tierCfg[section] : [];
+  const gw = editing ? list.find(x=>x.id===gwId) : null;
+  document.getElementById('gatewayEditorTitle').textContent = editing ? `Edit ${gwId}` : 'Add Gateway';
+  document.getElementById('gwEditOriginalId').value = gw ? gw.id : '';
+  document.getElementById('gwEditTier').value = tier;
+  document.getElementById('gwEditTierSelect').value = tier;
+  document.getElementById('gwEditSection').value = section;
+  document.getElementById('gwEditId').value = gw ? gw.id : '';
+  document.getElementById('gwEditName').value = gw ? (gw.name||'') : '';
+  document.getElementById('gwEditMandatory').value = gw && gw.mandatory===false ? 'false' : 'true';
+  document.getElementById('gwEditBridge').checked = !!(gw && gw.bridge);
+  document.getElementById('gwEditPrereq').checked = !!(gw && gw.prereq);
+  document.getElementById('gwEditObjective').value = gw ? (gw.objective||'') : '';
+  document.getElementById('gwEditConditions').value = gw && Array.isArray(gw.conditions) ? gw.conditions.join('\n') : '';
+  document.getElementById('gwEditMetrics').value = metricsToEditorText(gw ? gw.metrics : []);
+  document.getElementById('gwEditPass').value = gw && Array.isArray(gw.pass) ? gw.pass.join('\n') : '';
+  document.getElementById('gwEditNoPass').value = gw && Array.isArray(gw.nopass) ? gw.nopass.join('\n') : '';
+  document.getElementById('gatewayEditorOverlay').classList.add('show');
+  setTimeout(()=>document.getElementById('gwEditId').focus(),60);
+}
+
+function closeGatewayEditor(e){
+  if(!e || e.target===document.getElementById('gatewayEditorOverlay')){
+    document.getElementById('gatewayEditorOverlay').classList.remove('show');
+  }
+}
+
+function saveGatewayEdit(){
+  const originalTier = document.getElementById('gwEditTier').value;
+  const originalId = document.getElementById('gwEditOriginalId').value.trim();
+  const targetTier = document.getElementById('gwEditTierSelect').value;
+  const targetSection = document.getElementById('gwEditSection').value;
+  const newId = document.getElementById('gwEditId').value.trim().toUpperCase();
+  const newName = document.getElementById('gwEditName').value.trim();
+  const mandatory = document.getElementById('gwEditMandatory').value === 'true';
+  const bridge = document.getElementById('gwEditBridge').checked;
+  const prereq = document.getElementById('gwEditPrereq').checked;
+  const objective = document.getElementById('gwEditObjective').value.trim();
+  const conditions = textAreaList(document.getElementById('gwEditConditions').value);
+  const metrics = parseMetricsInput(document.getElementById('gwEditMetrics').value);
+  const pass = textAreaList(document.getElementById('gwEditPass').value);
+  const nopass = textAreaList(document.getElementById('gwEditNoPass').value);
+
+  if(!newId){ document.getElementById('gwEditId').focus(); return; }
+  if(!newName){ document.getElementById('gwEditName').focus(); return; }
+
+  const targetTierCfg = gateways[targetTier] || (gateways[targetTier]={label:tierLabel(targetTier),licenseOutcome:'',failConsequence:'',static:[],track:[]});
+  targetTierCfg.static = Array.isArray(targetTierCfg.static) ? targetTierCfg.static : [];
+  targetTierCfg.track = Array.isArray(targetTierCfg.track) ? targetTierCfg.track : [];
+  const targetList = targetTierCfg[targetSection];
+  if(targetList.some(g=>g.id===newId && g.id!==originalId)){
+    alert(`Gateway ID ${newId} already exists in ${tierLabel(targetTier)} (${targetSection}).`);
+    return;
+  }
+
+  let existing = null;
+  ['static','track'].forEach(sectionName=>{
+    const list = (gateways[originalTier] && Array.isArray(gateways[originalTier][sectionName])) ? gateways[originalTier][sectionName] : [];
+    const idx = list.findIndex(g=>g.id===originalId);
+    if(idx>=0){
+      existing = list[idx];
+      list.splice(idx,1);
+    }
+  });
+
+  const base = existing || {
+    objective:'',
+    conditions:[],
+    metrics:[],
+    pass:[],
+    nopass:[]
+  };
+  const updated = {...base,id:newId,name:newName,mandatory,bridge,prereq,objective,conditions,metrics,pass,nopass};
+  targetList.push(updated);
+  targetList.sort((a,b)=>String(a.id).localeCompare(String(b.id),undefined,{numeric:true,sensitivity:'base'}));
+
+  if(originalId && (originalId!==newId || originalTier!==targetTier)){
+    const tierSessionIds = new Set(sessions.filter(s=>s.tier===originalTier).map(s=>s.id));
+    attempts.forEach(a=>{
+      if(tierSessionIds.has(a.sessionId) && a.gwId===originalId){
+        a.gwId = newId;
+      }
+    });
+  }
+
+  saveToStorage();
+  closeGatewayEditor();
+  gatewayAdminTier = targetTier;
+  if(currentView==='gateway-admin'){
+    renderGatewayAdminSidebar();
+    renderGatewayAdmin();
+  }
+  if(currentView==='session'){
+    renderSessionSidebar();
+    if(currentGatewayId===originalId) currentGatewayId = newId;
+    const gw = getAllGateways(currentTier).find(g=>g.id===currentGatewayId);
+    if(gw) renderGateway(gw);
+    else renderSessionWelcome();
+    updateSessionProgress();
+  }
+}
+
+function removeGateway(tier, section, gwId){
+  const list = (gateways[tier] && Array.isArray(gateways[tier][section])) ? gateways[tier][section] : [];
+  const gw = list.find(g=>g.id===gwId);
+  if(!gw) return;
+  const ok = confirm(`Remove gateway ${gwId} (${gw.name||''}) from ${tierLabel(tier)}?\nThis also removes attempt history for this gateway in ${tierLabel(tier)} sessions.`);
+  if(!ok) return;
+  gateways[tier][section] = list.filter(g=>g.id!==gwId);
+  const tierSessionIds = new Set(sessions.filter(s=>s.tier===tier).map(s=>s.id));
+  attempts = attempts.filter(a=>!(tierSessionIds.has(a.sessionId) && a.gwId===gwId));
+  if(currentGatewayId===gwId) currentGatewayId = null;
+  saveToStorage();
+  if(currentView==='gateway-admin') renderGatewayAdmin();
+  if(currentView==='session'){
+    renderSessionSidebar();
+    renderSessionWelcome();
+    updateSessionProgress();
+  }
 }
 
 // ══════════════════════════════════════════════════════════════

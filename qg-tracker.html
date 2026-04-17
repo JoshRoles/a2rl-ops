@@ -323,13 +323,6 @@
   <div class="header-date" id="liveDate"></div>
 </div>
 
-<!-- NAV -->
-<div class="nav-strip">
-  <button class="nav-btn active" id="navDashboard" onclick="showView('dashboard')">Teams</button>
-  <div style="flex:1"></div>
-  <button class="summary-btn" id="summaryBtn" onclick="openSummary()">Session Summary</button>
-</div>
-
 <!-- SESSION BREADCRUMB (shown in session view) -->
 <div class="session-breadcrumb" id="sessionBreadcrumb" style="display:none"></div>
 
@@ -799,7 +792,8 @@ function showView(view, teamId=null, sessionId=null){
   currentSessionId=sessionId;
 
   // Update nav state
-  document.getElementById('navDashboard').classList.toggle('active', view==='dashboard');
+  const navDashboard = document.getElementById('navDashboard');
+  if (navDashboard) navDashboard.classList.toggle('active', view==='dashboard');
   // Context-aware summary button label
   const summaryBtn = document.getElementById('summaryBtn');
   if(summaryBtn){

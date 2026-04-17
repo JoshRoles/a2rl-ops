@@ -342,7 +342,8 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .workspace-brand{display:flex;flex-direction:column;align-items:center;justify-content:center;margin-bottom:18px;gap:10px;}
 .workspace-brand-inner{background:transparent;padding:0;box-shadow:none;}
 .workspace-brand img{max-width:min(520px,92vw);width:100%;height:auto;display:block;filter:drop-shadow(0 12px 40px rgba(0,0,0,0.55));}
-.workspace-brand-sub{font-size:12px;letter-spacing:1.6px;text-transform:uppercase;color:var(--muted);}
+.workspace-brand-welcome{font-size:30px;font-weight:700;color:var(--text);line-height:1;}
+.workspace-brand-sub{font-size:20px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin-top:-6px;}
 .workspace-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;}
 .workspace-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:24px;cursor:pointer;transition:border-color 0.15s,transform 0.15s,box-shadow 0.15s;}
 .workspace-card:hover{transform:translateY(-1px);box-shadow:0 10px 30px rgba(0,0,0,0.25);}
@@ -385,6 +386,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
   </div>
   <div class="workspace-shell">
     <div class="workspace-brand">
+      <div class="workspace-brand-welcome">Welcome to</div>
       <div class="workspace-brand-inner">
         <img src="assets/a2rl-logo-home.png" alt="Abu Dhabi Autonomous Racing League — A2RL" decoding="async">
       </div>
@@ -393,7 +395,6 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
     <div style="text-align:center;margin-bottom:22px;">
       <div class="workspace-kicker">Workspace Selection</div>
       <div class="workspace-name" style="font-size:34px;">Choose Your A2RL Workspace</div>
-      <div class="workspace-copy">Keep operational track events and simulation challenge data fully separated while using the same platform workflows. Sign in above to continue.</div>
     </div>
     <div class="workspace-grid">
       <div class="workspace-card" id="card-ws-qg" onclick="trySelectWorkspace('qg')">
@@ -407,7 +408,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
         <div class="workspace-copy">Simulation competition planning, digital sessions, isolated risk scoring, and simulator-only trends.</div>
       </div>
       <div class="workspace-card" id="card-ws-ontrack" onclick="trySelectWorkspace('ontrack')">
-        <div class="workspace-kicker">Production Workspace</div>
+        <div class="workspace-kicker">On Track Workspace</div>
         <div class="workspace-name">A2RL On Track</div>
         <div class="workspace-copy">Track operations, published sessions, garage capture, real-world history, and physical-event analysis.</div>
       </div>

@@ -1264,7 +1264,6 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
     <div class="view" id="view-events">
       <div style="display:flex;gap:10px;margin-bottom:18px;align-items:center;">
         <button class="btn primary" onclick="openNewEventModal()">+ New Event</button>
-        <button class="btn" onclick="openEventScheduleChangeLogs()">Event Schedule Change Logs</button>
         <span style="font-size:12px;color:var(--muted);" id="events-count-label"></span>
       </div>
       <div id="events-list" style="display:flex;flex-direction:column;gap:12px;"></div>
@@ -2493,7 +2492,27 @@ function getLatestScheduleVersion(dayIdx = currentSchedDay) {
   return bucket.versions[bucket.versions.length - 1];
 }
 
-function downloadScheduleChangeNotes() {
+let _pdfHeaderLogoDataUrl = null;
+async function getPdfHeaderLogoDataUrl() {
+  if (_pdfHeaderLogoDataUrl) return _pdfHeaderLogoDataUrl;
+  try {
+    const resp = await fetch('assets/a2rl-logo-home.png');
+    if (!resp.ok) return '';
+    const blob = await resp.blob();
+    const dataUrl = await new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => resolve('');
+      reader.readAsDataURL(blob);
+    });
+    _pdfHeaderLogoDataUrl = String(dataUrl || '');
+    return _pdfHeaderLogoDataUrl;
+  } catch {
+    return '';
+  }
+}
+
+async function downloadScheduleChangeNotes() {
   const dayIdx = currentSchedDay;
   let version = getLatestScheduleVersion(dayIdx);
   const issueReason = pendingScheduleChangeReason || (version ? 'Schedule updated' : 'Initial issued schedule');
@@ -2561,10 +2580,15 @@ function downloadScheduleChangeNotes() {
     alert('Popup blocked. Please allow popups and try again.');
     return;
   }
+  const logoDataUrl = await getPdfHeaderLogoDataUrl();
   win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Schedule Change Notes</title>
     <style>
       body{font-family:Roboto,Arial,sans-serif;padding:18px;color:#111}
       h1{margin:0 0 8px;font-size:20px} h2{margin:20px 0 8px;font-size:15px}
+      .pdf-header{display:flex;align-items:center;gap:14px;padding:12px 14px;margin-bottom:12px;border:1px solid #d1d5db;background:linear-gradient(135deg,#111827 0%,#1f2937 100%);color:#fff;border-radius:8px}
+      .pdf-header-logo{width:72px;height:72px;object-fit:contain;flex-shrink:0;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.35))}
+      .pdf-header-main{font-size:18px;font-weight:800;letter-spacing:0.6px;line-height:1.15;color:#e5e7eb}
+      .pdf-header-sub{font-size:13px;font-weight:700;letter-spacing:0.6px;margin-top:4px;color:#60a5fa}
       .meta{font-size:12px;color:#333;line-height:1.6}
       ul{margin:8px 0 0 18px;font-size:12px}
       table{width:100%;border-collapse:collapse;margin-top:10px;font-size:12px}
@@ -2573,7 +2597,13 @@ function downloadScheduleChangeNotes() {
       .changed-row td{background:#dcfce7}
       .footer{margin-top:14px;font-size:11px;color:#444}
     </style></head><body>
-      <h1>ABU DHABI AUTONOMOUS RACING LEAGUE</h1>
+      <div class="pdf-header">
+        ${logoDataUrl ? `<img class="pdf-header-logo" src="${logoDataUrl}" alt="A2RL logo">` : ''}
+        <div>
+        <div class="pdf-header-main">ABH DHABI AUTONOMOUS RACING LEAUGE</div>
+        <div class="pdf-header-sub">ABU DHABI AUTONOMOUS RACING LEAGUE</div>
+        </div>
+      </div>
       <h2 style="margin-top:2px;">Schedule Change Notes</h2>
       <div class="meta">
         Event: ${esc(version.eventName || schedCfg.eventName || '—')} | Version ${version.version} | Generated: ${esc(generated)}<br>
@@ -7356,6 +7386,7 @@ function renderEventsView() {
           +'<span class="badge '+sb+'" style="text-transform:capitalize;">'+(ev.status||'upcoming')+'</span>'
           +(isActive?'<span class="badge badge-low">● ACTIVE</span>':'')
           +'<button class="btn sm success" onclick="activateEvent('+i+')">Set Active</button>'
+          +'<button class="btn sm" onclick="openEventScheduleChangeLogs(\''+String(ev.id || '').replace(/'/g,"\\'")+'\')">Event Schedule Change Logs</button>'
           +(ev.status!=='completed' ? '<button class="btn sm" onclick="markEventComplete('+i+')">Mark as Complete</button>' : '')
           +'<button class="btn sm" onclick="openEditEventModal('+i+')">✎ Edit</button>'
           +'<button class="btn sm danger" onclick="deleteEvent('+i+')">✕</button>'
@@ -7479,27 +7510,18 @@ function deleteEvent(i) {
 }
 
 let eventLogViewerState = { eventId: '', dayIdx: 0 };
-function openEventScheduleChangeLogs() {
-  const sel = document.getElementById('event-log-event-select');
-  if (!sel) return;
+function openEventScheduleChangeLogs(eventId = '') {
   if (!events.length) {
     alert('No events available.');
     return;
   }
-  const opts = events.map(ev => `<option value="${ev.id}">${ev.name || ('Event ' + (ev.num || '?'))}</option>`);
-  sel.innerHTML = opts.join('');
-  const preferred = (events.find(e => String(e.id) === String(schedCfg.eventId || '')) || events[0] || null);
+  const preferred = eventId
+    ? (events.find(e => String(e.id) === String(eventId)) || null)
+    : (events.find(e => String(e.id) === String(schedCfg.eventId || '')) || events[0] || null);
   eventLogViewerState.eventId = preferred ? String(preferred.id) : '';
-  if (eventLogViewerState.eventId) sel.value = eventLogViewerState.eventId;
   eventLogViewerState.dayIdx = 0;
   renderEventScheduleChangeLogs();
   openModal('modal-event-schedule-logs');
-}
-function setEventLogEvent() {
-  const sel = document.getElementById('event-log-event-select');
-  eventLogViewerState.eventId = String(sel?.value || '');
-  eventLogViewerState.dayIdx = 0;
-  renderEventScheduleChangeLogs();
 }
 function setEventLogDay(dayIdx) {
   eventLogViewerState.dayIdx = Math.max(0, parseInt(dayIdx, 10) || 0);
@@ -8098,12 +8120,6 @@ init();
   <div class="modal" style="width:min(980px,96vw);max-height:90vh;overflow-y:auto;">
     <button class="modal-close" onclick="closeModal('modal-event-schedule-logs')">✕</button>
     <div class="modal-title">Event Schedule Change Logs</div>
-    <div class="form-grid" style="margin-bottom:10px;">
-      <div class="field">
-        <label>Event</label>
-        <select id="event-log-event-select" onchange="setEventLogEvent()"></select>
-      </div>
-    </div>
     <div id="event-log-meta" style="font-size:12px;color:var(--muted);margin-bottom:10px;"></div>
     <div id="event-log-day-tabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;"></div>
     <div id="event-log-body"></div>

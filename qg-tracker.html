@@ -765,6 +765,53 @@ function lsSet(key, val){
   try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){}
 }
 
+function normalizeGatewayItem(raw){
+  const g = raw && typeof raw === 'object' ? raw : {};
+  return {
+    id: String(g.id || '').trim(),
+    name: String(g.name || 'Untitled Gateway'),
+    mandatory: g.mandatory!==false,
+    bridge: !!g.bridge,
+    prereq: !!g.prereq,
+    objective: String(g.objective || ''),
+    conditions: Array.isArray(g.conditions) ? g.conditions.map(x=>String(x||'')).filter(Boolean) : [],
+    metrics: Array.isArray(g.metrics) ? g.metrics.map(m=>{
+      if(typeof m === 'string') return {text:m, value:'—'};
+      return {
+        text: String((m&&m.text) || ''),
+        value: String((m&&m.value) || '—')
+      };
+    }).filter(m=>m.text) : [],
+    pass: Array.isArray(g.pass) ? g.pass.map(x=>String(x||'')).filter(Boolean) : [],
+    nopass: Array.isArray(g.nopass) ? g.nopass.map(x=>String(x||'')).filter(Boolean) : []
+  };
+}
+
+function applyGatewayState(rawState){
+  if(!rawState || typeof rawState!=='object') return;
+  ['rookie','challenger','pro'].forEach(tier=>{
+    const incomingTier = rawState[tier];
+    if(!incomingTier || typeof incomingTier!=='object') return;
+    const targetTier = gateways[tier];
+    if(!targetTier) return;
+    if(typeof incomingTier.label === 'string' && incomingTier.label.trim()) targetTier.label = incomingTier.label;
+    if(typeof incomingTier.licenseOutcome === 'string') targetTier.licenseOutcome = incomingTier.licenseOutcome;
+    if(typeof incomingTier.failConsequence === 'string') targetTier.failConsequence = incomingTier.failConsequence;
+    if(Array.isArray(incomingTier.static)){
+      targetTier.static = incomingTier.static.map(normalizeGatewayItem).filter(g=>g.id);
+    }
+    if(Array.isArray(incomingTier.track)){
+      targetTier.track = incomingTier.track.map(normalizeGatewayItem).filter(g=>g.id);
+    }
+    if(!Array.isArray(targetTier.static) || !targetTier.static.length){
+      targetTier.static = [];
+    }
+    if(!Array.isArray(targetTier.track) || !targetTier.track.length){
+      targetTier.track = [];
+    }
+  });
+}
+
 async function loadFromStorage(){
   if(hasArtifactStorage()){
     try{ const r=await window.storage.get('a2rl-qg-teams');    if(r) teams=JSON.parse(r.value);    }catch(e){}
@@ -778,9 +825,7 @@ async function loadFromStorage(){
     licenses = lsGet('a2rl-qg-licenses') || {};
   }
   const gatewayState = lsGet('a2rl-qg-gateways');
-  if(gatewayState && gatewayState.rookie && gatewayState.challenger && gatewayState.pro){
-    gateways = gatewayState;
-  }
+  applyGatewayState(gatewayState);
 }
 
 async function saveToStorage(){
@@ -918,7 +963,8 @@ function showView(view, teamId=null, sessionId=null){
 
   if(view==='dashboard'){
     renderDashboard();
-    setMainLayout('full');
+    setMainLayout('full-with-sidebar');
+    renderGatewayQuickSidebar();
   } else if(view==='team'){
     currentTier = (teams.find(t=>t.id===teamId)||{}).tier||'rookie';
     renderTeamProfile();
@@ -950,11 +996,12 @@ function setMainLayout(mode){
 
   const isSession = (mode === 'split');
   const isGatewayAdmin = (mode === 'gateway-admin');
-  sidebar.style.display     = (isSession || isGatewayAdmin) ? '' : 'none';
+  const isFullSidebar = (mode === 'full-with-sidebar');
+  sidebar.style.display     = (isSession || isGatewayAdmin || isFullSidebar) ? '' : 'none';
   sessionCtrl.style.display = isSession ? '' : 'none';
   breadcrumb.style.display  = isSession ? '' : 'none';
   tierBar.style.display     = 'none'; // tier is locked per session; bar hidden
-  content.style.padding     = (isSession || isGatewayAdmin) ? '22px' : '0';
+  content.style.padding     = (isSession || isGatewayAdmin || isFullSidebar) ? '22px' : '0';
 
   // Adjust main height based on visible chrome
   // Header 52px + nav 44px + (breadcrumb 36px + progress 33px when session)
@@ -962,6 +1009,22 @@ function setMainLayout(mode){
   mainArea.style.height = isSession
     ? 'calc(100vh - 165px)'
     : 'calc(100vh - 96px)';
+}
+
+function renderGatewayQuickSidebar(){
+  const tiers = [
+    {id:'rookie',label:'Rookie'},
+    {id:'challenger',label:'Challenger'},
+    {id:'pro',label:'PRO'}
+  ];
+  let html = `<div class="sidebar-section-label">Gateway Setup</div>`;
+  tiers.forEach(t=>{
+    html += `<div class="gw-item" onclick="gatewayAdminTier='${t.id}';showView('gateway-admin')">
+      <span class="gw-code ${t.id}">${t.label.toUpperCase()}</span>
+      <span class="gw-title-short">Manage ${t.label} gateways</span>
+    </div>`;
+  });
+  document.getElementById('sidebar').innerHTML = html;
 }
 
 function setTierUI(tier){

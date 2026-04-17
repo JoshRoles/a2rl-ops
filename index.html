@@ -1590,6 +1590,7 @@ let supabaseGlobalSyncInFlight = false;
 let supabaseGlobalSyncQueued = false;
 let supabaseWorkspaceLastUpdatedAt = '';
 let supabasePollTimer = null;
+const PASSWORD_HASH_PREFIX = 'sha256:';
 function initSupabaseClient() {
   supabaseEnabled = !!(SUPABASE_URL && SUPABASE_ANON_KEY);
 }
@@ -1600,6 +1601,27 @@ function supabaseHeaders(extra = {}) {
     'Content-Type': 'application/json',
     ...extra,
   };
+}
+async function hashCredential(identifier, password) {
+  const raw = `${String(identifier || '').trim().toLowerCase()}::${String(password || '')}`;
+  if (!window.crypto?.subtle) return '';
+  const bytes = new TextEncoder().encode(raw);
+  const digest = await window.crypto.subtle.digest('SHA-256', bytes);
+  const arr = Array.from(new Uint8Array(digest));
+  return PASSWORD_HASH_PREFIX + arr.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+function isHashedPassword(v) {
+  return String(v || '').startsWith(PASSWORD_HASH_PREFIX);
+}
+async function verifyUserPassword(user, identifier, password) {
+  if (!user) return false;
+  const pwdHash = String(user.passwordHash || '');
+  if (pwdHash && isHashedPassword(pwdHash)) {
+    const candidate = await hashCredential(identifier, password);
+    return !!candidate && candidate === pwdHash;
+  }
+  const legacy = String(user.password || '');
+  return !!legacy && legacy === String(password || '');
 }
 function readScopedJson(name, fallback, legacyKey='') {
   const raw = currentWorkspace ? localStorage.getItem(wk(name)) : null;
@@ -2016,7 +2038,7 @@ function selectWorkspace(workspaceId) {
 
 function seedAuth() {
   if (!Array.isArray(users) || !users.length) {
-    users = [{ email: DEFAULT_ADMIN_EMAIL, password: DEFAULT_ADMIN_PASSWORD, role: 'admin', active: true, allowedViews: [...ACCESS_AREAS], allowedWorkspaces: [...ALL_WORKSPACES] }];
+    users = [{ email: DEFAULT_ADMIN_EMAIL, username: DEFAULT_ADMIN_EMAIL, password: DEFAULT_ADMIN_PASSWORD, role: 'admin', active: true, allowedViews: [...ACCESS_AREAS], allowedWorkspaces: [...ALL_WORKSPACES] }];
     localStorage.setItem(GLOBAL_KEYS.users, JSON.stringify(users));
   } else {
     users = users.map(u => {
@@ -2026,6 +2048,7 @@ function seedAuth() {
         : (role === ROLES.contributor ? [...CONTRIBUTOR_DEFAULT_AREAS] : [...VIEWER_DEFAULT_AREAS]);
       return {
         ...u,
+        username: u.username || u.email || '',
         role,
         allowedViews: Array.isArray(u.allowedViews) ? u.allowedViews.filter(v => v !== 'users') : defaults,
         allowedWorkspaces: Array.isArray(u.allowedWorkspaces) && u.allowedWorkspaces.length ? u.allowedWorkspaces.filter(w => ALL_WORKSPACES.includes(w)) : [...ALL_WORKSPACES],
@@ -2110,12 +2133,22 @@ function openHomeAdminModal() {
   renderUsersManagement();
   openModal('modal-home-admin');
 }
-function login() {
+async function login() {
   const email = (document.getElementById('login-email')?.value || '').trim().toLowerCase();
   const password = (document.getElementById('login-password')?.value || '').trim();
   const msg = document.getElementById('login-msg');
-  const u = users.find(x => (x.email || '').toLowerCase() === email && x.password === password && x.active !== false);
-  if (!u) {
+  const u = users.find(x => (x.email || '').toLowerCase() === email && x.active !== false);
+  const ok = await verifyUserPassword(u, email, password);
+  if (u && ok && !isHashedPassword(u.passwordHash || '')) {
+    // Upgrade legacy plain password account to hash after successful login.
+    const upgradedHash = await hashCredential(email, password);
+    if (upgradedHash) {
+      u.passwordHash = upgradedHash;
+      delete u.password;
+      persistUsersState();
+    }
+  }
+  if (!u || !ok) {
     if (msg) msg.textContent = 'Invalid credentials';
     return;
   }
@@ -2125,6 +2158,7 @@ function login() {
   const allowedViews = Array.isArray(u.allowedViews) ? u.allowedViews.filter(v => v !== 'users') : defaults;
   currentUser = {
     email: u.email,
+    username: u.username || u.email,
     role: u.role || 'viewer',
     allowedViews,
     allowedWorkspaces: normalizeUserWorkspaces(u),
@@ -2886,7 +2920,7 @@ function startSupabasePolling() {
     if (!currentWorkspace || !currentUser) return;
     loadWorkspaceDataFromSupabase(currentWorkspace);
     loadGlobalStateFromSupabase();
-  }, 7000);
+  }, 2000);
 }
 async function syncWorkspaceToSupabase() {
   if (!currentWorkspace || supabaseHydrating) return;
@@ -6346,7 +6380,7 @@ function renderUsersManagement() {
     </div>
   `).join('');
 }
-function createUserLogin() {
+async function createUserLogin() {
   if (!requireAdmin('Only admin can create users.')) return;
   const username = (document.getElementById('um-email')?.value || '').trim();
   const password = (document.getElementById('um-password')?.value || '').trim();
@@ -6357,7 +6391,9 @@ function createUserLogin() {
   if (role !== ROLES.admin && !allowedViews.length) { alert('Select at least one access area.'); return; }
   const allowedWorkspaces = role === ROLES.admin ? [...ALL_WORKSPACES] : getSelectedWorkspaces();
   if (role !== ROLES.admin && !allowedWorkspaces.length) { alert('Select at least one workspace.'); return; }
-  users.push({ email: username, username, password, role, active: true, allowedViews: role === ROLES.admin ? [...ACCESS_AREAS] : allowedViews, allowedWorkspaces });
+  const passwordHash = await hashCredential(username, password);
+  if (!passwordHash) { alert('Secure password hashing is unavailable in this browser.'); return; }
+  users.push({ email: username, username, passwordHash, role, active: true, allowedViews: role === ROLES.admin ? [...ACCESS_AREAS] : allowedViews, allowedWorkspaces });
   persistUsersState();
   document.getElementById('um-email').value = '';
   document.getElementById('um-password').value = '';
@@ -8249,6 +8285,11 @@ async function init(){
   syncAutoOnTrack();
   startSupabasePolling();
   window.addEventListener('focus', () => {
+    if (currentWorkspace) loadWorkspaceDataFromSupabase(currentWorkspace);
+    loadGlobalStateFromSupabase();
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
     if (currentWorkspace) loadWorkspaceDataFromSupabase(currentWorkspace);
     loadGlobalStateFromSupabase();
   });

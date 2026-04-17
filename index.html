@@ -6,6 +6,7 @@
 <title>A2RL Operations Command</title>
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root {
   --bg:#07070a; --bg2:#0f1018; --bg3:#171926; --bg4:#0b0b12;
@@ -1574,6 +1575,23 @@ const DEFAULT_HISTORY_COLUMNS = [
 ];
 let currentWorkspace = localStorage.getItem(GLOBAL_KEYS.workspace) || '';
 function wk(name) { return `a2rl_${currentWorkspace}_${name}`; }
+const SUPABASE_URL = 'https://rlfwaafrseibtqgjzpnf.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_XC8DB43VUfGRo1RkeDxEiw_wqay3CcW';
+const SUPABASE_STATE_TABLE = 'app_workspace_state';
+let supabaseClient = null;
+let supabaseSyncTimer = null;
+let supabaseLastPayload = '';
+let supabaseHydrating = false;
+let supabaseSyncInFlight = false;
+let supabaseSyncQueued = false;
+function initSupabaseClient() {
+  if (supabaseClient || !window.supabase?.createClient || !SUPABASE_URL || !SUPABASE_ANON_KEY) return;
+  try {
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  } catch {
+    supabaseClient = null;
+  }
+}
 function readScopedJson(name, fallback, legacyKey='') {
   const raw = currentWorkspace ? localStorage.getItem(wk(name)) : null;
   if (raw != null) {
@@ -1743,7 +1761,7 @@ function renderWorkspaceEventTypeOptions() {
   });
 }
 
-function loadWorkspaceData() {
+function loadWorkspaceData(opts = {}) {
   if (!currentWorkspace) return;
   migrateLegacyWorkspaceData();
   sessions = readScopedJson('sessions', [], 'a2rl_sessions');
@@ -1780,6 +1798,9 @@ function loadWorkspaceData() {
     'duration','weather','startAttempts','stoppages','laptime','damage','replans','instability','sensor','multicar','overtaking','manualOverride'
   ]));
   if (!historyColumns.length) historyColumns = HISTORY_COLUMNS.map(c => c.key);
+  if (!opts.skipRemote && !supabaseHydrating) {
+    loadWorkspaceDataFromSupabase(currentWorkspace);
+  }
 }
 function applyWorkspaceUI() {
   const cfg = WORKSPACE_CONFIG[currentWorkspace] || WORKSPACE_CONFIG.ontrack;
@@ -2698,6 +2719,118 @@ function openAllScheduleVersions() {
   openModal('modal-schedule-versions');
 }
 
+function buildWorkspaceStatePayload() {
+  return {
+    sessions,
+    teams,
+    weights,
+    schedule,
+    runtime_schedule: runtimeSchedule,
+    trackalloc: trackAlloc,
+    garages,
+    thresh: thresholds,
+    event_cfg: eventCfg,
+    sched_cfg: schedCfg,
+    capture_drafts: captureDrafts,
+    track_options: trackOptions,
+    team_summary_metrics: teamSummaryMetrics,
+    history_columns: historyColumns,
+    team_summary_sort: teamSummarySort,
+    schedule_change_log: scheduleChangeLog || {},
+    cat_mult: CAT_MULT,
+    events,
+    sched_zoom: schedZoom,
+    active_view: currentWorkspace ? localStorage.getItem(wk('active_view')) : null,
+  };
+}
+function persistWorkspaceStateToLocal(state) {
+  if (!currentWorkspace || !state || typeof state !== 'object') return;
+  const put = (k, v) => localStorage.setItem(wk(k), JSON.stringify(v));
+  put('sessions', state.sessions || []);
+  put('teams', state.teams || []);
+  put('weights', state.weights || []);
+  put('schedule', state.schedule || []);
+  put('runtime_schedule', state.runtime_schedule || []);
+  put('trackalloc', state.trackalloc || []);
+  put('garages', state.garages || {});
+  put('thresh', state.thresh || {});
+  put('event_cfg', state.event_cfg || {});
+  put('sched_cfg', state.sched_cfg || {});
+  put('capture_drafts', state.capture_drafts || {});
+  put('track_options', state.track_options || []);
+  put('team_summary_metrics', state.team_summary_metrics || []);
+  put('history_columns', state.history_columns || []);
+  put('team_summary_sort', state.team_summary_sort || {});
+  put('schedule_change_log', state.schedule_change_log || {});
+  put('cat_mult', state.cat_mult || { rookie: 1.0, challenger: 0.8, pro: 0.6 });
+  put('events', state.events || []);
+  localStorage.setItem(wk('sched_zoom'), String(state.sched_zoom || 1));
+  if (state.active_view) localStorage.setItem(wk('active_view'), String(state.active_view));
+}
+function scheduleSupabaseSync() {
+  if (!currentWorkspace) return;
+  initSupabaseClient();
+  if (!supabaseClient) return;
+  if (supabaseSyncTimer) clearTimeout(supabaseSyncTimer);
+  supabaseSyncTimer = setTimeout(syncWorkspaceToSupabase, 900);
+}
+async function syncWorkspaceToSupabase() {
+  if (!currentWorkspace || supabaseHydrating) return;
+  initSupabaseClient();
+  if (!supabaseClient) return;
+  if (supabaseSyncInFlight) {
+    supabaseSyncQueued = true;
+    return;
+  }
+  const statePayload = buildWorkspaceStatePayload();
+  const serialized = JSON.stringify(statePayload);
+  if (serialized === supabaseLastPayload) return;
+  supabaseSyncInFlight = true;
+  try {
+    const { error } = await supabaseClient
+      .from(SUPABASE_STATE_TABLE)
+      .upsert(
+        { workspace: currentWorkspace, state_json: statePayload, updated_at: new Date().toISOString() },
+        { onConflict: 'workspace' }
+      );
+    if (!error) supabaseLastPayload = serialized;
+  } catch {
+    // Keep local storage as fallback when network/db write fails.
+  } finally {
+    supabaseSyncInFlight = false;
+    if (supabaseSyncQueued) {
+      supabaseSyncQueued = false;
+      scheduleSupabaseSync();
+    }
+  }
+}
+async function loadWorkspaceDataFromSupabase(workspaceId) {
+  if (!workspaceId) return;
+  initSupabaseClient();
+  if (!supabaseClient) return;
+  try {
+    const { data, error } = await supabaseClient
+      .from(SUPABASE_STATE_TABLE)
+      .select('state_json, updated_at')
+      .eq('workspace', workspaceId)
+      .maybeSingle();
+    if (error || !data?.state_json || workspaceId !== currentWorkspace) return;
+    supabaseHydrating = true;
+    persistWorkspaceStateToLocal(data.state_json);
+    loadWorkspaceData({ skipRemote: true });
+    supabaseLastPayload = JSON.stringify(buildWorkspaceStatePayload());
+    if (currentWorkspace && currentUser) {
+      const activeView = readScopedString('active_view', isQGWorkspace() ? 'qg' : 'live', 'a2rl_active_view');
+      if (canAccessView(activeView)) showView(activeView);
+      else showView(isQGWorkspace() ? 'qg' : 'live');
+    }
+  } catch {
+    // Ignore remote load failures and keep local state.
+  } finally {
+    supabaseHydrating = false;
+  }
+}
+
 // ── SAVE ──
 function save() {
   if (!currentWorkspace) return;
@@ -2717,6 +2850,7 @@ function save() {
   localStorage.setItem(wk('history_columns'), JSON.stringify(historyColumns));
   localStorage.setItem(wk('team_summary_sort'), JSON.stringify(teamSummarySort));
   localStorage.setItem(wk('schedule_change_log'), JSON.stringify(scheduleChangeLog || {}));
+  scheduleSupabaseSync();
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -7943,6 +8077,7 @@ function applyRoleGuards() {
 }
 
 function init(){
+  initSupabaseClient();
   if (!currentUser) {
     currentWorkspace = '';
     localStorage.removeItem(GLOBAL_KEYS.workspace);

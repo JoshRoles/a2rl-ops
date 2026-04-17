@@ -3441,18 +3441,32 @@ function renderFeed() {
 // ═══════════════════════════════════════════════════════════════════════
 function populateTeamDropdowns() {
   const selects = ['f-team','g-team','ot-team-select','sched-build-team','alloc-team-select','queue-team-select'];
+  const dayIdx = getTodayScheduleDayIndex();
+  const scheduledTeamsToday = new Set(getRuntimeSchedule()
+    .filter(b => (b.day||0)===dayIdx && b.published && b.type!=='break' && b.type!=='reserve' && (b.teams||[]).length)
+    .flatMap(b => b.teams || []));
+  const scheduledOnlySelects = new Set(['f-team','g-team','ot-team-select','queue-team-select']);
   selects.forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     const isMulti = el.multiple;
     const activeTeams = teams.filter(t => t.active);
+    const sourceTeams = scheduledOnlySelects.has(id)
+      ? activeTeams.filter(t => scheduledTeamsToday.has(t.name))
+      : activeTeams;
     if (!isMulti) el.innerHTML = '';
     else el.innerHTML = '';
-    activeTeams.forEach(t => {
+    sourceTeams.forEach(t => {
       const o = document.createElement('option');
       o.value = t.name; o.textContent = t.name;
       el.appendChild(o);
     });
+    if (!isMulti && sourceTeams.length === 0 && scheduledOnlySelects.has(id)) {
+      const o = document.createElement('option');
+      o.value = '';
+      o.textContent = 'No teams scheduled';
+      el.appendChild(o);
+    }
   });
   // History filter
   const hf = document.getElementById('hist-filter-team');
@@ -6063,6 +6077,10 @@ function startActiveSession(opts) {
   const type = opts?.type || document.getElementById('ot-type-select').value;
   const duration = Number.isFinite(opts?.duration) ? opts.duration : (parseInt(document.getElementById('ot-duration').value) || 30);
   const sessNum = Number.isFinite(opts?.sessNum) ? opts.sessNum : (parseInt(document.getElementById('ot-sess-num').value) || 1);
+  if (!team) {
+    alert('No teams are scheduled in the Scheduler for On Track yet.');
+    return;
+  }
 
   if (liveSession?.timerInterval) clearInterval(liveSession.timerInterval);
 
@@ -6230,8 +6248,13 @@ function renderSessionQueue() {
 
 function openQueueModal() { populateTeamDropdowns(); openModal('modal-queue'); }
 function addToQueue() {
+  const selectedTeam = document.getElementById('queue-team-select').value;
+  if (!selectedTeam) {
+    alert('No teams are scheduled in the Scheduler for On Track yet.');
+    return;
+  }
   sessionQueue.push({
-    team: document.getElementById('queue-team-select').value,
+    team: selectedTeam,
     type: document.getElementById('queue-type-select').value,
     duration: parseInt(document.getElementById('queue-duration').value) || 30,
     priority: document.getElementById('queue-priority').value,

@@ -1783,7 +1783,9 @@ let currentUser = JSON.parse(localStorage.getItem(GLOBAL_KEYS.currentUser) || 'n
 
 const DEFAULT_ADMIN_EMAIL = 'Rolesjosh417@gmail.com';
 const DEFAULT_ADMIN_PASSWORD = 'Admin@123';
-const ACCESS_AREAS = ['live','schedule','garagealloc','garage','tracktime','session','history','teams','trends','events','settings','insurance','qg'];
+const QG_VIEW_PERMISSION = 'qg_view';
+const QG_CERT_PERMISSION = 'qg_certificate';
+const ACCESS_AREAS = ['live','schedule','garagealloc','garage','tracktime','session','history','teams','trends','events','settings','insurance','qg',QG_VIEW_PERMISSION,QG_CERT_PERMISSION];
 const ALL_WORKSPACES = ['ontrack','sim','qg'];
 const VIEWER_DEFAULT_AREAS = ['live','history','teams','trends'];
 const CONTRIBUTOR_DEFAULT_AREAS = ['live','schedule','garagealloc','garage','tracktime','session','history','teams','trends','events','insurance'];
@@ -1816,6 +1818,34 @@ function canAccessWorkspace(ws) {
 }
 function canContribute() {
   return isAdmin() || isContributor();
+}
+function normalizeAllowedViews(views) {
+  const selected = Array.isArray(views) ? views.filter(v => ACCESS_AREAS.includes(v)) : [];
+  const out = Array.from(new Set(selected));
+  if (out.includes(QG_CERT_PERMISSION) && !out.includes(QG_VIEW_PERMISSION)) out.push(QG_VIEW_PERMISSION);
+  if (out.includes(QG_VIEW_PERMISSION) && !out.includes('qg')) out.push('qg');
+  if (out.includes('qg') && !out.includes(QG_VIEW_PERMISSION)) out.push(QG_VIEW_PERMISSION);
+  return out;
+}
+function accessAreaLabel(v) {
+  const labels = {
+    live: 'Live Dashboard',
+    schedule: 'Schedule',
+    garagealloc: 'Garage',
+    garage: 'On Track',
+    tracktime: 'Track Time',
+    session: 'Sessions',
+    history: 'Session History',
+    teams: 'Team Analysis',
+    trends: 'Risk Trends',
+    events: 'Events',
+    settings: 'Settings',
+    insurance: 'Insurance',
+    qg: 'QG Workspace',
+    [QG_VIEW_PERMISSION]: 'View QG',
+    [QG_CERT_PERMISSION]: 'Certificate QG',
+  };
+  return labels[v] || v;
 }
 function isLastActiveAdmin(emailToExclude = '') {
   const admins = (users || []).filter(u => (u?.role || '') === ROLES.admin && u.active !== false);
@@ -2008,6 +2038,7 @@ function goHome() {
 }
 function selectWorkspace(workspaceId) {
   if (!WORKSPACE_CONFIG[workspaceId]) return;
+  const forceLiveLanding = workspaceId === 'sim' || workspaceId === 'ontrack';
   if (!currentUser) {
     alert('Please sign in first.');
     return;
@@ -2016,7 +2047,11 @@ function selectWorkspace(workspaceId) {
     alert('You do not have access to that workspace.');
     return;
   }
-  if (currentWorkspace === workspaceId) { refreshWorkspaceUI(); return; }
+  if (currentWorkspace === workspaceId) {
+    refreshWorkspaceUI();
+    if (currentUser) showView(forceLiveLanding ? 'live' : (canAccessView('qg') ? 'qg' : 'live'));
+    return;
+  }
   if (currentWorkspace) save();
   currentWorkspace = workspaceId;
   localStorage.setItem(GLOBAL_KEYS.workspace, currentWorkspace);
@@ -2028,8 +2063,12 @@ function selectWorkspace(workspaceId) {
   refreshAuthUI();
   if (currentUser) {
     const defaultView = isQGWorkspace() ? 'qg' : 'live';
-    const savedView = readScopedString('active_view', defaultView, 'a2rl_active_view');
-    showView(canAccessView(savedView) ? savedView : defaultView);
+    if (forceLiveLanding) {
+      showView('live');
+    } else {
+      const savedView = readScopedString('active_view', defaultView, 'a2rl_active_view');
+      showView(canAccessView(savedView) ? savedView : defaultView);
+    }
     renderLiveTable();
     renderFeed();
     initLiveCharts();
@@ -2050,7 +2089,7 @@ function seedAuth() {
         ...u,
         username: u.username || u.email || '',
         role,
-        allowedViews: Array.isArray(u.allowedViews) ? u.allowedViews.filter(v => v !== 'users') : defaults,
+        allowedViews: normalizeAllowedViews(Array.isArray(u.allowedViews) ? u.allowedViews.filter(v => v !== 'users') : defaults),
         allowedWorkspaces: Array.isArray(u.allowedWorkspaces) && u.allowedWorkspaces.length ? u.allowedWorkspaces.filter(w => ALL_WORKSPACES.includes(w)) : [...ALL_WORKSPACES],
       };
     });
@@ -2062,7 +2101,8 @@ function canAccessView(id) {
   if (!currentUser) return false;
   if (id === 'users') return false;
   if (isAdmin()) return true;
-  const allowed = Array.isArray(currentUser.allowedViews) ? currentUser.allowedViews : [];
+  const allowed = normalizeAllowedViews(currentUser.allowedViews);
+  if (id === 'qg') return allowed.includes('qg') || allowed.includes(QG_VIEW_PERMISSION);
   return allowed.includes(id);
 }
 function requireAdmin(msg) {
@@ -2155,7 +2195,7 @@ async function login() {
   const defaults = u.role === ROLES.admin
     ? [...ACCESS_AREAS]
     : (u.role === ROLES.contributor ? [...CONTRIBUTOR_DEFAULT_AREAS] : [...VIEWER_DEFAULT_AREAS]);
-  const allowedViews = Array.isArray(u.allowedViews) ? u.allowedViews.filter(v => v !== 'users') : defaults;
+  const allowedViews = normalizeAllowedViews(Array.isArray(u.allowedViews) ? u.allowedViews.filter(v => v !== 'users') : defaults);
   currentUser = {
     email: u.email,
     username: u.username || u.email,
@@ -2192,7 +2232,7 @@ function renderUserAccessChecks() {
   wrap.innerHTML = ACCESS_AREAS.map(v =>
     `<label style="display:flex;align-items:center;gap:6px;padding:4px 6px;border:1px solid var(--border);border-radius:5px;background:var(--card);">
       <input type="checkbox" value="${v}" data-acc-check checked style="accent-color:var(--accent);">
-      <span style="font-size:11px;text-transform:capitalize;">${v}</span>
+      <span style="font-size:11px;">${accessAreaLabel(v)}</span>
     </label>`
   ).join('');
 }
@@ -2207,7 +2247,7 @@ function toggleAccessChecksDisabled() {
 function getSelectedAccessAreas() {
   const role = document.getElementById('um-role')?.value || 'viewer';
   if (role === ROLES.admin) return [...ACCESS_AREAS];
-  return Array.from(document.querySelectorAll('#um-access-checks input[data-acc-check]:checked')).map(cb => cb.value);
+  return normalizeAllowedViews(Array.from(document.querySelectorAll('#um-access-checks input[data-acc-check]:checked')).map(cb => cb.value));
 }
 function renderWorkspaceAccessChecksCreate() {
   const wrap = document.getElementById('um-workspace-checks');
@@ -6393,7 +6433,7 @@ async function createUserLogin() {
   if (role !== ROLES.admin && !allowedWorkspaces.length) { alert('Select at least one workspace.'); return; }
   const passwordHash = await hashCredential(username, password);
   if (!passwordHash) { alert('Secure password hashing is unavailable in this browser.'); return; }
-  users.push({ email: username, username, passwordHash, role, active: true, allowedViews: role === ROLES.admin ? [...ACCESS_AREAS] : allowedViews, allowedWorkspaces });
+  users.push({ email: username, username, passwordHash, role, active: true, allowedViews: normalizeAllowedViews(role === ROLES.admin ? [...ACCESS_AREAS] : allowedViews), allowedWorkspaces });
   persistUsersState();
   document.getElementById('um-email').value = '';
   document.getElementById('um-password').value = '';
@@ -6443,12 +6483,12 @@ function openEditUserPermissions(i) {
   roleSel.value = u.role || 'viewer';
   const wrap = document.getElementById('edit-user-access-checks');
   if (wrap) {
-    const selected = new Set(Array.isArray(u.allowedViews) ? u.allowedViews : []);
+    const selected = new Set(normalizeAllowedViews(u.allowedViews));
     wrap.innerHTML = ACCESS_AREAS.map(v => {
       const checked = (u.role === ROLES.admin || selected.has(v)) ? 'checked' : '';
       return `<label style="display:flex;align-items:center;gap:6px;padding:4px 6px;border:1px solid var(--border);border-radius:5px;background:var(--card);">
         <input type="checkbox" value="${v}" data-edit-acc-check ${checked} style="accent-color:var(--accent);">
-        <span style="font-size:11px;text-transform:capitalize;">${v}</span>
+        <span style="font-size:11px;">${accessAreaLabel(v)}</span>
       </label>`;
     }).join('');
   }
@@ -6506,6 +6546,7 @@ function saveEditedUserPermissions() {
   let allowedViews = role === ROLES.admin
     ? [...ACCESS_AREAS]
     : Array.from(document.querySelectorAll('#edit-user-access-checks input[data-edit-acc-check]:checked')).map(cb => cb.value);
+  allowedViews = normalizeAllowedViews(allowedViews);
   if (role !== ROLES.admin && !allowedViews.length) {
     alert('Select at least one access area.');
     return;
@@ -6522,7 +6563,7 @@ function saveEditedUserPermissions() {
   users[idx].allowedWorkspaces = allowedWorkspaces;
   persistUsersState();
   if (currentUser && (currentUser.email || '').toLowerCase() === (users[idx].email || '').toLowerCase()) {
-    currentUser = { ...currentUser, role, allowedViews, allowedWorkspaces: normalizeUserWorkspaces(users[idx]) };
+    currentUser = { ...currentUser, role, allowedViews: normalizeAllowedViews(allowedViews), allowedWorkspaces: normalizeUserWorkspaces(users[idx]) };
     localStorage.setItem(GLOBAL_KEYS.currentUser, JSON.stringify(currentUser));
     refreshAuthUI();
   }

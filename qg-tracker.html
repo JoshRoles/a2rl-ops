@@ -861,6 +861,35 @@ function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
 function fmtDate(ts){ return ts?new Date(ts).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):'—'; }
 function fmtDateTime(ts){ return ts?new Date(ts).toLocaleString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'—'; }
+function getParentCurrentUser(){
+  try{
+    if (window.parent && window.parent !== window) return window.parent.currentUser || null;
+  }catch(e){}
+  return null;
+}
+function isParentAdmin(){
+  const u = getParentCurrentUser();
+  if (!u) return true;
+  return String(u.role || '').toLowerCase() === 'admin';
+}
+function canViewQG(){
+  const u = getParentCurrentUser();
+  if (!u) return true;
+  if (String(u.role || '').toLowerCase() === 'admin') return true;
+  const allowed = Array.isArray(u.allowedViews) ? u.allowedViews : [];
+  return allowed.includes('qg') || allowed.includes('qg_view');
+}
+function canCertificateQG(){
+  const u = getParentCurrentUser();
+  if (!u) return true;
+  if (String(u.role || '').toLowerCase() === 'admin') return true;
+  const allowed = Array.isArray(u.allowedViews) ? u.allowedViews : [];
+  return allowed.includes('qg_certificate');
+}
+function applyQGPermissionUI(){
+  const settingsBtn = document.getElementById('settingsCogBtn');
+  if (settingsBtn) settingsBtn.style.display = isParentAdmin() ? '' : 'none';
+}
 
 function teamAbbr(name){
   // Generate 3-letter abbreviation from team name
@@ -949,6 +978,20 @@ function teamGatewayStatus(teamId, tier){
 // VIEWS
 // ══════════════════════════════════════════════════════════════
 function showView(view, teamId=null, sessionId=null){
+  if(!canViewQG()){
+    currentView='dashboard';
+    currentTeamId=null;
+    currentSessionId=null;
+    setMainLayout('full');
+    document.getElementById('content').innerHTML = `<div class="welcome-pane"><div class="welcome-title">QG Access Restricted</div><div class="welcome-sub">You do not have permission to view QG. Ask an administrator to enable "View QG".</div></div>`;
+    return;
+  }
+  if(view==='gateway-admin' && !isParentAdmin()){
+    alert('Only admins can change QGs.');
+    view='dashboard';
+    teamId=null;
+    sessionId=null;
+  }
   currentView=view;
   currentTeamId=teamId;
   currentSessionId=sessionId;
@@ -1101,12 +1144,20 @@ function renderDashboard(){
 // TEAM PROFILE
 // ══════════════════════════════════════════════════════════════
 function issueLicense(teamId, verdict, rcOfficer, notes){
+  if(!canCertificateQG()){
+    alert('You do not have permission to certificate QG.');
+    return;
+  }
   licenses[teamId] = {verdict, issuedBy: rcOfficer, issuedAt: Date.now(), notes: notes||''};
   saveToStorage();
   renderTeamProfile();
 }
 
 function revokeLicense(teamId){
+  if(!canCertificateQG()){
+    alert('You do not have permission to certificate QG.');
+    return;
+  }
   if(!confirm('Revoke this license decision? The team will return to eligible/incomplete status.')) return;
   delete licenses[teamId];
   saveToStorage();
@@ -1156,7 +1207,9 @@ function renderLicensePanel(team, gwStatus){
 
   // Action buttons
   let btns = '';
-  if(lic){
+  if(!canCertificateQG()){
+    btns = `<div style="font-size:12px;color:var(--text-muted)">Certificate QG permission is required to issue, deny, or revoke license decisions.</div>`;
+  } else if(lic){
     btns = `<button class="license-btn revoke" onclick="revokeLicense('${team.id}')">↺ Revoke Decision</button>`;
   } else if(allPassed){
     btns = `
@@ -1537,6 +1590,7 @@ function setTier(tier){
 }
 
 function toggleQgSettingsMenu(ev){
+  if(!isParentAdmin()) return;
   if(ev) ev.stopPropagation();
   const menu = document.getElementById('qgSettingsMenu');
   if(!menu) return;
@@ -1544,6 +1598,10 @@ function toggleQgSettingsMenu(ev){
 }
 
 function openGatewayAdminFromMenu(){
+  if(!isParentAdmin()){
+    alert('Only admins can change QGs.');
+    return;
+  }
   const menu = document.getElementById('qgSettingsMenu');
   if(menu) menu.classList.remove('show');
   showView('gateway-admin');
@@ -2070,6 +2128,7 @@ async function init(){
   };
   tick(); setInterval(tick,30000);
   await loadFromStorage();
+  applyQGPermissionUI();
   showView('dashboard');
 }
 document.addEventListener('click', function(ev){

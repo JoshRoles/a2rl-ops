@@ -21,22 +21,22 @@
   body{background:var(--bg);color:var(--text);font-family:'Roboto',sans-serif;font-size:14px;min-height:100vh;}
 
   /* ── HEADER ── */
-  .header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:52px;position:sticky;top:0;z-index:100;}
-  .header-left{display:flex;align-items:center;gap:14px;}
+  .header{background:rgba(8,12,20,0.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:12px 26px;display:flex;align-items:center;justify-content:space-between;min-height:58px;position:sticky;top:0;z-index:100;}
+  .header-left{display:flex;align-items:center;gap:12px;}
   .header-brand-link{text-decoration:none;display:flex;align-items:center;cursor:pointer;}
   .header-brand-mark{background:transparent;padding:0;display:flex;align-items:center;}
-  .header-brand-img{height:32px;width:auto;max-width:132px;object-fit:contain;display:block;filter:drop-shadow(0 1px 6px rgba(0,0,0,0.4));}
-  .logo{font-family:'Roboto',sans-serif;font-weight:800;font-size:20px;letter-spacing:0.05em;}
-  .logo span{color:var(--pro);}
-  .header-badge{font-family:'Roboto Mono',monospace;font-size:10px;font-weight:600;color:var(--text-muted);background:var(--bg);border:1px solid var(--border);padding:3px 8px;border-radius:3px;letter-spacing:0.08em;text-transform:uppercase;}
+  .header-brand-img{height:38px;width:auto;max-width:148px;object-fit:contain;display:block;filter:drop-shadow(0 2px 10px rgba(0,0,0,0.45));}
+  .header-title{display:flex;flex-direction:column;gap:2px;}
+  .header-title-main{font-family:'Roboto',sans-serif;font-size:18px;font-weight:700;line-height:1;color:var(--text);}
+  .header-title-sub{font-size:11px;color:var(--text-muted);}
   .header-date{font-family:'Roboto Mono',monospace;font-size:11px;color:var(--text-muted);}
 
   /* ── NAV ── */
-  .nav-strip{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;gap:4px;height:44px;}
-  .nav-btn{font-family:'Roboto',sans-serif;font-weight:700;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;padding:10px 16px;border:none;background:none;cursor:pointer;border-bottom:3px solid transparent;color:var(--text-muted);transition:all 0.15s;position:relative;bottom:-1px;}
+  .nav-strip{background:var(--surface);border-bottom:1px solid var(--border);padding:0 26px;display:flex;align-items:center;gap:8px;height:46px;}
+  .nav-btn{font-family:'Roboto',sans-serif;font-weight:600;font-size:13px;letter-spacing:0.04em;text-transform:none;padding:8px 14px;border:1px solid transparent;background:none;cursor:pointer;border-radius:5px;color:var(--text-muted);transition:all 0.15s;}
   .nav-btn:hover{color:var(--text);}
-  .nav-btn.active{color:var(--accent);border-bottom-color:var(--accent);}
-  .summary-btn{font-family:'Roboto',sans-serif;font-weight:700;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;padding:6px 14px;background:var(--surface);border:1px solid var(--border);color:var(--text-muted);border-radius:4px;cursor:pointer;transition:all 0.15s;}
+  .nav-btn.active{color:var(--accent);border-color:var(--accent);background:rgba(59,130,246,0.08);}
+  .summary-btn{font-family:'Roboto',sans-serif;font-weight:600;font-size:13px;letter-spacing:0.04em;text-transform:none;padding:7px 14px;background:var(--surface);border:1px solid var(--border);color:var(--text-muted);border-radius:5px;cursor:pointer;transition:all 0.15s;}
   .summary-btn:hover{border-color:var(--accent);color:var(--accent);}
 
   /* ── SESSION BREADCRUMB ── */
@@ -315,8 +315,10 @@
         <img src="assets/a2rl-logo-home.png" alt="Abu Dhabi Autonomous Racing League — A2RL" class="header-brand-img">
       </div>
     </a>
-    <div class="header-badge">Race Control</div>
-    <div class="header-badge">Quality Gateway Script</div>
+    <div class="header-title">
+      <div class="header-title-main">A2RL Operations Command Center</div>
+      <div class="header-title-sub">QG Tracker</div>
+    </div>
   </div>
   <div class="header-date" id="liveDate"></div>
 </div>
@@ -350,7 +352,7 @@
 </div>
 
 <!-- MAIN -->
-<div class="main" id="mainArea" style="height:calc(100vh - 96px)">
+<div class="main" id="mainArea" style="height:calc(100vh - 104px)">
   <div class="sidebar scrollbar-thin" id="sidebar" style="display:none"></div>
   <div class="content scrollbar-thin" id="content"></div>
 </div>

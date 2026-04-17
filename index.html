@@ -1645,6 +1645,8 @@ let schedZoom = 1;
 let scheduleUndo = [];
 let scheduleRedo = [];
 let lastChangeNotesBase = [];
+let scheduleChangeLog = {};
+let pendingScheduleChangeReason = '';
 let captureDrafts = {};
 let garageCaptureActiveBlockId = null;
 let garageCaptureActiveTeam = '';
@@ -1756,6 +1758,7 @@ function loadWorkspaceData() {
   teamSummarySort = readScopedJson('team_summary_sort', {key:'avg',dir:'desc'}, 'a2rl_team_summary_sort');
   CAT_MULT = readScopedJson('cat_mult', { rookie: 1.0, challenger: 0.8, pro: 0.6 }, 'a2rl_cat_mult');
   events = readScopedJson('events', [], 'a2rl_events');
+  scheduleChangeLog = readScopedJson('schedule_change_log', {}, '');
   weights = DEFAULT_WEIGHTS.map(def => {
     const saved = Array.isArray(weights) ? weights.find(w => w && w.key === def.key) : null;
     return saved ? { ...def, ...saved } : { ...def };
@@ -2382,49 +2385,165 @@ function redoSchedule() {
   restoreScheduleState(next);
 }
 
-function downloadScheduleChangeNotes() {
-  const base = Array.isArray(lastChangeNotesBase) && lastChangeNotesBase.length ? lastChangeNotesBase : [];
-  const curr = Array.isArray(schedule) ? schedule : [];
-  const byIdBase = Object.fromEntries(base.map(b => [b.id, b]));
-  const byIdCurr = Object.fromEntries(curr.map(b => [b.id, b]));
-
+function markScheduleMutation(reason = '') {
+  pendingScheduleChangeReason = reason || 'Schedule updated';
+}
+function getScheduleChangeLogKey(dayIdx = currentSchedDay) {
+  const evKey = String(schedCfg?.eventId || schedCfg?.eventName || 'unassigned-event');
+  return `${evKey}::day-${dayIdx}`;
+}
+function getScheduleBlocksForDay(dayIdx = currentSchedDay) {
+  return (schedule || [])
+    .filter(b => matchSelectedScheduleEvent(b) && (b.day || 0) === dayIdx)
+    .sort((a,b)=>_toM(a.time)-_toM(b.time));
+}
+function cloneDaySchedule(dayIdx = currentSchedDay) {
+  return JSON.parse(JSON.stringify(getScheduleBlocksForDay(dayIdx)));
+}
+function summarizeBlock(b) {
+  const team = (b.teams || []).join(' + ') || b.label || '—';
+  return `Day ${((b.day || 0) + 1)} ${b.time} ${team} (${b.duration || 0}m, ${b.type || 'single'})`;
+}
+function diffDaySchedules(base, curr) {
+  const byIdBase = Object.fromEntries((base || []).map(b => [b.id, b]));
+  const byIdCurr = Object.fromEntries((curr || []).map(b => [b.id, b]));
   const lines = [];
-  lines.push(`Schedule Change Notes`);
-  lines.push(`Generated: ${new Date().toLocaleString()}`);
-  lines.push(`Event: ${schedCfg.eventName || '—'}`);
-  lines.push('');
-  lines.push('Changes');
-
-  const changed = [];
-  curr.forEach(b => {
-    const p = byIdBase[b.id];
-    if (!p) {
-      changed.push(`+ Added: Day ${b.day+1} ${b.time} ${b.label||((b.teams||[]).join(' + '))} (${b.duration}m)`);
+  (curr || []).forEach(b => {
+    const prev = byIdBase[b.id];
+    if (!prev) {
+      lines.push(`+ Added: ${summarizeBlock(b)}`);
       return;
     }
-    if (p.time !== b.time || p.duration !== b.duration || (p.label||'') !== (b.label||'')) {
-      changed.push(`~ Updated: Day ${b.day+1} ${p.time}→${b.time} ${p.duration}m→${b.duration}m ${b.label||''}`);
+    const teamsChanged = JSON.stringify(prev.teams || []) !== JSON.stringify(b.teams || []);
+    if (prev.time !== b.time || prev.duration !== b.duration || (prev.label || '') !== (b.label || '') || (prev.type || '') !== (b.type || '') || teamsChanged) {
+      lines.push(`~ Updated: ${summarizeBlock(prev)} -> ${summarizeBlock(b)}`);
     }
   });
-  base.forEach(b => {
-    if (!byIdCurr[b.id]) changed.push(`- Removed: Day ${b.day+1} ${b.time} ${b.label||((b.teams||[]).join(' + '))} (${b.duration}m)`);
+  (base || []).forEach(b => {
+    if (!byIdCurr[b.id]) lines.push(`- Removed: ${summarizeBlock(b)}`);
   });
-  if (!changed.length) lines.push('No differences from baseline.');
-  else changed.forEach(c => lines.push(c));
+  return lines;
+}
+function ensureScheduleVersion(reason, opts = {}) {
+  const dayIdx = Number.isFinite(opts.dayIdx) ? opts.dayIdx : currentSchedDay;
+  const key = getScheduleChangeLogKey(dayIdx);
+  if (!scheduleChangeLog || typeof scheduleChangeLog !== 'object') scheduleChangeLog = {};
+  if (!scheduleChangeLog[key]) {
+    scheduleChangeLog[key] = {
+      eventId: schedCfg?.eventId || null,
+      eventName: schedCfg?.eventName || '—',
+      day: dayIdx,
+      versions: [],
+    };
+  }
+  const bucket = scheduleChangeLog[key];
+  if (opts.initial && bucket.versions.length) return bucket.versions[bucket.versions.length - 1];
+  const currSnapshot = cloneDaySchedule(dayIdx);
+  const prevSnapshot = bucket.versions.length ? (bucket.versions[bucket.versions.length - 1].snapshot || []) : [];
+  if (!opts.force && JSON.stringify(prevSnapshot) === JSON.stringify(currSnapshot)) return null;
+  const changeLines = bucket.versions.length
+    ? diffDaySchedules(prevSnapshot, currSnapshot)
+    : ['Initial schedule issue.'];
+  const entry = {
+    version: bucket.versions.length + 1,
+    day: dayIdx,
+    eventName: schedCfg?.eventName || bucket.eventName || '—',
+    generatedAt: new Date().toISOString(),
+    generatedBy: currentUser?.email || 'System',
+    reason: reason || (bucket.versions.length ? 'Schedule updated' : 'Initial schedule issue'),
+    changes: changeLines.length ? changeLines : ['No row-level differences detected.'],
+    snapshot: currSnapshot,
+  };
+  bucket.eventId = schedCfg?.eventId || bucket.eventId || null;
+  bucket.eventName = schedCfg?.eventName || bucket.eventName || '—';
+  bucket.day = dayIdx;
+  bucket.versions.push(entry);
+  lastChangeNotesBase = JSON.parse(JSON.stringify(prevSnapshot));
+  return entry;
+}
+function getLatestScheduleVersion(dayIdx = currentSchedDay) {
+  const bucket = scheduleChangeLog?.[getScheduleChangeLogKey(dayIdx)];
+  if (!bucket || !Array.isArray(bucket.versions) || !bucket.versions.length) return null;
+  return bucket.versions[bucket.versions.length - 1];
+}
 
-  lines.push('');
-  lines.push('Current Timetable');
-  const sorted = [...curr].sort((a,b)=>a.day===b.day?_toM(a.time)-_toM(b.time):a.day-b.day);
-  sorted.forEach(b => {
-    const team = (b.teams||[]).join(' + ') || b.label || '—';
-    lines.push(`Day ${b.day+1}  ${b.time}-${_fM(_toM(b.time)+(b.duration||0))}  ${team}  [${b.type}]`);
-  });
-
-  const blob = new Blob([lines.join('\n')], { type:'text/plain;charset=utf-8' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `schedule-change-notes-${new Date().toISOString().slice(0,10)}.txt`;
-  a.click();
+function downloadScheduleChangeNotes() {
+  const dayIdx = currentSchedDay;
+  let version = getLatestScheduleVersion(dayIdx);
+  const issueReason = pendingScheduleChangeReason || (version ? 'Schedule updated' : 'Initial issued schedule');
+  const issued = ensureScheduleVersion(issueReason, { dayIdx, force: !version, initial: !version });
+  if (issued) {
+    version = issued;
+    save();
+  } else if (!version) {
+    version = {
+      version: 1,
+      eventName: schedCfg.eventName || '—',
+      generatedAt: new Date().toISOString(),
+      generatedBy: currentUser?.email || 'System',
+      changes: ['No row-level differences detected.'],
+      snapshot: cloneDaySchedule(dayIdx),
+    };
+  }
+  pendingScheduleChangeReason = '';
+  const esc = (v) => String(v == null ? '' : v)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+  const rows = getScheduleBlocksForDay(dayIdx);
+  const timetableRows = rows.map((b, idx) => {
+    const start = b.time || '00:00';
+    const end = _fM(_toM(start) + (parseInt(b.duration, 10) || 0));
+    const team = (b.teams || []).join(' + ') || b.label || '—';
+    const single = b.type === 'single' ? 'Yes' : 'No';
+    return `<tr>
+      <td>${idx + 1}</td>
+      <td>${esc(start)}</td>
+      <td>${esc(end)}</td>
+      <td>${esc(team)}</td>
+      <td>${single}</td>
+      <td>${parseInt(b.duration, 10) || 0}m</td>
+    </tr>`;
+  }).join('');
+  const changes = (version.changes || []).map(c => `<li>${esc(c)}</li>`).join('');
+  const generated = new Date(version.generatedAt || Date.now()).toLocaleString();
+  const win = window.open('', '_blank');
+  if (!win) {
+    alert('Popup blocked. Please allow popups and try again.');
+    return;
+  }
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Schedule Change Notes</title>
+    <style>
+      body{font-family:Roboto,Arial,sans-serif;padding:18px;color:#111}
+      h1{margin:0 0 8px;font-size:20px} h2{margin:20px 0 8px;font-size:15px}
+      .meta{font-size:12px;color:#333;line-height:1.6}
+      ul{margin:8px 0 0 18px;font-size:12px}
+      table{width:100%;border-collapse:collapse;margin-top:10px;font-size:12px}
+      th,td{border:1px solid #444;padding:6px 8px;text-align:left}
+      th{background:#f2f2f2}
+      .footer{margin-top:14px;font-size:11px;color:#444}
+    </style></head><body>
+      <h1>ABU DHABI AUTONOMOUS RACING LEAGUE</h1>
+      <h2 style="margin-top:2px;">Schedule Change Notes</h2>
+      <div class="meta">
+        Event: ${esc(version.eventName || schedCfg.eventName || '—')} | Version ${version.version} | Generated: ${esc(generated)}<br>
+        Issued by: ${esc(version.generatedBy || currentUser?.email || 'System')} | A2RL Sporting
+      </div>
+      <h2>Input change to schedule</h2>
+      <ul>${changes || '<li>No row-level differences detected.</li>'}</ul>
+      <h2>Current Timetable</h2>
+      <div style="font-size:11px;color:#444;margin-bottom:6px;">● Single Run &nbsp; ● Break &nbsp; ● Reserve / Buffer</div>
+      <table>
+        <thead><tr><th>Run No</th><th>Start time</th><th>End time</th><th>Team</th><th>Single car</th><th>Duration</th></tr></thead>
+        <tbody>${timetableRows || '<tr><td colspan="6">No schedule rows for this day.</td></tr>'}</tbody>
+      </table>
+      <div class="footer">Season ${esc(eventCfg?.season || '—')} | ${esc(version.eventName || schedCfg.eventName || '—')} | Day ${dayIdx + 1}</div>
+    </body></html>`);
+  win.document.close();
+  win.focus();
+  win.print();
 }
 
 // ── SAVE ──
@@ -2444,6 +2563,7 @@ function save() {
   localStorage.setItem(wk('team_summary_metrics'), JSON.stringify(teamSummaryMetrics));
   localStorage.setItem(wk('history_columns'), JSON.stringify(historyColumns));
   localStorage.setItem(wk('team_summary_sort'), JSON.stringify(teamSummarySort));
+  localStorage.setItem(wk('schedule_change_log'), JSON.stringify(scheduleChangeLog || {}));
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -4198,6 +4318,7 @@ function wizardBack() {
 
 function generateSchedule() {
   pushScheduleHistory();
+  markScheduleMutation('Schedule regenerated');
   let targetStartDay = wiz.buildScope === 'all' ? 0 : Math.max(0, parseInt(wiz.targetDay||0));
   if (wiz.targetDate) {
     if (schedCfg.eventStart) {
@@ -4476,6 +4597,7 @@ function onSlotTypeChange() {
 
 function saveSlot() {
   pushScheduleHistory();
+  markScheduleMutation('Manual schedule slot added');
   const time = document.getElementById('slot-time').value;
   const dur = parseInt(document.getElementById('slot-dur').value) || 30;
   const type = document.getElementById('slot-type').value;
@@ -4873,6 +4995,7 @@ function quickAddSlot(slot) {
 
 function removeSchedBlock(id) {
   pushScheduleHistory();
+  markScheduleMutation('Schedule slot removed');
   schedule = schedule.filter(b => b.id !== id);
   save();
   renderScheduleView();
@@ -4880,6 +5003,7 @@ function removeSchedBlock(id) {
 
 function clearSchedule() {
   pushScheduleHistory();
+  markScheduleMutation('Schedule day cleared');
   const before = schedule.length;
   schedule = schedule.filter(b => !(matchSelectedScheduleEvent(b) && (b.day||0) === (currentSchedDay||0)));
   const removed = before - schedule.length;
@@ -4954,6 +5078,7 @@ function exportScheduleToSessions() {
     b.runStarted = false;
   });
   lastChangeNotesBase = JSON.parse(JSON.stringify(schedule));
+  markScheduleMutation('Initial issued schedule');
   save();
   alert('Schedule published. Sessions will be added to Session History only after risk data is submitted.');
 }
@@ -6455,6 +6580,7 @@ function openEditSlot(blockId) {
   openModal('modal-edit-slot');
 }
 function saveEditSlot() {
+  markScheduleMutation('Schedule slot edited');
   const id = document.getElementById('edit-slot-id').value;
   const idx = schedule.findIndex(b => b.id === id);
   if (idx < 0) return;
@@ -6472,6 +6598,7 @@ function saveEditSlot() {
   renderScheduleView();
 }
 function deleteSlotFromModal() {
+  markScheduleMutation('Schedule slot removed');
   const id = document.getElementById('edit-slot-id').value;
   schedule = schedule.filter(b => b.id !== id);
   save();
@@ -7321,6 +7448,7 @@ function openEditSlot(blockId) {
 }
 function saveEditSlot() {
   pushScheduleHistory();
+  markScheduleMutation('Schedule slot edited');
   const id=document.getElementById('edit-slot-id').value;
   const idx=schedule.findIndex(b=>b.id===id); if(idx<0) return;
   const selTeams=Array.from(document.querySelectorAll('#edit-slot-team-checks input:checked')).map(cb=>cb.value);
@@ -7340,6 +7468,7 @@ function saveEditSlot() {
 }
 function deleteSlotFromModal() {
   pushScheduleHistory();
+  markScheduleMutation('Schedule slot removed');
   const id=document.getElementById('edit-slot-id').value;
   schedule=schedule.filter(b=>b.id!==id);
   save(); closeModal('modal-edit-slot'); renderScheduleView();
@@ -7428,6 +7557,7 @@ function onDragEnd(e){
   const block=schedule.find(b=>b.id===_drag.id);
   if(block){
     pushScheduleHistory();
+    markScheduleMutation('Schedule slot moved');
     const toM=t=>{const[h,m]=t.split(':').map(Number);return h*60+m;};
     const w = getSchedWindowsM(currentSchedDay);
     _resolveOverlap(block,_drag.mode==='top'?'up':'down',w.trackOpenM,w.trackCloseM);

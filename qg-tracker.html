@@ -32,7 +32,7 @@
   .header-date{font-family:'Roboto Mono',monospace;font-size:11px;color:var(--text-muted);}
 
   /* ── NAV ── */
-  .nav-strip{background:var(--surface);border-bottom:1px solid var(--border);padding:8px 26px;display:flex;align-items:center;gap:8px;min-height:46px;}
+  .nav-strip{display:none;}
   .nav-btn{font-family:'Roboto',sans-serif;font-weight:500;font-size:12px;letter-spacing:0.01em;text-transform:none;padding:6px 13px;border:1px solid var(--border-bright);background:rgba(255,255,255,0.03);cursor:pointer;border-radius:5px;color:var(--text);transition:all 0.15s;}
   .nav-btn:hover{color:var(--text);}
   .nav-btn.active{color:var(--accent);border-color:var(--accent);background:rgba(59,130,246,0.12);}
@@ -352,7 +352,7 @@
 </div>
 
 <!-- MAIN -->
-<div class="main" id="mainArea" style="height:calc(100vh - 104px)">
+<div class="main" id="mainArea" style="height:calc(100vh - 58px)">
   <div class="sidebar scrollbar-thin" id="sidebar" style="display:none"></div>
   <div class="content scrollbar-thin" id="content"></div>
 </div>

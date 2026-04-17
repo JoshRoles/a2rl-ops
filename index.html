@@ -53,6 +53,10 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .page-title{font-family:'Roboto',sans-serif;font-size:19px;font-weight:700;letter-spacing:0.5px;}
 .page-sub{font-size:11px;color:var(--muted);margin-top:1px;}
 .topbar-right{display:flex;align-items:center;gap:10px;}
+.sync-badge{font-family:'Roboto Mono',monospace;font-size:10px;padding:5px 8px;border-radius:999px;border:1px solid var(--border2);color:var(--muted);background:var(--bg3);}
+.sync-badge.ok{color:#86efac;border-color:rgba(34,197,94,0.35);}
+.sync-badge.err{color:#fca5a5;border-color:rgba(239,68,68,0.35);}
+.sync-badge.pend{color:#93c5fd;border-color:rgba(59,130,246,0.35);}
 .session-badge{display:flex;align-items:center;gap:6px;padding:5px 11px;background:rgba(0,102,255,0.12);border:1px solid rgba(0,102,255,0.25);border-radius:5px;font-family:'Roboto Mono',monospace;font-size:11px;color:#7bb3ff;}
 .btn{padding:6px 13px;border:1px solid var(--border2);background:var(--card);color:var(--text);border-radius:5px;font-size:12px;font-weight:500;cursor:pointer;transition:all 0.15s;font-family:'Roboto',sans-serif;}
 .btn:hover{background:var(--card-h);border-color:rgba(255,255,255,0.2);}
@@ -471,6 +475,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
       <div class="session-badge">
         <span id="auth-user-badge">Guest</span>
       </div>
+      <div class="sync-badge" id="sync-status-badge">Sync: —</div>
       <select id="workspace-switcher" onchange="selectWorkspace(this.value)" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);padding:6px 10px;border-radius:4px;font-size:12px;font-family:'Roboto',sans-serif;">
         <option value="ontrack">A2RL On Track</option>
         <option value="sim">A2RL Sim Challenge</option>
@@ -1590,6 +1595,7 @@ let supabaseGlobalSyncInFlight = false;
 let supabaseGlobalSyncQueued = false;
 let supabaseWorkspaceLastUpdatedAt = '';
 let supabasePollTimer = null;
+let lastSyncStatusText = 'Sync: —';
 const PASSWORD_HASH_PREFIX = 'sha256:';
 function initSupabaseClient() {
   supabaseEnabled = !!(SUPABASE_URL && SUPABASE_ANON_KEY);
@@ -1601,6 +1607,21 @@ function supabaseHeaders(extra = {}) {
     'Content-Type': 'application/json',
     ...extra,
   };
+}
+function formatSyncTime(ts) {
+  try {
+    const d = ts ? new Date(ts) : new Date();
+    return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  } catch {
+    return '--:--:--';
+  }
+}
+function setSyncStatus(text, tone = '') {
+  lastSyncStatusText = text;
+  const badge = document.getElementById('sync-status-badge');
+  if (!badge) return;
+  badge.textContent = text;
+  badge.className = `sync-badge${tone ? ` ${tone}` : ''}`;
 }
 async function hashCredential(identifier, password) {
   const raw = `${String(identifier || '').trim().toLowerCase()}::${String(password || '')}`;
@@ -1778,6 +1799,7 @@ let garageCaptureActiveTeam = '';
 let teamAnalysisSelected = '';
 let csvImportState = { fileName:'', headers:[], rows:[], mapping:{} };
 let teamSummarySort = { key:'avg', dir:'desc' };
+let historySort = { key:'datetime', dir:'desc' };
 let users = JSON.parse(localStorage.getItem(GLOBAL_KEYS.users) || '[]');
 let currentUser = JSON.parse(localStorage.getItem(GLOBAL_KEYS.currentUser) || 'null');
 
@@ -1922,6 +1944,7 @@ function loadWorkspaceData(opts = {}) {
   schedZoom = Math.max(0.6, Math.min(3, parseFloat(readScopedString('sched_zoom', '1', 'a2rl_sched_zoom')) || 1));
   captureDrafts = readScopedJson('capture_drafts', {}, 'a2rl_capture_drafts');
   teamSummarySort = readScopedJson('team_summary_sort', {key:'avg',dir:'desc'}, 'a2rl_team_summary_sort');
+  historySort = readScopedJson('history_sort', {key:'datetime',dir:'desc'}, '');
   CAT_MULT = readScopedJson('cat_mult', { rookie: 1.0, challenger: 0.8, pro: 0.6 }, 'a2rl_cat_mult');
   events = readScopedJson('events', [], 'a2rl_events');
   scheduleChangeLog = readScopedJson('schedule_change_log', {}, '');
@@ -1974,6 +1997,7 @@ function applyWorkspaceUI() {
   const garageModalTitle = document.getElementById('garage-modal-title');
   const topbarSessionBadge = document.getElementById('topbar-session-badge');
   const topbarExportBtn = document.getElementById('topbar-export-btn');
+  const syncBadge = document.getElementById('sync-status-badge');
   const sidebarLive = document.querySelector('.sidebar-live');
   const content = document.querySelector('.content');
   const qgMode = isQGWorkspace();
@@ -2015,10 +2039,12 @@ function applyWorkspaceUI() {
   if (sidebarLive) sidebarLive.style.display = qgMode ? 'none' : 'flex';
   if (topbarSessionBadge) topbarSessionBadge.style.display = qgMode ? 'none' : 'flex';
   if (topbarExportBtn) topbarExportBtn.style.display = qgMode ? 'none' : '';
+  if (syncBadge) syncBadge.style.display = currentWorkspace ? 'inline-flex' : 'none';
   if (topbarLive) topbarLive.style.display = qgMode ? 'none' : topbarLive.style.display;
   if (content) content.style.padding = qgMode ? '0' : '22px 26px';
   renderWorkspaceEventTypeOptions();
   document.title = cfg.label;
+  setSyncStatus(lastSyncStatusText);
 }
 function syncWorkspaceOverlayGuestClass() {
   const overlay = document.getElementById('workspace-overlay');
@@ -2899,12 +2925,12 @@ function buildWorkspaceStatePayload() {
     team_summary_metrics: teamSummaryMetrics,
     history_columns: historyColumns,
     team_summary_sort: teamSummarySort,
+    history_sort: historySort,
     schedule_change_log: scheduleChangeLog || {},
     cat_mult: CAT_MULT,
     events,
     qg_tracker_state: qgTrackerState,
     sched_zoom: schedZoom,
-    active_view: currentWorkspace ? localStorage.getItem(wk('active_view')) : null,
   };
 }
 function persistWorkspaceStateToLocal(state) {
@@ -2925,12 +2951,12 @@ function persistWorkspaceStateToLocal(state) {
   put('team_summary_metrics', state.team_summary_metrics || []);
   put('history_columns', state.history_columns || []);
   put('team_summary_sort', state.team_summary_sort || {});
+  put('history_sort', state.history_sort || { key:'datetime', dir:'desc' });
   put('schedule_change_log', state.schedule_change_log || {});
   put('cat_mult', state.cat_mult || { rookie: 1.0, challenger: 0.8, pro: 0.6 });
   put('events', state.events || []);
   put('qg_tracker_state', state.qg_tracker_state || {});
   localStorage.setItem(wk('sched_zoom'), String(state.sched_zoom || 1));
-  if (state.active_view) localStorage.setItem(wk('active_view'), String(state.active_view));
 }
 function isWorkspaceStateMeaningful(state) {
   if (!state || typeof state !== 'object') return false;
@@ -2956,6 +2982,7 @@ function scheduleSupabaseSync() {
   initSupabaseClient();
   if (!supabaseEnabled) return;
   if (supabaseSyncTimer) clearTimeout(supabaseSyncTimer);
+  setSyncStatus('Sync: pending...', 'pend');
   supabaseSyncTimer = setTimeout(syncWorkspaceToSupabase, 900);
 }
 function startSupabasePolling() {
@@ -2993,12 +3020,15 @@ async function syncWorkspaceToSupabase() {
     if (!res.ok) {
       const detail = await res.text();
       console.error('Supabase sync failed:', res.status, detail);
+      setSyncStatus('Sync: error', 'err');
       return;
     }
     supabaseWorkspaceLastUpdatedAt = new Date().toISOString();
     supabaseLastPayload = serialized;
+    setSyncStatus(`Sync: ${formatSyncTime(supabaseWorkspaceLastUpdatedAt)}`, 'ok');
   } catch {
     console.error('Supabase sync exception');
+    setSyncStatus('Sync: error', 'err');
     // Keep local storage as fallback when network/db write fails.
   } finally {
     supabaseSyncInFlight = false;
@@ -3021,6 +3051,7 @@ async function loadWorkspaceDataFromSupabase(workspaceId) {
     if (!res.ok) {
       const detail = await res.text();
       console.error('Supabase load failed:', res.status, detail);
+      setSyncStatus('Sync: error', 'err');
       return;
     }
     const rows = await res.json();
@@ -3039,6 +3070,7 @@ async function loadWorkspaceDataFromSupabase(workspaceId) {
     loadWorkspaceData({ skipRemote: true });
     supabaseWorkspaceLastUpdatedAt = remoteUpdatedAt || new Date().toISOString();
     supabaseLastPayload = JSON.stringify(buildWorkspaceStatePayload());
+    setSyncStatus(`Sync: ${formatSyncTime(supabaseWorkspaceLastUpdatedAt)}`, 'ok');
     if (currentWorkspace && currentUser) {
       const activeView = readScopedString('active_view', isQGWorkspace() ? 'qg' : 'live', 'a2rl_active_view');
       if (canAccessView(activeView)) showView(activeView);
@@ -3069,6 +3101,7 @@ function save() {
   localStorage.setItem(wk('team_summary_metrics'), JSON.stringify(teamSummaryMetrics));
   localStorage.setItem(wk('history_columns'), JSON.stringify(historyColumns));
   localStorage.setItem(wk('team_summary_sort'), JSON.stringify(teamSummarySort));
+  localStorage.setItem(wk('history_sort'), JSON.stringify(historySort));
   localStorage.setItem(wk('schedule_change_log'), JSON.stringify(scheduleChangeLog || {}));
   scheduleSupabaseSync();
 }
@@ -3728,42 +3761,64 @@ function renderHistory() {
   const filterType = document.getElementById('hist-filter-type')?.value || '';
   const filterSess = document.getElementById('hist-filter-sess')?.value || '';
 
-  let filtered = [...sessions].reverse().filter(s => {
+  let filtered = [...sessions].filter(s => {
     if (filterTeam && s.team !== filterTeam) return false;
     if (filterType && s.eventType !== filterType) return false;
     if (filterSess && s.sessType !== filterSess) return false;
     return true;
+  });
+  const sortKey = historySort?.key || 'datetime';
+  const sortDir = historySort?.dir === 'asc' ? 1 : -1;
+  const compare = (a,b) => (a < b ? -1 : (a > b ? 1 : 0));
+  const valueForSort = (s, key) => {
+    const meta = getSessionEventMeta(s);
+    if (key === 'datetime') return getSessionDateObj(s).getTime() || 0;
+    if (key === 'team') return String(s.team || '').toLowerCase();
+    if (key === 'eventName') return String(meta.eventName || '').toLowerCase();
+    if (key === 'track') return String(meta.track || '').toLowerCase();
+    if (key === 'eventType') return String(s.eventType || '').toLowerCase();
+    if (key === 'sessType') return String(s.sessType || '').toLowerCase();
+    if (key === 'notes') return String(s.notes || '').toLowerCase();
+    if (key === 'crashed') return String(s.crashed || '').toLowerCase();
+    return Number(s[key] || 0);
+  };
+  filtered.sort((a,b) => {
+    const av = valueForSort(a, sortKey);
+    const bv = valueForSort(b, sortKey);
+    return compare(av, bv) * sortDir;
   });
 
   const countEl = document.getElementById('hist-count');
   if (countEl) countEl.textContent = `${filtered.length} session${filtered.length!==1?'s':''}`;
   const head = document.getElementById('history-head-row');
   if (head) {
+    const sortArrow = key => (sortKey === key ? (sortDir === 1 ? ' ▲' : ' ▼') : '');
+    const sortableHead = (label, key) => `<th onclick="setHistorySort('${key}')" style="cursor:pointer;user-select:none;" title="Sort by ${label}">${label}${sortArrow(key)}</th>`;
     const cols = new Set(historyColumns || []);
-    let hh = '<th>Date/Time</th><th>Team</th>';
-    if (cols.has('eventName')) hh += '<th>Event</th>';
-    if (cols.has('track')) hh += '<th>Track</th>';
-    if (cols.has('eventType')) hh += '<th>Event Type</th>';
-    if (cols.has('sessType')) hh += '<th>Session Type</th>';
-    if (cols.has('sessNum')) hh += '<th>Sess#</th>';
-    if (cols.has('duration')) hh += '<th>Duration</th>';
-    if (cols.has('weather')) hh += '<th>Weather</th>';
-    if (cols.has('startAttempts')) hh += '<th>Start Attempts</th>';
-    if (cols.has('stoppages')) hh += '<th>SW Stoppages</th>';
-    if (cols.has('riskScore')) hh += '<th>Risk Score</th>';
-    if (cols.has('laps')) hh += '<th>Laps</th>';
-    if (cols.has('laptime')) hh += '<th>Avg Lap Time</th>';
-    if (cols.has('speed')) hh += '<th>Speed</th>';
-    if (cols.has('estops')) hh += '<th>E-Stops</th>';
-    if (cols.has('crashed')) hh += '<th>Crashed</th>';
-    if (cols.has('damage')) hh += '<th>Damage Cost</th>';
-    if (cols.has('replans')) hh += '<th>Planner Replans</th>';
-    if (cols.has('instability')) hh += '<th>Instability</th>';
-    if (cols.has('sensor')) hh += '<th>Sensor</th>';
-    if (cols.has('multicar')) hh += '<th>Multi-Car</th>';
-    if (cols.has('overtaking')) hh += '<th>Overtaking</th>';
-    if (cols.has('manualOverride')) hh += '<th>Manual Override</th>';
-    if (cols.has('notes')) hh += '<th>Notes</th>';
+    let hh = sortableHead('Date/Time', 'datetime') + sortableHead('Team', 'team');
+    if (cols.has('eventName')) hh += sortableHead('Event', 'eventName');
+    if (cols.has('track')) hh += sortableHead('Track', 'track');
+    if (cols.has('eventType')) hh += sortableHead('Event Type', 'eventType');
+    if (cols.has('sessType')) hh += sortableHead('Session Type', 'sessType');
+    if (cols.has('sessNum')) hh += sortableHead('Sess#', 'sessNum');
+    if (cols.has('duration')) hh += sortableHead('Duration', 'duration');
+    if (cols.has('weather')) hh += sortableHead('Weather', 'weather');
+    if (cols.has('startAttempts')) hh += sortableHead('Start Attempts', 'startAttempts');
+    if (cols.has('stoppages')) hh += sortableHead('SW Stoppages', 'stoppages');
+    if (cols.has('riskScore')) hh += sortableHead('Risk Score', 'riskScore');
+    if (cols.has('laps')) hh += sortableHead('Laps', 'laps');
+    if (cols.has('laptime')) hh += sortableHead('Avg Lap Time', 'laptime');
+    if (cols.has('speed')) hh += sortableHead('Speed', 'speed');
+    if (cols.has('estops')) hh += sortableHead('E-Stops', 'estops');
+    if (cols.has('crashed')) hh += sortableHead('Crashed', 'crashed');
+    if (cols.has('damage')) hh += sortableHead('Damage Cost', 'damage');
+    if (cols.has('replans')) hh += sortableHead('Planner Replans', 'replans');
+    if (cols.has('instability')) hh += sortableHead('Instability', 'instability');
+    if (cols.has('sensor')) hh += sortableHead('Sensor', 'sensor');
+    if (cols.has('multicar')) hh += sortableHead('Multi-Car', 'multicar');
+    if (cols.has('overtaking')) hh += sortableHead('Overtaking', 'overtaking');
+    if (cols.has('manualOverride')) hh += sortableHead('Manual Override', 'manualOverride');
+    if (cols.has('notes')) hh += sortableHead('Notes', 'notes');
     hh += '<th></th>';
     head.innerHTML = hh;
   }
@@ -3818,6 +3873,17 @@ function renderHistory() {
       <td style="display:flex;gap:4px;"><button class="btn sm" onclick="editSession('${s.id}')" title="Edit">✎</button><button class="btn sm danger" onclick="deleteSession('${s.id}')" title="Delete">✕</button></td>
     </tr>`;
   }).join('') || '<tr><td colspan="14" style="text-align:center;color:var(--muted);padding:20px;">No sessions logged yet</td></tr>';
+}
+function setHistorySort(key) {
+  if (!key) return;
+  if ((historySort?.key || '') === key) {
+    historySort.dir = historySort.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    const defaultAsc = ['team','eventName','track','eventType','sessType','weather','notes','crashed','multicar','overtaking'];
+    historySort = { key, dir: defaultAsc.includes(key) ? 'asc' : 'desc' };
+  }
+  save();
+  renderHistory();
 }
 
 function deleteSession(id) {

@@ -104,6 +104,8 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .data-table td{padding:10px 11px;border-bottom:1px solid rgba(255,255,255,0.03);font-size:12.5px;vertical-align:middle;}
 .data-table tr:last-child td{border-bottom:none;}
 .data-table tr:hover td{background:var(--card-h);}
+.history-table-wrap{overflow-x:auto;overflow-y:hidden;}
+#history-table{min-width:1200px;}
 .mono{font-family:'Roboto Mono',monospace;font-size:11px;}
 
 /* BADGES */
@@ -993,7 +995,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
         <div id="history-metric-selects" style="display:flex;gap:10px;flex-wrap:wrap;"></div>
       </div>
       <div class="panel">
-        <div class="panel-body" style="padding:0">
+        <div class="panel-body history-table-wrap" style="padding:0">
           <table class="data-table" id="history-table">
             <thead><tr id="history-head-row"></tr></thead>
             <tbody id="history-tbody"></tbody>
@@ -4078,7 +4080,10 @@ function renderTeamDrilldown(teamName) {
       return true;
     })
     .sort((a,b)=>getSessionDateObj(a)-getSessionDateObj(b));
-  const labels = rows.map((_,i)=>`S${i+1}`);
+  const labels = rows.map(s => {
+    const dt = getSessionDateObj(s);
+    return isNaN(dt) ? '—' : dt.toLocaleDateString('en-GB', { day:'2-digit', month:'short' });
+  });
   mkChart('chart-team-drill', {
     type:'line',
     data:{
@@ -4089,7 +4094,23 @@ function renderTeamDrilldown(teamName) {
         borderColor:'#00d4ff', backgroundColor:'rgba(0,212,255,0.12)', tension:0.3, fill:true, pointRadius:3
       }]
     },
-    options:{...chartCfg, responsive:true, maintainAspectRatio:false}
+    options:{
+      ...chartCfg,
+      responsive:true,
+      maintainAspectRatio:false,
+      scales:{
+        x:{
+          ...chartCfg.scales.x,
+          title:{ display:true, text:'Date', color:'#6b7a99' }
+        },
+        y:{
+          ...chartCfg.scales.y,
+          min:0,
+          max:100,
+          title:{ display:true, text:'Risk Score', color:'#6b7a99' }
+        }
+      }
+    }
   });
   const factorAvg = key => rows.length ? +(rows.reduce((a,s)=>a+(Number(s[key])||0),0)/rows.length).toFixed(2) : 0;
   mkChart('chart-team-factors', {
@@ -7604,6 +7625,11 @@ function parseCsvNumber(value) {
   const parsed = parseFloat(cleaned);
   return Number.isFinite(parsed) ? parsed : 0;
 }
+function normalizeSessionTypeLabel(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (raw.includes('multi')) return 'Multi Car';
+  return 'Single Car';
+}
 function parseLegacyTimestamp(row, map) {
   const ts = map.timestamp ? (row[map.timestamp] || '') : '';
   if (ts) {
@@ -7696,7 +7722,7 @@ function confirmCsvImport() {
         team,
         track: raw('track') || schedCfg.track || '',
         eventType: raw('eventType') || defaultEventType(),
-        sessType: raw('sessType') || 'Single Car',
+        sessType: normalizeSessionTypeLabel(raw('sessType')),
         sessNum: parseInt(parseCsvNumber(raw('sessNum')) || 1, 10) || 1,
         timestamp: trackTs,
         trackTimestamp: trackTs,

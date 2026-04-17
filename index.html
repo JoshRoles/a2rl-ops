@@ -6,7 +6,6 @@
 <title>A2RL Operations Command</title>
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
 :root {
   --bg:#07070a; --bg2:#0f1018; --bg3:#171926; --bg4:#0b0b12;
@@ -1578,20 +1577,22 @@ function wk(name) { return `a2rl_${currentWorkspace}_${name}`; }
 const SUPABASE_URL = 'https://rlfwaafrseibtqgjzpnf.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_XC8DB43VUfGRo1RkeDxEiw_wqay3CcW';
 const SUPABASE_STATE_TABLE = 'app_workspace_state';
-let supabaseClient = null;
+let supabaseEnabled = false;
 let supabaseSyncTimer = null;
 let supabaseLastPayload = '';
 let supabaseHydrating = false;
 let supabaseSyncInFlight = false;
 let supabaseSyncQueued = false;
 function initSupabaseClient() {
-  if (supabaseClient || !window.supabase?.createClient || !SUPABASE_URL || !SUPABASE_ANON_KEY) return;
-  try {
-    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  } catch {
-    supabaseClient = null;
-    console.error('Supabase client initialization failed');
-  }
+  supabaseEnabled = !!(SUPABASE_URL && SUPABASE_ANON_KEY);
+}
+function supabaseHeaders(extra = {}) {
+  return {
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+    'Content-Type': 'application/json',
+    ...extra,
+  };
 }
 function readScopedJson(name, fallback, legacyKey='') {
   const raw = currentWorkspace ? localStorage.getItem(wk(name)) : null;
@@ -2771,14 +2772,14 @@ function persistWorkspaceStateToLocal(state) {
 function scheduleSupabaseSync() {
   if (!currentWorkspace) return;
   initSupabaseClient();
-  if (!supabaseClient) return;
+  if (!supabaseEnabled) return;
   if (supabaseSyncTimer) clearTimeout(supabaseSyncTimer);
   supabaseSyncTimer = setTimeout(syncWorkspaceToSupabase, 900);
 }
 async function syncWorkspaceToSupabase() {
   if (!currentWorkspace || supabaseHydrating) return;
   initSupabaseClient();
-  if (!supabaseClient) return;
+  if (!supabaseEnabled) return;
   if (supabaseSyncInFlight) {
     supabaseSyncQueued = true;
     return;
@@ -2788,14 +2789,19 @@ async function syncWorkspaceToSupabase() {
   if (serialized === supabaseLastPayload) return;
   supabaseSyncInFlight = true;
   try {
-    const { error } = await supabaseClient
-      .from(SUPABASE_STATE_TABLE)
-      .upsert(
-        { workspace: currentWorkspace, state_json: statePayload, updated_at: new Date().toISOString() },
-        { onConflict: 'workspace' }
-      );
-    if (error) {
-      console.error('Supabase sync failed:', error);
+    const endpoint = `${SUPABASE_URL}/rest/v1/${SUPABASE_STATE_TABLE}?on_conflict=workspace`;
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: supabaseHeaders({
+        Prefer: 'resolution=merge-duplicates,return=minimal',
+      }),
+      body: JSON.stringify([
+        { workspace: currentWorkspace, state_json: statePayload, updated_at: new Date().toISOString() }
+      ]),
+    });
+    if (!res.ok) {
+      const detail = await res.text();
+      console.error('Supabase sync failed:', res.status, detail);
       return;
     }
     supabaseLastPayload = serialized;
@@ -2813,17 +2819,20 @@ async function syncWorkspaceToSupabase() {
 async function loadWorkspaceDataFromSupabase(workspaceId) {
   if (!workspaceId) return;
   initSupabaseClient();
-  if (!supabaseClient) return;
+  if (!supabaseEnabled) return;
   try {
-    const { data, error } = await supabaseClient
-      .from(SUPABASE_STATE_TABLE)
-      .select('state_json, updated_at')
-      .eq('workspace', workspaceId)
-      .maybeSingle();
-    if (error) {
-      console.error('Supabase load failed:', error);
+    const endpoint = `${SUPABASE_URL}/rest/v1/${SUPABASE_STATE_TABLE}?select=state_json,updated_at&workspace=eq.${encodeURIComponent(workspaceId)}&limit=1`;
+    const res = await fetch(endpoint, {
+      method: 'GET',
+      headers: supabaseHeaders(),
+    });
+    if (!res.ok) {
+      const detail = await res.text();
+      console.error('Supabase load failed:', res.status, detail);
       return;
     }
+    const rows = await res.json();
+    const data = Array.isArray(rows) ? rows[0] : null;
     if (workspaceId !== currentWorkspace) return;
     if (!data?.state_json) {
       // First-time bootstrap: push local workspace state to Supabase.

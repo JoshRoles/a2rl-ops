@@ -2493,20 +2493,50 @@ function getLatestScheduleVersion(dayIdx = currentSchedDay) {
 }
 
 const _pdfHeaderAssetCache = {};
-async function getPdfHeaderAssetDataUrl(assetPath) {
-  if (_pdfHeaderAssetCache[assetPath]) return _pdfHeaderAssetCache[assetPath];
+async function getPdfHeaderAssetDataUrl(assetPath, opts = {}) {
+  const cacheKey = `${assetPath}::${opts.removeNearBlack ? 'rmblack' : 'raw'}`;
+  if (_pdfHeaderAssetCache[cacheKey]) return _pdfHeaderAssetCache[cacheKey];
   try {
     const resp = await fetch(assetPath);
     if (!resp.ok) return '';
     const blob = await resp.blob();
-    const dataUrl = await new Promise(resolve => {
+    const rawDataUrl = await new Promise(resolve => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result || ''));
       reader.onerror = () => resolve('');
       reader.readAsDataURL(blob);
     });
-    _pdfHeaderAssetCache[assetPath] = String(dataUrl || '');
-    return _pdfHeaderAssetCache[assetPath];
+    if (!opts.removeNearBlack) {
+      _pdfHeaderAssetCache[cacheKey] = String(rawDataUrl || '');
+      return _pdfHeaderAssetCache[cacheKey];
+    }
+    const cleanedDataUrl = await new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const c = document.createElement('canvas');
+          c.width = img.naturalWidth || img.width;
+          c.height = img.naturalHeight || img.height;
+          const ctx = c.getContext('2d');
+          if (!ctx) return resolve(String(rawDataUrl || ''));
+          ctx.drawImage(img, 0, 0);
+          const frame = ctx.getImageData(0, 0, c.width, c.height);
+          const d = frame.data;
+          for (let i = 0; i < d.length; i += 4) {
+            const r = d[i], g = d[i + 1], b = d[i + 2];
+            if (r < 35 && g < 35 && b < 35) d[i + 3] = 0;
+          }
+          ctx.putImageData(frame, 0, 0);
+          resolve(c.toDataURL('image/png'));
+        } catch {
+          resolve(String(rawDataUrl || ''));
+        }
+      };
+      img.onerror = () => resolve(String(rawDataUrl || ''));
+      img.src = String(rawDataUrl || '');
+    });
+    _pdfHeaderAssetCache[cacheKey] = String(cleanedDataUrl || '');
+    return _pdfHeaderAssetCache[cacheKey];
   } catch {
     return '';
   }
@@ -2581,17 +2611,15 @@ async function downloadScheduleChangeNotes() {
     return;
   }
   const aspireLogoDataUrl = await getPdfHeaderAssetDataUrl('assets/aspire-logo.png');
-  const a2rlLogoDataUrl = await getPdfHeaderAssetDataUrl('assets/a2rl-logo-template.png');
+  const a2rlLogoDataUrl = await getPdfHeaderAssetDataUrl('assets/a2rl-logo-template.png', { removeNearBlack: true });
   win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Schedule Change Notes</title>
     <style>
       body{font-family:Roboto,Arial,sans-serif;padding:18px;color:#111}
       h1{margin:0 0 8px;font-size:20px} h2{margin:20px 0 8px;font-size:15px}
-      .pdf-header{display:flex;align-items:center;gap:14px;padding:12px 14px;margin-bottom:12px;border:1px solid #d1d5db;background:linear-gradient(135deg,#111827 0%,#1f2937 100%);color:#fff;border-radius:8px}
-      .pdf-header-logos{display:flex;flex-direction:column;gap:8px;align-items:flex-start;justify-content:center;min-width:280px}
+      .pdf-header{display:flex;align-items:center;gap:14px;padding:12px 14px;margin-bottom:12px;border:1px solid #d1d5db;background:#fff;border-radius:8px}
+      .pdf-header-logo-a2rl{height:44px;width:auto;object-fit:contain;display:block}
       .pdf-header-logo-aspire{height:34px;width:auto;object-fit:contain;display:block}
-      .pdf-header-logo-a2rl{height:42px;width:auto;object-fit:contain;display:block}
-      .pdf-header-main{font-size:18px;font-weight:800;letter-spacing:0.6px;line-height:1.15;color:#e5e7eb}
-      .pdf-header-sub{font-size:13px;font-weight:700;letter-spacing:0.6px;margin-top:4px;color:#60a5fa}
+      .pdf-header-main{font-size:18px;font-weight:800;letter-spacing:0.6px;line-height:1.2;color:#dc2626;white-space:nowrap}
       .meta{font-size:12px;color:#333;line-height:1.6}
       ul{margin:8px 0 0 18px;font-size:12px}
       table{width:100%;border-collapse:collapse;margin-top:10px;font-size:12px}
@@ -2601,14 +2629,9 @@ async function downloadScheduleChangeNotes() {
       .footer{margin-top:14px;font-size:11px;color:#444}
     </style></head><body>
       <div class="pdf-header">
-        <div class="pdf-header-logos">
-          ${aspireLogoDataUrl ? `<img class="pdf-header-logo-aspire" src="${aspireLogoDataUrl}" alt="ASPIRE logo">` : ''}
-          ${a2rlLogoDataUrl ? `<img class="pdf-header-logo-a2rl" src="${a2rlLogoDataUrl}" alt="A2RL logo">` : ''}
-        </div>
-        <div>
-        <div class="pdf-header-main">ABH DHABI AUTONOMOUS RACING LEAUGE</div>
-        <div class="pdf-header-sub">ABU DHABI AUTONOMOUS RACING LEAGUE</div>
-        </div>
+        ${a2rlLogoDataUrl ? `<img class="pdf-header-logo-a2rl" src="${a2rlLogoDataUrl}" alt="A2RL logo">` : ''}
+        <div class="pdf-header-main">ABU DHABI AUTONOMOUS RACING LEAGUE</div>
+        ${aspireLogoDataUrl ? `<img class="pdf-header-logo-aspire" src="${aspireLogoDataUrl}" alt="ASPIRE logo">` : ''}
       </div>
       <h2 style="margin-top:2px;">Schedule Change Notes</h2>
       <div class="meta">

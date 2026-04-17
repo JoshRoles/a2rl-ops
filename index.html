@@ -311,8 +311,8 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .sched-cal-block.sched-open{background:rgba(0,232,122,0.12);}
 .sched-cal-block.sched-break{background:rgba(255,255,255,0.04);}
 .sched-cal-block.sched-lunch{
-  background:rgba(239,68,68,0.2);
-  border-color:rgba(239,68,68,0.5);
+  background:rgba(245,158,11,0.24);
+  border-color:rgba(245,158,11,0.55);
 }
 .sched-cal-block.sched-end-buffer{
   background:rgba(245,158,11,0.2);
@@ -645,6 +645,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
               <button class="btn sm" onclick="undoSchedule()">↶ Undo</button>
               <button class="btn sm" onclick="redoSchedule()">↷ Redo</button>
               <button class="btn sm" onclick="downloadScheduleChangeNotes()">📝 Change Notes</button>
+              <button class="btn sm" onclick="openAllScheduleVersions()">📚 All Versions</button>
               <button class="btn sm" onclick="openAddSlotModal()">+ Add Slot</button>
             </div>
           </div>
@@ -2493,17 +2494,38 @@ function downloadScheduleChangeNotes() {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
   const rows = getScheduleBlocksForDay(dayIdx);
+  const bucket = scheduleChangeLog?.[getScheduleChangeLogKey(dayIdx)];
+  const prevVersion = (bucket?.versions || []).find(v => v.version === (version.version - 1));
+  const prevSnapshot = Array.isArray(prevVersion?.snapshot) ? prevVersion.snapshot : [];
+  const changedRowIds = new Set();
+  if (prevSnapshot.length) {
+    const prevById = Object.fromEntries(prevSnapshot.map(b => [b.id, b]));
+    rows.forEach(b => {
+      const p = prevById[b.id];
+      if (!p) { changedRowIds.add(b.id); return; }
+      const teamsChanged = JSON.stringify(p.teams || []) !== JSON.stringify(b.teams || []);
+      if (p.time !== b.time || p.duration !== b.duration || (p.label || '') !== (b.label || '') || (p.type || '') !== (b.type || '') || teamsChanged) {
+        changedRowIds.add(b.id);
+      }
+    });
+  }
   const timetableRows = rows.map((b, idx) => {
     const start = b.time || '00:00';
     const end = _fM(_toM(start) + (parseInt(b.duration, 10) || 0));
     const team = (b.teams || []).join(' + ') || b.label || '—';
-    const single = b.type === 'single' ? 'Yes' : 'No';
-    return `<tr>
+    const sessionType = b.type === 'single'
+      ? 'Single Car'
+      : (b.type === 'multi'
+        ? 'Multi Car'
+        : (b.type === 'open'
+          ? 'Open Pit'
+          : (b.type === 'break' ? 'Break' : 'Reserve / Buffer')));
+    return `<tr${changedRowIds.has(b.id) ? ' class="changed-row"' : ''}>
       <td>${idx + 1}</td>
       <td>${esc(start)}</td>
       <td>${esc(end)}</td>
       <td>${esc(team)}</td>
-      <td>${single}</td>
+      <td>${sessionType}</td>
       <td>${parseInt(b.duration, 10) || 0}m</td>
     </tr>`;
   }).join('');
@@ -2523,6 +2545,7 @@ function downloadScheduleChangeNotes() {
       table{width:100%;border-collapse:collapse;margin-top:10px;font-size:12px}
       th,td{border:1px solid #444;padding:6px 8px;text-align:left}
       th{background:#f2f2f2}
+      .changed-row td{background:#dcfce7}
       .footer{margin-top:14px;font-size:11px;color:#444}
     </style></head><body>
       <h1>ABU DHABI AUTONOMOUS RACING LEAGUE</h1>
@@ -2536,7 +2559,7 @@ function downloadScheduleChangeNotes() {
       <h2>Current Timetable</h2>
       <div style="font-size:11px;color:#444;margin-bottom:6px;">● Single Run &nbsp; ● Break &nbsp; ● Reserve / Buffer</div>
       <table>
-        <thead><tr><th>Run No</th><th>Start time</th><th>End time</th><th>Team</th><th>Single car</th><th>Duration</th></tr></thead>
+        <thead><tr><th>Run No</th><th>Start time</th><th>End time</th><th>Team</th><th>Session Type</th><th>Duration</th></tr></thead>
         <tbody>${timetableRows || '<tr><td colspan="6">No schedule rows for this day.</td></tr>'}</tbody>
       </table>
       <div class="footer">Season ${esc(eventCfg?.season || '—')} | ${esc(version.eventName || schedCfg.eventName || '—')} | Day ${dayIdx + 1}</div>
@@ -2544,6 +2567,42 @@ function downloadScheduleChangeNotes() {
   win.document.close();
   win.focus();
   win.print();
+}
+function openAllScheduleVersions() {
+  const dayIdx = currentSchedDay;
+  const key = getScheduleChangeLogKey(dayIdx);
+  const bucket = scheduleChangeLog?.[key];
+  const body = document.getElementById('schedule-versions-body');
+  const meta = document.getElementById('schedule-versions-meta');
+  if (!body || !meta) return;
+  const eventName = schedCfg?.eventName || bucket?.eventName || '—';
+  meta.textContent = `Event: ${eventName} | Day ${dayIdx + 1}`;
+  if (!bucket || !Array.isArray(bucket.versions) || !bucket.versions.length) {
+    body.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 2px;">No issued versions for this day yet. Issue from "Change Notes" to create Version 1.</div>';
+    openModal('modal-schedule-versions');
+    return;
+  }
+  const items = [...bucket.versions].sort((a,b) => (b.version || 0) - (a.version || 0));
+  body.innerHTML = items.map(v => {
+    const lines = Array.isArray(v.changes) && v.changes.length ? v.changes : ['No row-level differences detected.'];
+    const changeList = lines.map(line => `<li>${String(line).replace(/</g,'&lt;').replace(/>/g,'&gt;')}</li>`).join('');
+    const when = new Date(v.generatedAt || Date.now()).toLocaleString();
+    return `<div class="panel" style="margin:0 0 10px 0;">
+      <div class="panel-head">
+        <div class="panel-title">Version ${v.version}</div>
+        <div style="font-size:11px;color:var(--muted);">Issued ${when}</div>
+      </div>
+      <div class="panel-body" style="font-size:12px;">
+        <div style="display:flex;gap:18px;flex-wrap:wrap;color:var(--muted);margin-bottom:8px;">
+          <span>Issued by: <span style="color:var(--text);">${(v.generatedBy || 'System').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span></span>
+          <span>Reason: <span style="color:var(--text);">${(v.reason || 'Schedule updated').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span></span>
+        </div>
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Changes in this issued version</div>
+        <ul style="margin:0 0 0 18px;line-height:1.5;">${changeList}</ul>
+      </div>
+    </div>`;
+  }).join('');
+  openModal('modal-schedule-versions');
 }
 
 // ── SAVE ──
@@ -7874,6 +7933,17 @@ init();
     <div style="margin-top:12px;"><button class="btn primary" onclick="createUserLogin()">Create Login</button></div>
     <div class="sep" style="margin:14px 0;"></div>
     <div id="users-list"></div>
+  </div>
+</div>
+<div class="modal-overlay" id="modal-schedule-versions">
+  <div class="modal" style="width:min(900px,96vw);max-height:90vh;overflow-y:auto;">
+    <button class="modal-close" onclick="closeModal('modal-schedule-versions')">✕</button>
+    <div class="modal-title">Schedule Versions Log</div>
+    <div id="schedule-versions-meta" style="font-size:12px;color:var(--muted);margin-bottom:12px;"></div>
+    <div id="schedule-versions-body"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-schedule-versions')">Close</button>
+    </div>
   </div>
 </div>
 <div class="modal-overlay" id="modal-manual-session">

@@ -5210,27 +5210,28 @@ function onSlotTypeChange() {
 }
 
 function saveSlot() {
-  pushScheduleHistory();
-  markScheduleMutation('Manual schedule slot added');
   const time = document.getElementById('slot-time').value;
   const dur = parseInt(document.getElementById('slot-dur').value) || 30;
   const type = document.getElementById('slot-type').value;
   const label = document.getElementById('slot-label').value;
   const selectedTeams = Array.from(document.querySelectorAll('#slot-team-checkboxes input:checked')).map(cb=>cb.value);
 
-  schedule.push({
+  const newBlock = {
     id: Date.now().toString(),
     day: currentSchedDay,
     eventId: schedCfg.eventId || null,
     eventDay: currentSchedDay,
     time, type, teams: selectedTeams, duration: dur,
     label: label || selectedTeams.join(' + '), generated: false,
-  });
-  const inserted = schedule[schedule.length-1];
-  if (inserted) {
-    const w = getSchedWindowsM(currentSchedDay);
-    _resolveOverlap(inserted,'down',w.trackOpenM,w.trackCloseM);
+  };
+  const overlaps = findScheduleOverlaps(newBlock);
+  if (overlaps.length) {
+    alert('This slot overlaps existing scheduled time. Choose a free time window or move the other slot first.');
+    return;
   }
+  pushScheduleHistory();
+  markScheduleMutation('Manual schedule slot added');
+  schedule.push(newBlock);
   save();
   closeModal('modal-add-slot');
   renderScheduleView();
@@ -5311,6 +5312,7 @@ function renderScheduleView() {
     ? (minDur < 10 ? 2 : Math.max(2, Math.min(6, Math.ceil(20 / minDur))))
     : 2;
   const PX = Math.max(1.2, Math.min(20, +(basePX * schedZoom).toFixed(2)));
+  schedulePxPerMin = PX;
   const totalH=(closeM-openM)*PX;
 
   const typeInfo={
@@ -8210,23 +8212,26 @@ function openEditSlot(blockId) {
   openModal('modal-edit-slot');
 }
 function saveEditSlot() {
-  pushScheduleHistory();
-  markScheduleMutation('Schedule slot edited');
   const id=document.getElementById('edit-slot-id').value;
   const idx=schedule.findIndex(b=>b.id===id); if(idx<0) return;
   const selTeams=Array.from(document.querySelectorAll('#edit-slot-team-checks input:checked')).map(cb=>cb.value);
   const prevTime=schedule[idx].time, prevDur=schedule[idx].duration;
   const newTime=document.getElementById('edit-slot-time').value;
   const newDur=parseInt(document.getElementById('edit-slot-dur').value)||30;
-  schedule[idx]={...schedule[idx], time:newTime, duration:newDur,
+  const updated={...schedule[idx], time:newTime, duration:newDur,
     type:document.getElementById('edit-slot-type').value,
     label:document.getElementById('edit-slot-label').value||selTeams.join(' + '),
     teams:selTeams};
   if(newTime!==prevTime||newDur!==prevDur){
-    const toM=t=>{const[h,m]=t.split(':').map(Number);return h*60+m;};
-    const w = getSchedWindowsM(currentSchedDay);
-    _resolveOverlap(schedule[idx],'down',w.trackOpenM,w.trackCloseM);
+    const overlaps = findScheduleOverlaps(updated, id);
+    if (overlaps.length) {
+      alert('This edit overlaps other slots. To auto-adjust neighboring slots, use drag/resize and approve the prompt.');
+      return;
+    }
   }
+  pushScheduleHistory();
+  markScheduleMutation('Schedule slot edited');
+  schedule[idx]=updated;
   save(); closeModal('modal-edit-slot'); renderScheduleView();
 }
 function deleteSlotFromModal() {
@@ -8239,7 +8244,8 @@ function deleteSlotFromModal() {
 
 // ── DRAG / RESIZE ─────────────────────────────────────────────────────
 let _drag=null;
-const PX_PER_MIN=2, MIN_SNAP=5;
+let schedulePxPerMin = 2;
+const MIN_SNAP=5;
 function snapTo5(m){return Math.round(m/MIN_SNAP)*MIN_SNAP;}
 
 function _ensureDragOverlay(){
@@ -8262,7 +8268,7 @@ function startBlockMove(e,blockId){
   const block=schedule.find(b=>b.id===blockId); if(!block) return;
   const toM=t=>{const[h,m]=t.split(':').map(Number);return h*60+m;};
   _drag={id:blockId,mode:'move',startY:e.touches?e.touches[0].clientY:e.clientY,
-    origDur:block.duration,origStartM:toM(block.time),moved:false};
+    origDur:block.duration,origStartM:toM(block.time),origTime:block.time,moved:false,rafPending:false,lastClientY:null};
   const ov=_ensureDragOverlay(); ov.style.display='block';
   const el=document.getElementById('blk-'+blockId);
   if(el){el.style.opacity='0.8';el.style.zIndex='10';}
@@ -8272,7 +8278,7 @@ function startResize(e,blockId,handle){
   const block=schedule.find(b=>b.id===blockId); if(!block) return;
   const toM=t=>{const[h,m]=t.split(':').map(Number);return h*60+m;};
   _drag={id:blockId,mode:handle,startY:e.touches?e.touches[0].clientY:e.clientY,
-    origDur:block.duration,origStartM:toM(block.time),moved:false};
+    origDur:block.duration,origStartM:toM(block.time),origTime:block.time,moved:false,rafPending:false,lastClientY:null};
   const ov=_ensureDragOverlay(); ov.style.display='block';
   const el=document.getElementById('blk-'+blockId);
   if(el) el.style.opacity='0.85';
@@ -8280,7 +8286,17 @@ function startResize(e,blockId,handle){
 function onDragMove(e){
   if(!_drag) return; e.preventDefault(); _drag.moved=true;
   const clientY=e.touches?e.touches[0].clientY:e.clientY;
-  const deltaY=clientY-_drag.startY, deltaMins=deltaY/PX_PER_MIN;
+  _drag.lastClientY = clientY;
+  if (_drag.rafPending) return;
+  _drag.rafPending = true;
+  requestAnimationFrame(applyDragPreview);
+}
+function applyDragPreview(){
+  if(!_drag){ return; }
+  _drag.rafPending = false;
+  const pxPerMin = Math.max(1, schedulePxPerMin || 2);
+  const clientY = _drag.lastClientY ?? _drag.startY;
+  const deltaY=clientY-_drag.startY, deltaMins=deltaY/pxPerMin;
   const block=schedule.find(b=>b.id===_drag.id); if(!block) return;
   const toM=t=>{const[h,m]=t.split(':').map(Number);return h*60+m;};
   const fM=m=>String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
@@ -8292,18 +8308,18 @@ function onDragMove(e){
     let nd=snapTo5(Math.max(MIN_SNAP,_drag.origDur+deltaMins));
     if(_drag.origStartM+nd>closeM) nd=closeM-_drag.origStartM;
     block.duration=Math.max(MIN_SNAP,nd);
-    el.style.height=Math.max(block.duration*PX_PER_MIN,24)+'px';
+    el.style.height=Math.max(block.duration*pxPerMin,24)+'px';
   } else if(_drag.mode==='top'){
     let ns=snapTo5(_drag.origStartM+deltaMins);
     ns=Math.max(openM,Math.min(ns,_drag.origStartM+_drag.origDur-MIN_SNAP));
     block.time=fM(ns); block.duration=Math.max(MIN_SNAP,_drag.origStartM+_drag.origDur-ns);
-    el.style.top=((ns-openM)*PX_PER_MIN)+'px';
-    el.style.height=Math.max(block.duration*PX_PER_MIN,24)+'px';
+    el.style.top=((ns-openM)*pxPerMin)+'px';
+    el.style.height=Math.max(block.duration*pxPerMin,24)+'px';
   } else if(_drag.mode==='move'){
     let ns=snapTo5(_drag.origStartM+deltaMins);
     ns=Math.max(openM,Math.min(ns,closeM-_drag.origDur));
     block.time=fM(ns);
-    el.style.top=((ns-openM)*PX_PER_MIN)+'px';
+    el.style.top=((ns-openM)*pxPerMin)+'px';
   }
 }
 function onDragEnd(e){
@@ -8319,11 +8335,27 @@ function onDragEnd(e){
   if(el){el.style.opacity='1';el.style.zIndex='1';}
   const block=schedule.find(b=>b.id===_drag.id);
   if(block){
-    pushScheduleHistory();
-    markScheduleMutation('Schedule slot moved');
-    const toM=t=>{const[h,m]=t.split(':').map(Number);return h*60+m;};
-    const w = getSchedWindowsM(currentSchedDay);
-    _resolveOverlap(block,_drag.mode==='top'?'up':'down',w.trackOpenM,w.trackCloseM);
+    const overlaps = findScheduleOverlaps(block, block.id);
+    if (overlaps.length) {
+      const approval = confirm(
+        `This drag change overlaps ${overlaps.length} existing slot(s).\n\n` +
+        `Do you want to auto-adjust neighboring slots to remove conflicts?`
+      );
+      if (approval) {
+        pushScheduleHistory();
+        markScheduleMutation('Schedule slot moved');
+        const w = getSchedWindowsM(currentSchedDay);
+        _resolveOverlap(block,_drag.mode==='top'?'up':'down',w.trackOpenM,w.trackCloseM);
+      } else {
+        block.time = _drag.origTime;
+        block.duration = _drag.origDur;
+        _drag=null; renderScheduleView();
+        return;
+      }
+    } else if (block.time !== _drag.origTime || block.duration !== _drag.origDur) {
+      pushScheduleHistory();
+      markScheduleMutation('Schedule slot moved');
+    }
     (block.teams||[]).forEach(tn=>{
       const al=trackAlloc.find(a=>a.team===tn);
       if(al) al.hours=+(schedule.filter(b=>(b.teams||[]).includes(tn)).reduce((s,b)=>s+b.duration,0)/60).toFixed(2);
@@ -8334,20 +8366,22 @@ function onDragEnd(e){
 
 // ── RESOLVE OVERLAP (cascade + lunch awareness) ───────────────────────
 function _resolveOverlap(movedBlock, direction, openM, closeM) {
+  const pxPerMin = Math.max(1, schedulePxPerMin || 2);
   const toM=t=>{const[h,m]=t.split(':').map(Number);return h*60+m;};
   const fM=m=>String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
-  const others=schedule.filter(b=>b.day===currentSchedDay&&b.id!==movedBlock.id&&b.type!=='reserve')
+  const sameEvent = (a,b) => String(a.eventId || '') === String(b.eventId || '');
+  const others=schedule.filter(b=>b.day===currentSchedDay&&b.id!==movedBlock.id&&b.type!=='reserve'&&sameEvent(b,movedBlock))
     .sort((a,b)=>toM(a.time)-toM(b.time));
   const mS=toM(movedBlock.time), mE=mS+movedBlock.duration;
 
   if(direction==='down'||direction==='both'){
     let cursor=mE;
     others.filter(b=>toM(b.time)>=mS).forEach(b=>{
-      // Keep schedule contiguous after edited block: remove gaps and overlaps
-      if (toM(b.time)!==cursor) b.time=fM(cursor);
+      // Only shift blocks that overlap the moved block/chain; keep natural gaps untouched.
+      if (toM(b.time)<cursor) b.time=fM(cursor);
       cursor=toM(b.time)+b.duration;
       const el=document.getElementById('blk-'+b.id);
-      if(el) el.style.top=((toM(b.time)-openM)*PX_PER_MIN)+'px';
+      if(el) el.style.top=((toM(b.time)-openM)*pxPerMin)+'px';
     });
   }
   if(direction==='up'||direction==='both'){
@@ -8357,10 +8391,27 @@ function _resolveOverlap(movedBlock, direction, openM, closeM) {
         const ns=Math.max(openM,cursor-b.duration);
         b.time=fM(ns); cursor=ns;
         const el=document.getElementById('blk-'+b.id);
-        if(el) el.style.top=((ns-openM)*PX_PER_MIN)+'px';
+        if(el) el.style.top=((ns-openM)*pxPerMin)+'px';
       }
     });
   }
+}
+
+function findScheduleOverlaps(candidate, ignoreId='') {
+  const toM=t=>{const[h,m]=String(t||'00:00').split(':').map(Number);return h*60+m;};
+  const cStart = toM(candidate.time);
+  const cEnd = cStart + (parseInt(candidate.duration,10) || 0);
+  if (cEnd <= cStart) return [];
+  const sameEvent = (a,b) => String(a.eventId || '') === String(b.eventId || '');
+  return schedule.filter(b => {
+    if (!b || b.id === ignoreId) return false;
+    if ((b.day || 0) !== (candidate.day || 0)) return false;
+    if (b.type === 'reserve') return false;
+    if (!sameEvent(b, candidate)) return false;
+    const bStart = toM(b.time);
+    const bEnd = bStart + (parseInt(b.duration,10) || 0);
+    return cStart < bEnd && cEnd > bStart;
+  });
 }
 
 // ── TRACK ALLOC CHART ─────────────────────────────────────────────────

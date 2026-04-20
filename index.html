@@ -7245,56 +7245,6 @@ function wizRemoveFromGroup(gi, ti) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// EDIT SLOT (click schedule block)
-// ═══════════════════════════════════════════════════════════════════════
-function openEditSlot(blockId) {
-  const block = schedule.find(b => b.id === blockId);
-  if (!block) return;
-  document.getElementById('edit-slot-id').value = blockId;
-  document.getElementById('edit-slot-time').value = block.time;
-  document.getElementById('edit-slot-dur').value = block.duration;
-  document.getElementById('edit-slot-type').value = block.type;
-  document.getElementById('edit-slot-label').value = block.label || '';
-  // Build team checkboxes
-  const box = document.getElementById('edit-slot-team-checks');
-  if (box) {
-    box.innerHTML = teams.filter(t => t.active).map(t => {
-      const checked = (block.teams || []).includes(t.name) ? 'checked' : '';
-      return '<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;padding:3px;">'
-        + '<input type="checkbox" value="' + t.name + '" ' + checked + ' style="accent-color:var(--accent);">'
-        + '<span class="team-dot" style="background:' + t.color + '"></span>' + t.name + '</label>';
-    }).join('');
-  }
-  openModal('modal-edit-slot');
-}
-function saveEditSlot() {
-  markScheduleMutation('Schedule slot edited');
-  const id = document.getElementById('edit-slot-id').value;
-  const idx = schedule.findIndex(b => b.id === id);
-  if (idx < 0) return;
-  const selTeams = Array.from(document.querySelectorAll('#edit-slot-team-checks input:checked')).map(cb => cb.value);
-  schedule[idx] = {
-    ...schedule[idx],
-    time: document.getElementById('edit-slot-time').value,
-    duration: parseInt(document.getElementById('edit-slot-dur').value) || 30,
-    type: document.getElementById('edit-slot-type').value,
-    label: document.getElementById('edit-slot-label').value || selTeams.join(' + '),
-    teams: selTeams,
-  };
-  save();
-  closeModal('modal-edit-slot');
-  renderScheduleView();
-}
-function deleteSlotFromModal() {
-  markScheduleMutation('Schedule slot removed');
-  const id = document.getElementById('edit-slot-id').value;
-  schedule = schedule.filter(b => b.id !== id);
-  save();
-  closeModal('modal-edit-slot');
-  renderScheduleView();
-}
-
-// ═══════════════════════════════════════════════════════════════════════
 // EDIT SESSION (from history)
 // ═══════════════════════════════════════════════════════════════════════
 function editSession(id) {
@@ -8301,6 +8251,10 @@ function applyDragPreview(){
   const toM=t=>{const[h,m]=t.split(':').map(Number);return h*60+m;};
   const fM=m=>String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
   const w = getSchedWindowsM(currentSchedDay);
+  // renderScheduleView() draws blocks relative to dayStartM, so the drag preview
+  // must use the same baseline to stay pixel-aligned with the grid. Clamping still
+  // uses the track window so users can only place blocks in valid on-track hours.
+  const baseM = w.dayStartM;
   const openM = w.trackOpenM, closeM = w.trackCloseM;
   const el=document.getElementById('blk-'+_drag.id); if(!el) return;
 
@@ -8313,13 +8267,13 @@ function applyDragPreview(){
     let ns=snapTo5(_drag.origStartM+deltaMins);
     ns=Math.max(openM,Math.min(ns,_drag.origStartM+_drag.origDur-MIN_SNAP));
     block.time=fM(ns); block.duration=Math.max(MIN_SNAP,_drag.origStartM+_drag.origDur-ns);
-    el.style.top=((ns-openM)*pxPerMin)+'px';
+    el.style.top=((ns-baseM)*pxPerMin)+'px';
     el.style.height=Math.max(block.duration*pxPerMin,24)+'px';
   } else if(_drag.mode==='move'){
     let ns=snapTo5(_drag.origStartM+deltaMins);
     ns=Math.max(openM,Math.min(ns,closeM-_drag.origDur));
     block.time=fM(ns);
-    el.style.top=((ns-openM)*pxPerMin)+'px';
+    el.style.top=((ns-baseM)*pxPerMin)+'px';
   }
 }
 function onDragEnd(e){
@@ -8345,7 +8299,7 @@ function onDragEnd(e){
         pushScheduleHistory();
         markScheduleMutation('Schedule slot moved');
         const w = getSchedWindowsM(currentSchedDay);
-        _resolveOverlap(block,_drag.mode==='top'?'up':'down',w.trackOpenM,w.trackCloseM);
+        _resolveOverlap(block,_drag.mode==='top'?'up':'down',w.trackOpenM,w.trackCloseM,w.dayStartM);
       } else {
         block.time = _drag.origTime;
         block.duration = _drag.origDur;
@@ -8365,8 +8319,12 @@ function onDragEnd(e){
 }
 
 // ── RESOLVE OVERLAP (cascade + lunch awareness) ───────────────────────
-function _resolveOverlap(movedBlock, direction, openM, closeM) {
+function _resolveOverlap(movedBlock, direction, openM, closeM, baseM) {
   const pxPerMin = Math.max(1, schedulePxPerMin || 2);
+  // Use the day-start baseline for DOM positioning so cascaded previews stay
+  // visually aligned with renderScheduleView(). Clamping still uses the
+  // track-open window. Fallback to openM if baseM isn't supplied.
+  const renderBase = Number.isFinite(baseM) ? baseM : openM;
   const toM=t=>{const[h,m]=t.split(':').map(Number);return h*60+m;};
   const fM=m=>String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
   const sameEvent = (a,b) => String(a.eventId || '') === String(b.eventId || '');
@@ -8381,7 +8339,7 @@ function _resolveOverlap(movedBlock, direction, openM, closeM) {
       if (toM(b.time)<cursor) b.time=fM(cursor);
       cursor=toM(b.time)+b.duration;
       const el=document.getElementById('blk-'+b.id);
-      if(el) el.style.top=((toM(b.time)-openM)*pxPerMin)+'px';
+      if(el) el.style.top=((toM(b.time)-renderBase)*pxPerMin)+'px';
     });
   }
   if(direction==='up'||direction==='both'){
@@ -8391,7 +8349,7 @@ function _resolveOverlap(movedBlock, direction, openM, closeM) {
         const ns=Math.max(openM,cursor-b.duration);
         b.time=fM(ns); cursor=ns;
         const el=document.getElementById('blk-'+b.id);
-        if(el) el.style.top=((ns-openM)*pxPerMin)+'px';
+        if(el) el.style.top=((ns-renderBase)*pxPerMin)+'px';
       }
     });
   }

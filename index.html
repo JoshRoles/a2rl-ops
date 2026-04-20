@@ -632,9 +632,11 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
           <div style="margin-left:auto;display:flex;gap:8px;">
             <button class="btn primary" onclick="startScheduleWizard()">+ Build New Schedule</button>
             <button class="btn" onclick="exportScheduleToSessions()" id="btn-push-sessions">⤑ Push to Sessions</button>
+            <button class="btn" onclick="saveScheduleDraft()" id="btn-save-schedule-draft">💾 Save Draft</button>
             <button class="btn danger sm" onclick="clearSchedule()">Clear</button>
           </div>
         </div>
+        <div id="sched-status-chip" style="margin:-6px 0 12px 0;font-size:11px;color:var(--muted);display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid var(--border2);border-radius:999px;background:rgba(255,255,255,0.03);">Status: —</div>
 
         <div id="sched-stats-row" style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:16px;"></div>
 
@@ -2635,6 +2637,111 @@ function getScheduleBlocksForDay(dayIdx = currentSchedDay) {
   return (schedule || [])
     .filter(b => matchSelectedScheduleEvent(b) && (b.day || 0) === dayIdx)
     .sort((a,b)=>_toM(a.time)-_toM(b.time));
+}
+function getScheduleLogBucket(dayIdx = currentSchedDay, create = false) {
+  const key = getScheduleChangeLogKey(dayIdx);
+  if (!scheduleChangeLog || typeof scheduleChangeLog !== 'object') scheduleChangeLog = {};
+  if (!scheduleChangeLog[key] && create) {
+    scheduleChangeLog[key] = {
+      eventId: schedCfg?.eventId || null,
+      eventName: schedCfg?.eventName || '—',
+      day: dayIdx,
+      versions: [],
+      lastPublishedVersion: 0,
+      lastPublishedSnapshot: [],
+      lastPublishedAt: '',
+      lastSavedAt: '',
+    };
+  }
+  return scheduleChangeLog[key] || null;
+}
+function scheduleSnapshotsEqual(a, b) {
+  return JSON.stringify(a || []) === JSON.stringify(b || []);
+}
+function getScheduleStatusForDay(dayIdx = currentSchedDay) {
+  const bucket = getScheduleLogBucket(dayIdx, false);
+  const currSnapshot = cloneDaySchedule(dayIdx);
+  const hasRows = currSnapshot.some(b => b.type !== 'break' && b.type !== 'reserve' && (b.teams || []).length);
+  const publishedVersion = Number(bucket?.lastPublishedVersion || 0);
+  if (publishedVersion > 0) {
+    const publishedSnapshot = Array.isArray(bucket?.lastPublishedSnapshot) ? bucket.lastPublishedSnapshot : [];
+    const clean = scheduleSnapshotsEqual(currSnapshot, publishedSnapshot);
+    return {
+      label: clean ? `V${publishedVersion} Pushed` : `V${publishedVersion} Draft`,
+      tone: clean ? 'ok' : 'draft',
+      savedAt: String(bucket?.lastSavedAt || ''),
+    };
+  }
+  return {
+    label: hasRows ? 'Draft' : 'No Draft',
+    tone: hasRows ? 'draft' : 'muted',
+    savedAt: String(bucket?.lastSavedAt || ''),
+  };
+}
+function formatScheduleSavedAt(ts) {
+  const d = ts ? new Date(ts) : null;
+  if (!d || isNaN(d)) return '';
+  return d.toLocaleString(undefined, { month:'short', day:'2-digit', hour:'2-digit', minute:'2-digit' });
+}
+function renderScheduleStatusChip() {
+  const chip = document.getElementById('sched-status-chip');
+  if (!chip) return;
+  const status = getScheduleStatusForDay(currentSchedDay);
+  const toneMap = {
+    ok: { color:'var(--green)', border:'rgba(0,232,122,0.4)', bg:'rgba(0,232,122,0.12)' },
+    draft: { color:'var(--amber)', border:'rgba(245,158,11,0.45)', bg:'rgba(245,158,11,0.12)' },
+    muted: { color:'var(--muted)', border:'var(--border2)', bg:'rgba(255,255,255,0.03)' },
+  };
+  const tone = toneMap[status.tone] || toneMap.muted;
+  chip.style.color = tone.color;
+  chip.style.borderColor = tone.border;
+  chip.style.background = tone.bg;
+  const savedTxt = status.savedAt ? ` · Saved ${formatScheduleSavedAt(status.savedAt)}` : '';
+  chip.textContent = `Status: ${status.label}${savedTxt}`;
+}
+function issuePublishedScheduleVersion(dayIdx = currentSchedDay, reason = 'Pushed to Sessions') {
+  const bucket = getScheduleLogBucket(dayIdx, true);
+  const currSnapshot = cloneDaySchedule(dayIdx);
+  const prevPublishedVersion = Number(bucket.lastPublishedVersion || 0);
+  const prevPublishedSnapshot = Array.isArray(bucket.lastPublishedSnapshot) ? bucket.lastPublishedSnapshot : [];
+  // No new version if nothing changed since last published version.
+  if (prevPublishedVersion > 0 && scheduleSnapshotsEqual(currSnapshot, prevPublishedSnapshot)) {
+    bucket.lastSavedAt = new Date().toISOString();
+    return null;
+  }
+  const versions = Array.isArray(bucket.versions) ? bucket.versions : [];
+  const nextVersion = versions.length ? (Math.max(...versions.map(v => Number(v.version || 0))) + 1) : 1;
+  const changeLines = prevPublishedVersion > 0
+    ? diffDaySchedules(prevPublishedSnapshot, currSnapshot)
+    : ['Initial schedule issue.'];
+  const entry = {
+    version: nextVersion,
+    day: dayIdx,
+    eventName: schedCfg?.eventName || bucket.eventName || '—',
+    generatedAt: new Date().toISOString(),
+    generatedBy: currentUserName(),
+    reason,
+    changes: changeLines.length ? changeLines : ['No row-level differences detected.'],
+    snapshot: currSnapshot,
+  };
+  bucket.eventId = schedCfg?.eventId || bucket.eventId || null;
+  bucket.eventName = schedCfg?.eventName || bucket.eventName || '—';
+  bucket.day = dayIdx;
+  bucket.versions = versions;
+  bucket.versions.push(entry);
+  bucket.lastPublishedVersion = nextVersion;
+  bucket.lastPublishedSnapshot = JSON.parse(JSON.stringify(currSnapshot));
+  bucket.lastPublishedAt = entry.generatedAt;
+  bucket.lastSavedAt = entry.generatedAt;
+  return entry;
+}
+function saveScheduleDraft() {
+  const bucket = getScheduleLogBucket(currentSchedDay, true);
+  bucket.lastSavedAt = new Date().toISOString();
+  save();
+  renderScheduleDayTabs();
+  renderScheduleStatusChip();
+  alert(`Draft saved for Day ${currentSchedDay + 1}.`);
 }
 function getRuntimeSchedule() {
   return Array.isArray(runtimeSchedule) ? runtimeSchedule : [];
@@ -5215,6 +5322,10 @@ function saveSlot() {
   const type = document.getElementById('slot-type').value;
   const label = document.getElementById('slot-label').value;
   const selectedTeams = Array.from(document.querySelectorAll('#slot-team-checkboxes input:checked')).map(cb=>cb.value);
+  if (type !== 'break' && !selectedTeams.length) {
+    alert('Select at least one team for Single/Multi/Open session slots.');
+    return;
+  }
 
   const newBlock = {
     id: Date.now().toString(),
@@ -5259,7 +5370,9 @@ function renderScheduleDayTabs() {
   wrap.innerHTML = Array.from({length:days}).map((_,i)=>{
     const date = schedCfg.eventStart ? (()=>{const d=new Date(schedCfg.eventStart+'T00:00:00');d.setDate(d.getDate()+i);return d.toLocaleDateString(undefined,{day:'2-digit',month:'short'});})() : 'No date';
     const active = i===currentSchedDay;
-    return `<button class="btn sm" style="border-color:${active?'rgba(0,212,255,0.45)':'var(--border2)'};color:${active?'var(--accent)':'var(--muted)'};background:${active?'rgba(0,212,255,0.08)':'var(--card)'};" onclick="currentSchedDay=${i};const ds=document.getElementById('sched-day-select');if(ds)ds.value=${i};renderScheduleView();">Day ${i+1} · ${date}</button>`;
+    const st = getScheduleStatusForDay(i);
+    const stColor = st.tone === 'ok' ? 'var(--green)' : (st.tone === 'draft' ? 'var(--amber)' : 'var(--muted)');
+    return `<button class="btn sm" style="border-color:${active?'rgba(0,212,255,0.45)':'var(--border2)'};color:${active?'var(--accent)':'var(--muted)'};background:${active?'rgba(0,212,255,0.08)':'var(--card)'};display:flex;flex-direction:column;align-items:flex-start;line-height:1.2;min-height:40px;" onclick="currentSchedDay=${i};const ds=document.getElementById('sched-day-select');if(ds)ds.value=${i};renderScheduleView();"><span>Day ${i+1} · ${date}</span><span style="font-size:10px;color:${stColor};">${st.label}</span></button>`;
   }).join('');
 }
 
@@ -5279,6 +5392,13 @@ function renderScheduleView() {
     if (teamSummary) teamSummary.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:14px;">No event selected.</td></tr>';
     const publishedTb = document.getElementById('sched-published-tbody');
     if (publishedTb) publishedTb.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:14px;">No event selected.</td></tr>';
+    const chip = document.getElementById('sched-status-chip');
+    if (chip) {
+      chip.textContent = 'Status: —';
+      chip.style.color = 'var(--muted)';
+      chip.style.borderColor = 'var(--border2)';
+      chip.style.background = 'rgba(255,255,255,0.03)';
+    }
     return;
   }
   if (ev) {
@@ -5294,6 +5414,7 @@ function renderScheduleView() {
   const lbl = document.getElementById('sched-day-label');
   if (lbl) lbl.textContent = 'Day '+(currentSchedDay+1);
   renderScheduleDayTabs();
+  renderScheduleStatusChip();
 
   const toM = t=>{const[h,m]=t.split(':').map(Number);return h*60+m;};
   const fM  = m=>String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
@@ -5702,7 +5823,14 @@ function nextSchedDay() {
 
 // ── PUSH SCHEDULE TO SESSIONS (auto-populate Log Session) ──
 function exportScheduleToSessions() {
-  const blocks = schedule.filter(b=>matchSelectedScheduleEvent(b) && b.type!=='break' && b.type!=='reserve' && b.teams && b.teams.length>0);
+  const matchSelectedOrLegacy = (b) => {
+    const selectedId = String(getSelectedScheduleEventId() || '');
+    if (!selectedId) return true;
+    const blockEventId = String(b?.eventId || '');
+    // Legacy/manual rows may not have eventId; allow publishing them in selected event.
+    return blockEventId === selectedId || !blockEventId;
+  };
+  const blocks = schedule.filter(b=>matchSelectedOrLegacy(b) && b.type!=='break' && b.type!=='reserve' && b.teams && b.teams.length>0);
   if (!blocks.length) { alert('No session blocks to push. Build a schedule first.'); return; }
   const prevById = Object.fromEntries(getRuntimeSchedule().map(b => [String(b.id), b]));
   const liveId = String(liveSession?.schedBlockId || scheduleLive?.current?.id || '');
@@ -5732,14 +5860,91 @@ function exportScheduleToSessions() {
     }
     return withFlags;
   });
+  const pushedDays = [...new Set(blocks.map(b => (b.day || 0)))];
+  pushedDays.forEach(dayIdx => issuePublishedScheduleVersion(dayIdx, 'Pushed to Sessions'));
+  // Materialize visible "pending capture" sessions immediately, including
+  // future-dated plans, so Session History reflects what was just published.
+  syncPendingSessionsFromRuntimeSchedule();
   lastChangeNotesBase = JSON.parse(JSON.stringify(schedule));
   markScheduleMutation('Initial issued schedule');
   save();
+  renderScheduleDayTabs();
+  renderScheduleStatusChip();
   renderPublishedSessionsTable();
   renderSessionOverviewTable();
+  renderHistory();
   renderPublishedTodayPlan();
   renderActivityLog();
-  alert('Schedule published. Sessions will be added to Session History only after risk data is submitted.');
+  alert('Schedule published. Pending session rows are now visible in Session History until risk capture is submitted.');
+}
+
+function syncPendingSessionsFromRuntimeSchedule() {
+  const typeMap = { single:'Single Car', multi:'Multi Car', open:'Open Pit Lane' };
+  const matchSelectedOrLegacy = (b) => {
+    const selectedId = String(getSelectedScheduleEventId() || '');
+    if (!selectedId) return true;
+    const blockEventId = String(b?.eventId || '');
+    return blockEventId === selectedId || !blockEventId;
+  };
+  const rows = getRuntimeSchedule().filter(b =>
+    matchSelectedOrLegacy(b) &&
+    b.published &&
+    b.type !== 'break' &&
+    b.type !== 'reserve' &&
+    (b.teams || []).length
+  );
+
+  rows.forEach(block => {
+    const ev = block?.eventId
+      ? (events || []).find(e => String(e.id || '') === String(block.eventId || ''))
+      : getScheduleEventById();
+    const d = schedCfg?.eventStart
+      ? new Date(`${schedCfg.eventStart}T00:00:00`)
+      : new Date();
+    d.setDate(d.getDate() + (block.day || 0));
+    const dateStr = toLocalDateStr(d) || toLocalDateStr(new Date());
+    const tsIso = `${dateStr}T${block.time}:00`;
+
+    getCaptureTeamsForBlock(block).forEach(team => {
+      const capKey = buildCaptureKey(block.id, team);
+      const hasReal = sessions.some(s => !s.stub && (
+        String(s.schedCaptureKey || '') === capKey ||
+        (String(s.schedBlockId || '') === String(block.id) && String(s.team || '') === String(team))
+      ));
+      if (hasReal) return;
+
+      const pending = {
+        id: String(Date.now() + Math.floor(Math.random() * 1000)),
+        team,
+        eventType: defaultEventType(),
+        sessType: typeMap[block.type] || 'Single Car',
+        sessNum: getSessionOrdinalForBlock(block),
+        duration: parseInt(block.duration, 10) || 0,
+        timestamp: tsIso,
+        trackTimestamp: tsIso,
+        eventId: block.eventId || ev?.id || schedCfg.eventId || null,
+        eventName: ev?.name || schedCfg.eventName || null,
+        track: ev?.track || schedCfg.track || null,
+        schedBlockId: block.id,
+        schedCaptureKey: capKey,
+        stub: true,
+        riskScore: null,
+        notes: '',
+      };
+
+      const existingStubIdx = sessions.findIndex(s =>
+        s.stub && (
+          String(s.schedCaptureKey || '') === capKey ||
+          (String(s.schedBlockId || '') === String(block.id) && String(s.team || '') === String(team))
+        )
+      );
+      if (existingStubIdx >= 0) {
+        sessions[existingStubIdx] = { ...sessions[existingStubIdx], ...pending, id: sessions[existingStubIdx].id || pending.id };
+      } else {
+        sessions.push(pending);
+      }
+    });
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -8172,6 +8377,10 @@ function saveEditSlot() {
     type:document.getElementById('edit-slot-type').value,
     label:document.getElementById('edit-slot-label').value||selTeams.join(' + '),
     teams:selTeams};
+  if (updated.type !== 'break' && !selTeams.length) {
+    alert('Select at least one team for Single/Multi/Open session slots.');
+    return;
+  }
   if(newTime!==prevTime||newDur!==prevDur){
     const overlaps = findScheduleOverlaps(updated, id);
     if (overlaps.length) {
@@ -8212,6 +8421,43 @@ function _ensureDragOverlay(){
   }
   return ov;
 }
+function _removeDragGhost(){
+  const ghost=document.getElementById('drag-ghost');
+  if(ghost) ghost.remove();
+}
+function _createDragGhost(blockId){
+  _removeDragGhost();
+  const source=document.getElementById('blk-'+blockId);
+  if(!source) return null;
+  const rect=source.getBoundingClientRect();
+  const ghost=source.cloneNode(true);
+  ghost.id='drag-ghost';
+  ghost.querySelectorAll('[id]').forEach(node=>node.removeAttribute('id'));
+  ghost.style.position='fixed';
+  ghost.style.left=rect.left+'px';
+  ghost.style.top=rect.top+'px';
+  ghost.style.width=rect.width+'px';
+  ghost.style.height=rect.height+'px';
+  ghost.style.right='auto';
+  ghost.style.margin='0';
+  ghost.style.pointerEvents='none';
+  ghost.style.zIndex='10001';
+  ghost.style.opacity='0.96';
+  ghost.style.boxShadow='0 10px 26px rgba(0,0,0,0.45)';
+  ghost.style.transform='translateZ(0)';
+  document.body.appendChild(ghost);
+  return ghost;
+}
+function _syncDragGhost(blockId){
+  const ghost=document.getElementById('drag-ghost');
+  const source=document.getElementById('blk-'+blockId);
+  if(!ghost||!source) return;
+  const rect=source.getBoundingClientRect();
+  ghost.style.left=rect.left+'px';
+  ghost.style.top=rect.top+'px';
+  ghost.style.width=rect.width+'px';
+  ghost.style.height=rect.height+'px';
+}
 function startBlockMove(e,blockId){
   if(e.button!==undefined&&e.button!==0) return;
   e.preventDefault(); e.stopPropagation();
@@ -8220,6 +8466,7 @@ function startBlockMove(e,blockId){
   _drag={id:blockId,mode:'move',startY:e.touches?e.touches[0].clientY:e.clientY,
     origDur:block.duration,origStartM:toM(block.time),origTime:block.time,moved:false,rafPending:false,lastClientY:null};
   const ov=_ensureDragOverlay(); ov.style.display='block';
+  _createDragGhost(blockId);
   const el=document.getElementById('blk-'+blockId);
   if(el){el.style.opacity='0.8';el.style.zIndex='10';}
 }
@@ -8230,6 +8477,7 @@ function startResize(e,blockId,handle){
   _drag={id:blockId,mode:handle,startY:e.touches?e.touches[0].clientY:e.clientY,
     origDur:block.duration,origStartM:toM(block.time),origTime:block.time,moved:false,rafPending:false,lastClientY:null};
   const ov=_ensureDragOverlay(); ov.style.display='block';
+  _createDragGhost(blockId);
   const el=document.getElementById('blk-'+blockId);
   if(el) el.style.opacity='0.85';
 }
@@ -8275,6 +8523,7 @@ function applyDragPreview(){
     block.time=fM(ns);
     el.style.top=((ns-baseM)*pxPerMin)+'px';
   }
+  _syncDragGhost(_drag.id);
 }
 function onDragEnd(e){
   if(!_drag) return;
@@ -8283,6 +8532,7 @@ function onDragEnd(e){
   if(!_drag.moved&&_drag.mode==='move'){
     const el2=document.getElementById('blk-'+_drag.id);
     if(el2){el2.style.opacity='1';el2.style.zIndex='1';}
+    _removeDragGhost();
     const bid=_drag.id; _drag=null; openEditSlot(bid); return;
   }
   const el=document.getElementById('blk-'+_drag.id);
@@ -8303,6 +8553,7 @@ function onDragEnd(e){
       } else {
         block.time = _drag.origTime;
         block.duration = _drag.origDur;
+        _removeDragGhost();
         _drag=null; renderScheduleView();
         return;
       }
@@ -8315,6 +8566,7 @@ function onDragEnd(e){
       if(al) al.hours=+(schedule.filter(b=>(b.teams||[]).includes(tn)).reduce((s,b)=>s+b.duration,0)/60).toFixed(2);
     });
   }
+  _removeDragGhost();
   _drag=null; save(); renderScheduleView();
 }
 

@@ -7809,8 +7809,8 @@ const CSV_IMPORT_FIELDS = [
   { key:'replans', label:'Planner Replans (0/1)', aliases:['replans', 'plannerreplans'], required:false },
   { key:'instability', label:'Instability', aliases:['instability', 'unstableevents'], required:false },
   { key:'sensor', label:'Sensor Failure (0/1)', aliases:['sensor', 'sensorfailure'], required:false },
-  { key:'multicar', label:'Multi-Car Interaction', aliases:['multicar', 'multicarinteraction', 'multi_car_interaction'], required:false },
-  { key:'overtaking', label:'Overtaking Events', aliases:['overtaking', 'overtakingevents', 'overtake'], required:false },
+  { key:'multicar', label:'Multi-Car Interaction (Yes/No)', aliases:['multicar', 'multicarinteraction', 'multi_car_interaction'], required:false },
+  { key:'overtaking', label:'Overtaking Events (Yes/No)', aliases:['overtaking', 'overtakingevents', 'overtake'], required:false },
   { key:'manualOverride', label:'Manual Override (0/1)', aliases:['manualoverride', 'manual_override', 'manualoverride010'], required:false },
   { key:'notes', label:'Notes', aliases:['notes', 'comment', 'comments', 'remarks'], required:false },
 ];
@@ -7882,7 +7882,12 @@ function renderCsvImportModal() {
   statusEl.textContent = missingRequired.length
     ? `Missing required mapping: ${missingRequired.join(', ')}`
     : (!hasDateSource ? 'Map either Timestamp or Date before importing.' : `Ready to import ${rows.length} rows.`);
-  mappingEl.innerHTML = CSV_IMPORT_FIELDS.map(field => {
+  const priorityKeys = new Set(['multicar','overtaking']);
+  const orderedFields = [
+    ...CSV_IMPORT_FIELDS.filter(f => priorityKeys.has(f.key)),
+    ...CSV_IMPORT_FIELDS.filter(f => !priorityKeys.has(f.key)),
+  ];
+  mappingEl.innerHTML = orderedFields.map(field => {
     const current = mapping[field.key] || '';
     const opts = ['<option value="">Skip this field</option>']
       .concat(headers.map(h => `<option value="${h.replace(/"/g,'&quot;')}" ${current===h?'selected':''}>${h}</option>`))

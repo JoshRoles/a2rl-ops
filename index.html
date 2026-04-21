@@ -94,7 +94,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 
 /* PANEL */
 .panel{background:var(--card);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:15px;}
-.panel-head{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.panel-head{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;}
 .panel-title{font-family:'Roboto',sans-serif;font-size:13px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;}
 .panel-body{padding:14px 16px;}
 
@@ -535,7 +535,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
         <div class="panel">
           <div class="panel-head">
             <div class="panel-title">⬡ Live Risk Monitor</div>
-            <div style="display:flex;gap:8px;align-items:center;">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
               <span class="badge badge-blue" id="live-session-type">Single Car</span>
               <button class="btn sm" onclick="showView('session')">+ Log Session</button>
             </div>
@@ -1142,7 +1142,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
             <div style="display:flex;gap:8px;align-items:center;">
               <div class="weight-total">Total: <span id="weight-total-val">100</span>%</div>
               <button class="btn sm" onclick="resetWeights()">Reset Defaults</button>
-              <button class="btn sm primary" onclick="recalcAllSessionRiskScores()">Recalculate All Session Risks</button>
+              <button class="btn sm primary" id="btn-recalc-all-risks" onclick="recalcAllSessionRiskScores()">Recalculate All Session Risks</button>
             </div>
           </div>
           <div class="panel-body" id="weights-container"></div>
@@ -6748,6 +6748,8 @@ function applySettingsReadOnly() {
   const root = document.getElementById('view-settings');
   if (!root) return;
   const ro = !isAdmin();
+  const recalcBtn = document.getElementById('btn-recalc-all-risks');
+  if (recalcBtn) recalcBtn.style.display = isAdmin() ? 'inline-flex' : 'none';
   root.querySelectorAll('input, select, textarea, button').forEach(el => {
     // Keep tab navigation usable for viewers
     if (el.classList.contains('settings-tab')) return;

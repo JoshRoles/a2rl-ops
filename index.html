@@ -1142,6 +1142,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
             <div style="display:flex;gap:8px;align-items:center;">
               <div class="weight-total">Total: <span id="weight-total-val">100</span>%</div>
               <button class="btn sm" onclick="resetWeights()">Reset Defaults</button>
+              <button class="btn sm primary" onclick="recalcAllSessionRiskScores()">Recalculate All Session Risks</button>
             </div>
           </div>
           <div class="panel-body" id="weights-container"></div>
@@ -1964,6 +1965,10 @@ function loadWorkspaceData(opts = {}) {
     'duration','weather','startAttempts','stoppages','laptime','damage','replans','instability','sensor','multicar','overtaking','manualOverride'
   ]));
   if (!historyColumns.length) historyColumns = HISTORY_COLUMNS.map(c => c.key);
+  if (migrateLegacyPartialRiskScores()) {
+    rebuildLiveRisks();
+    save();
+  }
   if (!opts.skipRemote && !supabaseHydrating) {
     loadWorkspaceDataFromSupabase(currentWorkspace);
   }
@@ -3329,10 +3334,12 @@ function calcRiskPartial(s, present = {}) {
   });
 
   const confidence = fullMax > 0 ? Math.max(0, Math.min(1, availableMax / fullMax)) : 0;
-  const scaledScore = availableMax > 0 ? Math.max(0, Math.min(100, (availablePoints / availableMax) * 100)) : 0;
-  const scale = availableMax > 0 ? (100 / availableMax) : 0;
+  // Score partial rows against the full model baseline (not against only the
+  // provided fields). This prevents inflated scores when a CSV maps only a few
+  // columns and keeps ranking consistent.
+  const scaledScore = fullMax > 0 ? Math.max(0, Math.min(100, (availablePoints / fullMax) * 100)) : 0;
   const breakdown = {};
-  metricDefs.forEach(m => { breakdown[m.key] = has(m.key) ? ((m.points || 0) * scale) : 0; });
+  metricDefs.forEach(m => { breakdown[m.key] = has(m.key) ? (m.points || 0) : 0; });
 
   return {
     score: Math.round(scaledScore * 10) / 10,
@@ -3340,6 +3347,81 @@ function calcRiskPartial(s, present = {}) {
     confidence: Math.round(confidence * 1000) / 1000,
     partialData: confidence < 0.999,
   };
+}
+function getRiskPresentMapFromSession(s) {
+  return {
+    crash: String(s?.crashed || '').trim() !== '',
+    estops: s?.estops !== undefined && s?.estops !== null && String(s.estops) !== '',
+    instability: s?.instability !== undefined && s?.instability !== null && String(s.instability) !== '',
+    stoppages: s?.stoppages !== undefined && s?.stoppages !== null && String(s.stoppages) !== '',
+    startAttempts: s?.startAttempts !== undefined && s?.startAttempts !== null && String(s.startAttempts) !== '',
+    damage: s?.damage !== undefined && s?.damage !== null && String(s.damage) !== '',
+    sensor: s?.sensor !== undefined && s?.sensor !== null && String(s.sensor) !== '',
+    replans: s?.replans !== undefined && s?.replans !== null && String(s.replans) !== '',
+    laptime: s?.laptime !== undefined && s?.laptime !== null && String(s.laptime) !== '',
+    multicar: String(s?.multicar || '').trim() !== '',
+    overtaking: String(s?.overtaking || '').trim() !== '',
+    ttc: s?.ttc !== undefined && s?.ttc !== null && String(s.ttc) !== '',
+    manualOverride: s?.manualOverride !== undefined && s?.manualOverride !== null && String(s.manualOverride) !== '',
+  };
+}
+function recalcSessionRiskRecord(s) {
+  if (!s || s.stub) return { ...s };
+  const present = getRiskPresentMapFromSession(s);
+  const usePartial = !!s.partialData || (Number(s.riskConfidence || 1) < 0.999);
+  const result = usePartial ? calcRiskPartial(s, present) : { ...calcRisk(s), confidence: 1, partialData: false };
+  return {
+    ...s,
+    riskScore: Number(result.score || 0),
+    riskBreakdown: result.breakdown || {},
+    riskConfidence: Number(result.confidence || 1),
+    partialData: !!result.partialData,
+  };
+}
+function migrateLegacyPartialRiskScores() {
+  if (!Array.isArray(sessions) || !sessions.length) return false;
+  let changed = false;
+  sessions = sessions.map(s => {
+    if (!s || !s.partialData) return s;
+    const result = calcRiskPartial(s, getRiskPresentMapFromSession(s));
+    const nextScore = Number(result.score || 0);
+    const currScore = Number(s.riskScore || 0);
+    if (Math.abs(nextScore - currScore) < 0.05) return s;
+    changed = true;
+    return {
+      ...s,
+      riskScore: nextScore,
+      riskBreakdown: result.breakdown,
+      riskConfidence: result.confidence,
+      partialData: !!result.partialData,
+    };
+  });
+  return changed;
+}
+function recalcAllSessionRiskScores() {
+  if (!Array.isArray(sessions) || !sessions.length) {
+    alert('No sessions found to recalculate.');
+    return;
+  }
+  if (!confirm('Recalculate risk scores for all sessions using current weights and thresholds?')) return;
+  let changed = 0;
+  sessions = sessions.map(s => {
+    const next = recalcSessionRiskRecord(s);
+    const prevScore = Number(s?.riskScore || 0);
+    const nextScore = Number(next?.riskScore || 0);
+    if (Math.abs(nextScore - prevScore) > 0.05) changed++;
+    return next;
+  });
+  rebuildLiveRisks();
+  syncTrackUsedFromSessions();
+  save();
+  renderHistory();
+  renderLiveTable();
+  renderTeamView();
+  renderTrends();
+  renderInsurance();
+  renderSettings();
+  alert(`Recalculated ${sessions.length} sessions. Updated scores in ${changed} rows.`);
 }
 
 function riskColor(s) {
@@ -8674,7 +8756,7 @@ function applyRoleGuards() {
     ],
     admin: [
       'openAddTeamModal','deleteTeam',
-      'saveEventConfig','saveCategoryMultipliers','resetWeights','saveThresholds','importData','clearAllData',
+      'saveEventConfig','saveCategoryMultipliers','resetWeights','saveThresholds','recalcAllSessionRiskScores','importData','clearAllData',
       'addTrackOption','removeTrackOption'
     ]
   };

@@ -1248,7 +1248,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
           <table class="data-table">
             <thead><tr>
               <th>Team</th><th>Total Sessions</th><th>Crash Frequency</th><th>Avg Loss Severity ($)</th>
-              <th>Max Single Loss ($)</th><th>Cost/Lap ($)</th><th>Trend</th><th>Near Miss Rate</th>
+              <th>Max Single Loss ($)</th><th>Cost/Km ($)</th><th>Trend</th><th>Near Miss Rate</th>
               <th title="Relative index only. Multiply by insurer base rate to calculate actual premium. Not a quoted price.">Annual Premium Index <span style="color:var(--muted);font-size:10px;">ⓘ</span></th>
               <th>Liability Status</th>
             </tr></thead>
@@ -7528,12 +7528,12 @@ function renderInsurance() {
     if (avgLoss < 100000) return 1.55;
     return 1.80;
   };
-  const factorExposure = (costPerLap) => {
-    if (costPerLap <= 0) return 0.85;
-    if (costPerLap < 50) return 0.95;
-    if (costPerLap < 150) return 1.00;
-    if (costPerLap < 300) return 1.15;
-    if (costPerLap < 500) return 1.35;
+  const factorExposure = (costPerKm) => {
+    if (costPerKm <= 0) return 0.85;
+    if (costPerKm < 50) return 0.95;
+    if (costPerKm < 150) return 1.00;
+    if (costPerKm < 300) return 1.15;
+    if (costPerKm < 500) return 1.35;
     return 1.60;
   };
   const factorTrend = (delta, sessionsCount) => {
@@ -7601,7 +7601,7 @@ function renderInsurance() {
     const crashFreq = ts.length > 0 ? (crashes / ts.length) : 0;
     const avgLoss = crashes > 0 ? (totalDamage / crashes) : 0;
     const maxSingleLoss = ts.length ? Math.max(...ts.map(s => Math.max(0, Number(s.damage)||0))) : 0;
-    const costPerLap = totalLaps > 0 ? (totalDamage / totalLaps) : 0;
+    const costPerKm = totalKm > 0 ? (totalDamage / totalKm) : 0;
     const riskPerKm = totalKm > 0 ? (scores.reduce((a,b)=>a+b,0) / totalKm) : 0;
     const nearMissSessions = ts.filter(s => (Number(s.estops) || 0) > 0).length;
     const nearMissRate = ts.length > 0 ? (nearMissSessions / ts.length) : 0;
@@ -7615,7 +7615,7 @@ function renderInsurance() {
       ? Number((1.00
         * factorClaimFrequency(crashFreq)
         * factorLossSeverity(avgLoss)
-        * factorExposure(costPerLap)
+        * factorExposure(costPerKm)
         * trendMult
         * factorNearMiss(nearMissRate)
       ).toFixed(2))
@@ -7634,7 +7634,7 @@ function renderInsurance() {
       damage: totalDamage,
       laps: totalLaps,
       totalKm,
-      costPerLap,
+      costPerKm,
       riskPerKm,
       trendDelta,
       trend: trendView(trendDelta, ts.length),
@@ -7694,17 +7694,30 @@ function renderInsurance() {
     if (st.nearMissFrequencyFlag) teamFlags.push('<span class="badge badge-high">NEAR MISS FREQUENCY</span>');
     const trend = st.trend || { label:'Stable', arrow:'→', color:'var(--muted)' };
     const premium = `${Number(st.annualPremiumIndex || 1).toFixed(2)}x`;
+    const maxNorm = Math.max(1, Number(thresholds.maxDamage) || 100000);
+    const liabilityRatio = Math.max(0, Number(st.damage) || 0) / maxNorm;
+    const liabilityPct = Math.max(0, Math.min(100, liabilityRatio * 100));
+    const liabilityHue = Math.max(0, 120 - (Math.max(0, Math.min(1, liabilityRatio)) * 120));
+    const liabilityFill = `hsl(${liabilityHue} 85% 45%)`;
+    const liabilityDisplay = money(st.damage);
     return `<tr>
       <td><span class="team-dot" style="background:${t.color}"></span><b>${t.name}</b>${teamFlags.length ? `<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;">${teamFlags.join(' ')}</div>` : ''}</td>
       <td class="mono">${st.sessions}</td>
       <td class="mono">${pct(st.crashFreq)}</td>
       <td class="mono">${money(st.avgLoss)}</td>
       <td class="mono">${money(st.maxSingleLoss)}</td>
-      <td class="mono">${st.laps > 0 ? money(st.costPerLap) : '—'}</td>
+      <td class="mono">${st.totalKm > 0 ? money(st.costPerKm) : '—'}</td>
       <td><span style="color:${trend.color};font-weight:700;">${trend.arrow}</span> <span style="color:${trend.color};">${trend.label}</span></td>
       <td class="mono">${pct(st.nearMissRate)}</td>
       <td class="mono" style="color:${(st.annualPremiumIndex || 1) >= 1 ? C.red : C.green}">${premium}</td>
-      <td>${formatLiabilityBadges(st.liabilityBreach, false)}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px;min-width:220px;">
+          <div style="flex:1;height:8px;background:rgba(255,255,255,0.08);border:1px solid var(--border);border-radius:999px;overflow:hidden;">
+            <div style="height:100%;width:${liabilityPct}%;background:${liabilityFill};"></div>
+          </div>
+          <span class="mono" style="min-width:86px;color:${st.liabilityBreach ? C.red : 'var(--text)'}">${liabilityDisplay}</span>
+        </div>
+      </td>
     </tr>`;
   }).join('') || '<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:16px;">No session data</td></tr>';
 

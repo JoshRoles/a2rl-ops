@@ -1237,6 +1237,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
     <!-- ═══════════════════════════════════════════════ INSURANCE ══ -->
     <div class="view" id="view-insurance">
       <div id="ins-alert" class="alert-warn">⚑ Insurance Report · Season 3 · Generated dynamically from session logs</div>
+      <div id="ins-season-tabs" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;"></div>
       <div class="report-grid" id="ins-stats-grid"></div>
       <div class="panel">
         <div class="panel-head">
@@ -1246,11 +1247,25 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
         <div class="panel-body" style="padding:0">
           <table class="data-table">
             <thead><tr>
-              <th>Team</th><th>Sessions</th><th>Adj Avg Risk</th><th>Crash Count</th>
-              <th>E-Stops</th><th>Est. Damage ($)</th><th>Cost/Lap ($)</th><th>Liability Status</th><th>Risk Tier</th><th>Premium Index</th>
+              <th>Team</th><th>Total Sessions</th><th>Crash Frequency</th><th>Avg Loss Severity ($)</th>
+              <th>Max Single Loss ($)</th><th>Cost/Lap ($)</th><th>Trend</th><th>Near Miss Rate</th>
+              <th title="Relative index only. Multiply by insurer base rate to calculate actual premium. Not a quoted price.">Annual Premium Index <span style="color:var(--muted);font-size:10px;">ⓘ</span></th>
+              <th>Liability Status</th>
             </tr></thead>
             <tbody id="ins-tbody"></tbody>
           </table>
+        </div>
+      </div>
+      <div class="panel" style="margin-top:14px;">
+        <div class="panel-head"><div class="panel-title">Insurance Configuration · Year-on-Year Team Risk Trend</div></div>
+        <div class="panel-body">
+          <div class="chart-wrap-lg"><canvas id="chart-ins-yoy"></canvas></div>
+          <div style="margin-top:12px;overflow:auto;">
+            <table class="data-table">
+              <thead><tr id="ins-yoy-head-row"><th>Team</th></tr></thead>
+              <tbody id="ins-yoy-tbody"></tbody>
+            </table>
+          </div>
         </div>
       </div>
       <div class="grid-2">
@@ -1757,7 +1772,7 @@ function migrateLegacyWorkspaceData() {
   const legacyPairs = {
     sessions:'a2rl_sessions', teams:'a2rl_teams', weights:'a2rl_weights', schedule:'a2rl_schedule',
     trackalloc:'a2rl_trackalloc', garages:'a2rl_garages', thresh:'a2rl_thresh', event_cfg:'a2rl_event_cfg',
-    sched_cfg:'a2rl_sched_cfg', track_options:'a2rl_track_options', team_summary_metrics:'a2rl_team_summary_metrics',
+    sched_cfg:'a2rl_sched_cfg', track_options:'a2rl_track_options', track_distances:'a2rl_track_distances', team_summary_metrics:'a2rl_team_summary_metrics',
     history_columns:'a2rl_history_columns', sched_zoom:'a2rl_sched_zoom', capture_drafts:'a2rl_capture_drafts',
     team_summary_sort:'a2rl_team_summary_sort', cat_mult:'a2rl_cat_mult', events:'a2rl_events', active_view:'a2rl_active_view'
   };
@@ -1778,8 +1793,10 @@ let thresholds = {};
 let eventCfg = {};
 let schedCfg = {};
 let trackOptions = [];
+let trackDistances = {};
 let teamSummaryMetrics = [];
 let historyColumns = [];
+let insuranceSeasonFilter = 'all';
 
 
 // CSS color constants (avoids single-quote issues in template literals)
@@ -1947,6 +1964,7 @@ function loadWorkspaceData(opts = {}) {
   eventCfg = readScopedJson('event_cfg', {season:3,eventNum:1,org:'A2RL',defaultDur:30}, 'a2rl_event_cfg');
   schedCfg = readScopedJson('sched_cfg', {eventId:null,eventName:'A2RL Season 3 — Event 1',track:'Yas Marina Circuit',open:'08:00',close:'18:00',days:2,buffer:15,eventStart:null}, 'a2rl_sched_cfg');
   trackOptions = readScopedJson('track_options', [...DEFAULT_TRACKS], 'a2rl_track_options');
+  trackDistances = readScopedJson('track_distances', {}, 'a2rl_track_distances');
   teamSummaryMetrics = readScopedJson('team_summary_metrics', ['sessions','cumRisk','avg','best','worst','costPerLap','damageEff','estops','crashes','trackHrs','liability','tier'], 'a2rl_team_summary_metrics');
   historyColumns = readScopedJson('history_columns', [...DEFAULT_HISTORY_COLUMNS], 'a2rl_history_columns');
   schedZoom = Math.max(0.6, Math.min(3, parseFloat(readScopedString('sched_zoom', '1', 'a2rl_sched_zoom')) || 1));
@@ -1961,6 +1979,12 @@ function loadWorkspaceData(opts = {}) {
     return saved ? { ...def, ...saved } : { ...def };
   });
   if (!Array.isArray(trackOptions) || !trackOptions.length) trackOptions = [...DEFAULT_TRACKS];
+  if (!trackDistances || typeof trackDistances !== 'object') trackDistances = {};
+  trackOptions.forEach(t => {
+    const key = String(t || '').trim();
+    if (!key) return;
+    if (trackDistances[key] === undefined || trackDistances[key] === null || trackDistances[key] === '') trackDistances[key] = 0;
+  });
   teamSummaryMetrics = TEAM_SUMMARY_METRICS.map(m => m.key).filter(k => (teamSummaryMetrics || []).includes(k));
   if (!teamSummaryMetrics.length) teamSummaryMetrics = TEAM_SUMMARY_METRICS.map(m => m.key);
   historyColumns = Array.from(new Set([
@@ -3039,6 +3063,7 @@ function buildWorkspaceStatePayload() {
     sched_cfg: schedCfg,
     capture_drafts: captureDrafts,
     track_options: trackOptions,
+    track_distances: trackDistances,
     team_summary_metrics: teamSummaryMetrics,
     history_columns: historyColumns,
     team_summary_sort: teamSummarySort,
@@ -3065,6 +3090,7 @@ function persistWorkspaceStateToLocal(state) {
   put('sched_cfg', state.sched_cfg || {});
   put('capture_drafts', state.capture_drafts || {});
   put('track_options', state.track_options || []);
+  put('track_distances', state.track_distances || {});
   put('team_summary_metrics', state.team_summary_metrics || []);
   put('history_columns', state.history_columns || []);
   put('team_summary_sort', state.team_summary_sort || {});
@@ -3215,6 +3241,7 @@ function save() {
   localStorage.setItem(wk('sched_cfg'), JSON.stringify(schedCfg));
   localStorage.setItem(wk('capture_drafts'), JSON.stringify(captureDrafts));
   localStorage.setItem(wk('track_options'), JSON.stringify(trackOptions));
+  localStorage.setItem(wk('track_distances'), JSON.stringify(trackDistances || {}));
   localStorage.setItem(wk('team_summary_metrics'), JSON.stringify(teamSummaryMetrics));
   localStorage.setItem(wk('history_columns'), JSON.stringify(historyColumns));
   localStorage.setItem(wk('team_summary_sort'), JSON.stringify(teamSummarySort));
@@ -3228,6 +3255,34 @@ function save() {
 // ═══════════════════════════════════════════════════════════════════════
 function calcRisk(s) {
   return calcRiskPartial(s, getRiskPresentMapFromSession(s));
+}
+function getRecentCrashLoadingBoost(session) {
+  if (!session || !Array.isArray(sessions) || !sessions.length) return 0;
+  const team = String(session.team || '').trim();
+  if (!team) return 0;
+  const eventId = String(session.eventId || '').trim();
+  const eventName = String(session.eventName || '').trim();
+  const ts = new Date(session.trackTimestamp || session.timestamp);
+  if (isNaN(ts)) return 0;
+  const sameEvent = (x) => {
+    if (!x) return false;
+    if (eventId) return String(x.eventId || '').trim() === eventId;
+    if (eventName) return String(x.eventName || '').trim() === eventName;
+    return false;
+  };
+  const prior = sessions
+    .filter(x => {
+      if (!x || x.stub) return false;
+      if (String(x.team || '').trim() !== team) return false;
+      if (!sameEvent(x)) return false;
+      if (String(x.id || '') === String(session.id || '')) return false;
+      const d = new Date(x.trackTimestamp || x.timestamp);
+      if (isNaN(d)) return false;
+      return d < ts;
+    })
+    .sort((a, b) => new Date(b.trackTimestamp || b.timestamp) - new Date(a.trackTimestamp || a.timestamp))
+    .slice(0, 3);
+  return prior.some(x => String(x.crashed || '').trim().toLowerCase() === 'yes') ? 8 : 0;
 }
 function calcRiskPartial(s, present = {}) {
   const W = {};
@@ -3411,7 +3466,10 @@ function calcRiskPartial(s, present = {}) {
   breakdown.speedCredit = -speedCredit;
   breakdown.multiCarCleanBonus = -multiCarCleanBonus;
 
-  const preFloorScore = points - speedCredit - multiCarCleanBonus;
+  const recentCrashLoading = getRecentCrashLoadingBoost(s);
+  breakdown.recentCrashLoading = recentCrashLoading;
+  if (recentCrashLoading > 0) flags.push('RECENT_CRASH_LOADING_PLUS_8');
+  const preFloorScore = points - speedCredit - multiCarCleanBonus + recentCrashLoading;
   let crashFloor = 0;
   if (crashed === true) {
     if (has('damage') && Number.isFinite(Number(s.damage))) {
@@ -3430,11 +3488,34 @@ function calcRiskPartial(s, present = {}) {
     }
   }
   let adjusted = preFloorScore;
-  if (crashed === true) adjusted = Math.max(crashFloor, adjusted);
+  const estopFloor = estopsPresent
+    ? (estops >= 3 ? 50 : (estops === 2 ? 35 : (estops === 1 ? 20 : 0)))
+    : 0;
+  const instabilityFloor = instPresent
+    ? (instability >= 10 ? 50 : (instability >= 8 ? 38 : (instability >= 6 ? 25 : (instability >= 4 ? 15 : 0))))
+    : 0;
+  const observerFloor = has('manualOverride')
+    ? (() => {
+        const obs = Math.max(0, Math.min(10, Number(s.manualOverride) || 0));
+        if (obs === 10) return 60;
+        if (obs >= 8) return 45;
+        if (obs >= 6) return 28;
+        if (obs >= 4) return 15;
+        return 0;
+      })()
+    : 0;
+  const floorMax = Math.max(estopFloor, instabilityFloor, observerFloor, crashFloor);
+  if (floorMax > 0) adjusted = Math.max(floorMax, adjusted);
   const crashFloorAdjustment = crashed === true ? Math.max(0, crashFloor - preFloorScore) : 0;
   breakdown.crashFloorAdjustment = crashFloorAdjustment;
   const crashFloorEnforced = crashFloorAdjustment > 0;
   if (crashFloorEnforced) flags.push('CRASH_FLOOR_ENFORCED');
+  breakdown.eStopFloorAdjustment = Math.max(0, estopFloor - preFloorScore);
+  breakdown.instabilityFloorAdjustment = Math.max(0, instabilityFloor - preFloorScore);
+  breakdown.observerFloorAdjustment = Math.max(0, observerFloor - preFloorScore);
+  if (estopFloor > 0 && floorMax === estopFloor) flags.push('ESTOP_FLOOR_ENFORCED');
+  if (instabilityFloor > 0 && floorMax === instabilityFloor) flags.push('INSTABILITY_FLOOR_ENFORCED');
+  if (observerFloor > 0 && floorMax === observerFloor) flags.push('OBSERVER_FLOOR_ENFORCED');
 
   // Baseline for "activity-only" sessions (laps/speed present, no incident data).
   const onlyPerfData = (lapsPresent || speedPresent) && !hasIncidentSignal && crashed !== true;
@@ -3570,6 +3651,48 @@ function calcDamageEfficiencyScore(costPerLap, fieldAvgCostPerLap) {
   const ratio = costPerLap / fieldAvgCostPerLap;
   if (ratio >= 1) return Math.min(10, 5 + ((ratio - 1) / 2) * 5); // 1x => 5, 3x+ => 10
   return Math.max(0, ratio * 5); // below field avg scales below neutral
+}
+function getTrackDistanceKm(trackName) {
+  const key = String(trackName || '').trim();
+  if (!key) return 0;
+  const raw = Number((trackDistances || {})[key] || 0);
+  return Number.isFinite(raw) ? Math.max(0, raw) : 0;
+}
+function getSessionSeasonNumber(s) {
+  if (!s) return null;
+  const direct = Number(s.season);
+  if (Number.isFinite(direct) && direct > 0) return direct;
+  if (Array.isArray(events) && s.eventId) {
+    const ev = events.find(e => String(e.id || '') === String(s.eventId || ''));
+    const sev = Number(ev?.season);
+    if (Number.isFinite(sev) && sev > 0) return sev;
+  }
+  const name = String(s.eventName || '').trim();
+  const m = name.match(/season\s*(\d+)/i);
+  if (m) return parseInt(m[1], 10) || null;
+  const dt = new Date(s.trackTimestamp || s.timestamp);
+  if (!isNaN(dt)) {
+    const yr = dt.getFullYear();
+    if (yr >= 2024) return (yr - 2023); // 2025=>2, 2026=>3
+  }
+  return null;
+}
+function getInsuranceSeasonsFromData() {
+  const set = new Set();
+  (events || []).forEach(ev => {
+    const n = Number(ev?.season);
+    if (Number.isFinite(n) && n > 0) set.add(n);
+  });
+  (sessions || []).forEach(s => {
+    const n = getSessionSeasonNumber(s);
+    if (Number.isFinite(n) && n > 0) set.add(n);
+  });
+  if (!set.size) set.add(Number(eventCfg?.season || 3));
+  return Array.from(set).filter(n => Number.isFinite(n) && n > 0).sort((a,b) => a - b);
+}
+function setInsuranceSeason(seasonKey) {
+  insuranceSeasonFilter = String(seasonKey || 'all');
+  renderInsurance();
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -6994,20 +7117,47 @@ function renderTrackOptionsSelect(selectedTrack='') {
   sel.innerHTML = trackOptions.map(t => `<option value="${t}">${t}</option>`).join('');
   if (selectedTrack && trackOptions.includes(selectedTrack)) sel.value = selectedTrack;
   else sel.value = trackOptions[0] || '';
+  syncEventTrackDistanceInput();
 }
 function renderTrackLibrary() {
   const list = document.getElementById('track-library-list');
   if (!list) return;
-  list.innerHTML = (trackOptions || []).map(t => `<span class="badge badge-blue" style="display:inline-flex;align-items:center;gap:6px;padding:5px 8px;">
+  list.innerHTML = (trackOptions || []).map(t => {
+    const safe = String(t).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const km = getTrackDistanceKm(t);
+    return `<span class="badge badge-blue" style="display:inline-flex;align-items:center;gap:6px;padding:5px 8px;">
       ${t}
-      <button class="btn sm danger" style="padding:0 4px;line-height:1;" onclick="removeTrackOption('${String(t).replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">×</button>
-    </span>`).join('');
+      <input type="number" min="0" step="0.01" value="${km || 0}" style="width:86px;padding:2px 6px;background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:4px;" title="Lap distance (km)" onchange="updateTrackDistanceFromLibrary('${safe}', this.value)">
+      <span style="font-size:10px;color:var(--muted)">km/lap</span>
+      <button class="btn sm danger" style="padding:0 4px;line-height:1;" onclick="removeTrackOption('${safe}')">×</button>
+    </span>`;
+  }).join('');
+}
+function updateTrackDistanceFromLibrary(trackName, value) {
+  if (!trackName) return;
+  const km = Math.max(0, parseFloat(value) || 0);
+  trackDistances = { ...(trackDistances || {}), [trackName]: km };
+  save();
+}
+function syncEventTrackDistanceInput() {
+  const track = document.getElementById('ev-track')?.value || '';
+  const input = document.getElementById('ev-track-distance');
+  if (!input) return;
+  input.value = getTrackDistanceKm(track) || 0;
+}
+function saveEventTrackDistanceInput() {
+  const track = document.getElementById('ev-track')?.value || '';
+  if (!track) return;
+  const km = Math.max(0, parseFloat(document.getElementById('ev-track-distance')?.value) || 0);
+  trackDistances = { ...(trackDistances || {}), [track]: km };
+  save();
 }
 function addTrackOption() {
   const el = document.getElementById('new-track-name');
   const v = String(el?.value || '').trim();
   if (!v) return;
   if (!(trackOptions || []).includes(v)) trackOptions.push(v);
+  if (trackDistances[v] === undefined) trackDistances[v] = 0;
   if (el) el.value = '';
   save();
   renderTrackLibrary();
@@ -7019,6 +7169,9 @@ function removeTrackOption(trackName) {
     return;
   }
   trackOptions = (trackOptions || []).filter(t => t !== trackName);
+  if (trackDistances && Object.prototype.hasOwnProperty.call(trackDistances, trackName)) {
+    delete trackDistances[trackName];
+  }
   // Keep existing events valid if deleted track was used.
   events.forEach(ev => {
     if (ev.track === trackName) ev.track = trackOptions[0] || ev.track;
@@ -7346,84 +7499,276 @@ function saveEventConfig() {
 // INSURANCE
 // ═══════════════════════════════════════════════════════════════════════
 function renderInsurance() {
+  const recencyWeightedAverage = (rows) => {
+    if (!rows.length) return 0;
+    let wSum = 0;
+    let vSum = 0;
+    rows.forEach((r, i) => {
+      const w = i + 1;
+      wSum += w;
+      vSum += (toRiskNumber(r) * w);
+    });
+    return wSum > 0 ? (vSum / wSum) : 0;
+  };
+  const pct = (v) => `${(Math.max(0, v || 0) * 100).toFixed(1)}%`;
+  const money = (v) => `$${Number(v || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  const factorClaimFrequency = (rate) => {
+    if (rate <= 0) return 0.75;
+    if (rate < 0.05) return 0.90;
+    if (rate < 0.10) return 1.00;
+    if (rate < 0.15) return 1.25;
+    if (rate < 0.25) return 1.50;
+    return 1.85;
+  };
+  const factorLossSeverity = (avgLoss) => {
+    if (avgLoss <= 0) return 0.80;
+    if (avgLoss < 10000) return 0.95;
+    if (avgLoss < 30000) return 1.10;
+    if (avgLoss < 60000) return 1.30;
+    if (avgLoss < 100000) return 1.55;
+    return 1.80;
+  };
+  const factorExposure = (costPerLap) => {
+    if (costPerLap <= 0) return 0.85;
+    if (costPerLap < 50) return 0.95;
+    if (costPerLap < 150) return 1.00;
+    if (costPerLap < 300) return 1.15;
+    if (costPerLap < 500) return 1.35;
+    return 1.60;
+  };
+  const factorTrend = (delta, sessionsCount) => {
+    if (sessionsCount < 10) return 1.00;
+    if (delta <= -10) return 0.88;
+    if (delta <= -5) return 0.94;
+    if (delta < 5) return 1.00;
+    if (delta <= 10) return 1.12;
+    return 1.25;
+  };
+  const factorNearMiss = (rate) => {
+    if (rate <= 0) return 0.95;
+    if (rate < 0.10) return 1.00;
+    if (rate < 0.20) return 1.10;
+    return 1.22;
+  };
+  const trendView = (delta, sessionsCount) => {
+    if (sessionsCount < 10) return { label: 'Stable', arrow: '→', color: 'var(--muted)' };
+    if (delta <= -5) return { label: 'Improving', arrow: '↓', color: 'var(--green)' };
+    if (delta >= 5) return { label: 'Worsening', arrow: '↑', color: 'var(--red)' };
+    return { label: 'Stable', arrow: '→', color: 'var(--muted)' };
+  };
+  const sessionDistanceKm = (s) => {
+    const laps = Math.max(0, Number(s?.laps) || 0);
+    if (!laps) return 0;
+    let trackName = String(s?.track || '').trim();
+    if (!trackName && s?.eventId && Array.isArray(events)) {
+      const ev = events.find(e => String(e.id || '') === String(s.eventId || ''));
+      trackName = String(ev?.track || '').trim();
+    }
+    const kmPerLap = getTrackDistanceKm(trackName);
+    return kmPerLap > 0 ? (laps * kmPerLap) : 0;
+  };
+
+  const seasons = getInsuranceSeasonsFromData();
+  if (insuranceSeasonFilter !== 'all' && !seasons.some(s => String(s) === String(insuranceSeasonFilter))) {
+    insuranceSeasonFilter = seasons.length ? String(seasons[0]) : 'all';
+  }
+  const seasonTabs = document.getElementById('ins-season-tabs');
+  if (seasonTabs) {
+    seasonTabs.innerHTML = [
+      `<button class="btn sm${insuranceSeasonFilter === 'all' ? ' primary' : ''}" onclick="setInsuranceSeason('all')">All Seasons</button>`,
+      ...seasons.map(season => `<button class="btn sm${String(insuranceSeasonFilter) === String(season) ? ' primary' : ''}" onclick="setInsuranceSeason('${season}')">Season ${season}</button>`)
+    ].join('');
+  }
+
   const activeTeams = teams.filter(t => t.active);
+  const allScoredSessions = sessions.filter(s => !s.stub && !s.riskInsufficientData);
+  const filteredSessions = allScoredSessions.filter(s => {
+    if (insuranceSeasonFilter === 'all') return true;
+    return String(getSessionSeasonNumber(s) || '') === String(insuranceSeasonFilter);
+  });
+
   const teamStats = {};
   activeTeams.forEach(t => {
-    const ts = sessions.filter(s => s.team === t.name && !s.stub);
-    const scored = ts.filter(hasUsableRiskScore);
-    const scores = scored.map(toRiskNumber);
+    const ts = filteredSessions
+      .filter(s => s.team === t.name)
+      .sort((a,b)=>getSessionDateObj(a)-getSessionDateObj(b));
+    const scores = ts.map(toRiskNumber);
     const totalLaps = ts.reduce((a,s)=>a+Math.max(0, Number(s.laps)||0),0);
     const totalDamage = ts.reduce((a,s)=>a+Math.max(0, Number(s.damage)||0),0);
+    const totalKm = ts.reduce((a,s)=>a+sessionDistanceKm(s),0);
+    const crashRows = ts.filter(s => String(s.crashed || '').trim().toLowerCase() === 'yes');
+    const crashes = crashRows.length;
+    const crashFreq = ts.length > 0 ? (crashes / ts.length) : 0;
+    const avgLoss = crashes > 0 ? (totalDamage / crashes) : 0;
+    const maxSingleLoss = ts.length ? Math.max(...ts.map(s => Math.max(0, Number(s.damage)||0))) : 0;
+    const costPerLap = totalLaps > 0 ? (totalDamage / totalLaps) : 0;
+    const riskPerKm = totalKm > 0 ? (scores.reduce((a,b)=>a+b,0) / totalKm) : 0;
+    const nearMissSessions = ts.filter(s => (Number(s.estops) || 0) > 0).length;
+    const nearMissRate = ts.length > 0 ? (nearMissSessions / ts.length) : 0;
+    const early10 = ts.slice(0, 10);
+    const recent10 = ts.slice(-10);
+    const earlyAvg = recencyWeightedAverage(early10);
+    const recentAvg = recencyWeightedAverage(recent10);
+    const trendDelta = recentAvg - earlyAvg;
+    const trendMult = factorTrend(trendDelta, ts.length);
+    const annualPremiumIndex = ts.length > 0
+      ? Number((1.00
+        * factorClaimFrequency(crashFreq)
+        * factorLossSeverity(avgLoss)
+        * factorExposure(costPerLap)
+        * trendMult
+        * factorNearMiss(nearMissRate)
+      ).toFixed(2))
+      : null;
+    const instabilityFloorSessions = ts.filter(s => (Number(s.instability) || 0) >= 4).length;
+    const instabilityFloorRate = ts.length > 0 ? (instabilityFloorSessions / ts.length) : 0;
     teamStats[t.name] = {
       sessions: ts.length,
-      avg: scores.length ? scores.reduce((a,b)=>a+b,0)/scores.length : 0,
-      crashes: ts.filter(s=>s.crashed==='Yes').length,
-      estops: ts.reduce((a,s)=>a+(s.estops||0),0),
+      avgRisk: scores.length ? scores.reduce((a,b)=>a+b,0)/scores.length : 0,
+      crashes,
+      crashFreq,
+      avgLoss,
+      maxSingleLoss,
+      nearMissRate,
+      nearMissSessions,
       damage: totalDamage,
       laps: totalLaps,
-      costPerLap: totalLaps > 0 ? (totalDamage / totalLaps) : 0,
+      totalKm,
+      costPerLap,
+      riskPerKm,
+      trendDelta,
+      trend: trendView(trendDelta, ts.length),
+      annualPremiumIndex,
+      liabilityBreach: totalDamage > (thresholds.maxDamage || 100000),
+      behavioralRiskFlag: instabilityFloorRate > 0.20,
+      nearMissFrequencyFlag: nearMissRate > 0.15,
     };
   });
 
-  const fieldCostRows = activeTeams
-    .map(t => teamStats[t.name])
-    .filter(st => st.sessions > 0 && st.damage > 0 && st.laps > 0);
-  const fieldAvgCostPerLap = fieldCostRows.length
-    ? (fieldCostRows.reduce((a, st) => a + st.costPerLap, 0) / fieldCostRows.length)
-    : 0;
-  activeTeams.forEach(t => {
-    const st = teamStats[t.name];
-    st.damageEff = calcDamageEfficiencyScore(st.costPerLap, fieldAvgCostPerLap);
-    st.adjustedAvg = (st.avg * 0.7) + ((st.damageEff * 10) * 0.3);
-    st.liabilityBreach = st.damage > (thresholds.maxDamage || 100000);
-    st.highCostLap = fieldAvgCostPerLap > 0 && st.costPerLap > (fieldAvgCostPerLap * 2);
-  });
-
-  const allScores = sessions.filter(hasUsableRiskScore).map(toRiskNumber);
+  const allScores = filteredSessions.map(toRiskNumber);
   const fleetAvg = allScores.length ? allScores.reduce((a,b)=>a+b,0)/allScores.length : 0;
-  const totalTTC = sessions.reduce((a,s)=>a+(s.ttc||0),0);
-  const totalCrashes = sessions.filter(s=>s.crashed==='Yes').length;
-  const totalDamage = sessions.reduce((a,s)=>a+(s.damage||0),0);
+  const totalTTC = filteredSessions.reduce((a,s)=>a+(s.ttc||0),0);
+  const totalCrashes = filteredSessions.filter(s=>String(s.crashed||'').toLowerCase()==='yes').length;
+  const totalDamage = filteredSessions.reduce((a,s)=>a+(s.damage||0),0);
+  const filterLabel = insuranceSeasonFilter === 'all' ? 'all seasons' : `Season ${insuranceSeasonFilter}`;
 
   const grid = document.getElementById('ins-stats-grid');
   if (grid) grid.innerHTML = `
-    <div class="report-card"><div class="report-card-label">Fleet Avg Risk</div><div class="report-card-val" style="color:${riskColor(fleetAvg)}">${fleetAvg.toFixed(1)}</div><div class="report-card-sub">across ${sessions.length} sessions</div></div>
-    <div class="report-card"><div class="report-card-label">Total Sessions</div><div class="report-card-val" style="color:var(--accent)">${sessions.length}</div><div class="report-card-sub">all event types</div></div>
+    <div class="report-card"><div class="report-card-label">Fleet Avg Risk</div><div class="report-card-val" style="color:${riskColor(fleetAvg)}">${fleetAvg.toFixed(1)}</div><div class="report-card-sub">${filterLabel} · ${filteredSessions.length} scored sessions</div></div>
+    <div class="report-card"><div class="report-card-label">Total Sessions</div><div class="report-card-val" style="color:var(--accent)">${filteredSessions.length}</div><div class="report-card-sub">insufficient-data rows excluded</div></div>
     <div class="report-card"><div class="report-card-label">Crash Events</div><div class="report-card-val" style="color:var(--red)">${totalCrashes}</div><div class="report-card-sub">Est. $${totalDamage.toLocaleString()} damage</div></div>
     <div class="report-card"><div class="report-card-label">TTC Events</div><div class="report-card-val" style="color:var(--amber)">${totalTTC}</div><div class="report-card-sub">near-miss (ROS pending)</div></div>
-    <div class="report-card"><div class="report-card-label">High Risk Sessions</div><div class="report-card-val" style="color:var(--red)">${sessions.filter(s=>(s.riskScore||0)>=thresholds.high).length}</div><div class="report-card-sub">score ≥ ${thresholds.high}</div></div>
+    <div class="report-card"><div class="report-card-label">High Risk Sessions</div><div class="report-card-val" style="color:var(--red)">${filteredSessions.filter(s=>(s.riskScore||0)>=thresholds.high).length}</div><div class="report-card-sub">score ≥ ${thresholds.high}</div></div>
     <div class="report-card"><div class="report-card-label">Risk Tier Split</div>
       <div class="report-card-val" style="font-size:14px;">
-        L:${sessions.length?Math.round(sessions.filter(s=>(s.riskScore||0)<thresholds.low).length/sessions.length*100):0}%
-        M:${sessions.length?Math.round(sessions.filter(s=>(s.riskScore||0)>=thresholds.low&&(s.riskScore||0)<thresholds.high).length/sessions.length*100):0}%
-        H:${sessions.length?Math.round(sessions.filter(s=>(s.riskScore||0)>=thresholds.high).length/sessions.length*100):0}%
+        L:${filteredSessions.length?Math.round(filteredSessions.filter(s=>(s.riskScore||0)<thresholds.low).length/filteredSessions.length*100):0}%
+        M:${filteredSessions.length?Math.round(filteredSessions.filter(s=>(s.riskScore||0)>=thresholds.low&&(s.riskScore||0)<thresholds.high).length/filteredSessions.length*100):0}%
+        H:${filteredSessions.length?Math.round(filteredSessions.filter(s=>(s.riskScore||0)>=thresholds.high).length/filteredSessions.length*100):0}%
       </div>
       <div class="risk-tier-bar" style="margin-top:6px;">
-        <div class="tier-seg" style="flex:${sessions.filter(s=>(s.riskScore||0)<thresholds.low).length+0.1};background:var(--green)"></div>
-        <div class="tier-seg" style="flex:${sessions.filter(s=>(s.riskScore||0)>=thresholds.low&&(s.riskScore||0)<thresholds.high).length+0.1};background:var(--amber)"></div>
-        <div class="tier-seg" style="flex:${sessions.filter(s=>(s.riskScore||0)>=thresholds.high).length+0.1};background:var(--red)"></div>
+        <div class="tier-seg" style="flex:${filteredSessions.filter(s=>(s.riskScore||0)<thresholds.low).length+0.1};background:var(--green)"></div>
+        <div class="tier-seg" style="flex:${filteredSessions.filter(s=>(s.riskScore||0)>=thresholds.low&&(s.riskScore||0)<thresholds.high).length+0.1};background:var(--amber)"></div>
+        <div class="tier-seg" style="flex:${filteredSessions.filter(s=>(s.riskScore||0)>=thresholds.high).length+0.1};background:var(--red)"></div>
       </div>
     </div>`;
 
-  document.getElementById('ins-tbody').innerHTML = activeTeams.map(t => {
+  const body = document.getElementById('ins-tbody');
+  if (body) body.innerHTML = activeTeams.map(t => {
     const st = teamStats[t.name];
-    const tier = riskTier(st.adjustedAvg);
-    const premium = st.adjustedAvg > 0
-      ? (0.8 + (st.adjustedAvg/100 * 1.1) + (st.damageEff/10 * 0.6)).toFixed(2)
-      : '1.00';
+    if (!st || st.sessions === 0) {
+      return `<tr>
+        <td><span class="team-dot" style="background:${t.color}"></span><b>${t.name}</b></td>
+        <td class="mono">0</td>
+        <td class="mono">—</td>
+        <td class="mono">—</td>
+        <td class="mono">—</td>
+        <td class="mono">—</td>
+        <td style="color:var(--muted)">—</td>
+        <td class="mono">—</td>
+        <td class="mono">—</td>
+        <td>${formatLiabilityBadges(false, false)}</td>
+      </tr>`;
+    }
+    const teamFlags = [];
+    if (st.behavioralRiskFlag) teamFlags.push('<span class="badge badge-high">BEHAVIOURAL RISK</span>');
+    if (st.nearMissFrequencyFlag) teamFlags.push('<span class="badge badge-high">NEAR MISS FREQUENCY</span>');
+    const trend = st.trend || { label:'Stable', arrow:'→', color:'var(--muted)' };
+    const premium = `${Number(st.annualPremiumIndex || 1).toFixed(2)}x`;
     return `<tr>
-      <td><span class="team-dot" style="background:${t.color}"></span><b>${t.name}</b></td>
+      <td><span class="team-dot" style="background:${t.color}"></span><b>${t.name}</b>${teamFlags.length ? `<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;">${teamFlags.join(' ')}</div>` : ''}</td>
       <td class="mono">${st.sessions}</td>
-      <td class="mono" style="color:${riskColor(st.adjustedAvg)}">${st.adjustedAvg.toFixed(1)}</td>
-      <td class="mono" style="color:${st.crashes>0?C.red:C.muted}">${st.crashes}</td>
-      <td class="mono">${st.estops}</td>
-      <td class="mono">$${st.damage.toLocaleString()}</td>
-      <td class="mono">${st.laps > 0 ? `$${st.costPerLap.toFixed(1)}` : '—'}</td>
-      <td>${formatLiabilityBadges(st.liabilityBreach, st.highCostLap)}</td>
-      <td><span class="badge ${tier.cls}">${tier.label}</span></td>
-      <td class="mono" style="color:${parseFloat(premium)>1?C.red:C.green}">${premium}×</td>
+      <td class="mono">${pct(st.crashFreq)}</td>
+      <td class="mono">${money(st.avgLoss)}</td>
+      <td class="mono">${money(st.maxSingleLoss)}</td>
+      <td class="mono">${st.laps > 0 ? money(st.costPerLap) : '—'}</td>
+      <td><span style="color:${trend.color};font-weight:700;">${trend.arrow}</span> <span style="color:${trend.color};">${trend.label}</span></td>
+      <td class="mono">${pct(st.nearMissRate)}</td>
+      <td class="mono" style="color:${(st.annualPremiumIndex || 1) >= 1 ? C.red : C.green}">${premium}</td>
+      <td>${formatLiabilityBadges(st.liabilityBreach, false)}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:16px;">No session data</td></tr>';
+
+  // Year-on-year comparison (always across all seasons)
+  const yoyHead = document.getElementById('ins-yoy-head-row');
+  const yoyBody = document.getElementById('ins-yoy-tbody');
+  const yoySeasons = getInsuranceSeasonsFromData();
+  if (yoyHead) {
+    yoyHead.innerHTML = '<th>Team</th>' + yoySeasons.map(s => `<th>S${s} Avg Risk</th>`).join('') + '<th>YoY Δ</th><th>Risk/km</th>';
+  }
+  if (yoyBody) {
+    yoyBody.innerHTML = activeTeams.map(t => {
+      const perSeasonScores = yoySeasons.map(season => {
+        const rs = allScoredSessions.filter(s => s.team === t.name && String(getSessionSeasonNumber(s) || '') === String(season)).map(toRiskNumber);
+        if (!rs.length) return null;
+        return rs.reduce((a,b)=>a+b,0)/rs.length;
+      });
+      const first = perSeasonScores.find(v => v !== null && v !== undefined);
+      const last = [...perSeasonScores].reverse().find(v => v !== null && v !== undefined);
+      const delta = (first !== undefined && first !== null && last !== undefined && last !== null) ? (last - first) : null;
+      const allTeam = allScoredSessions.filter(s => s.team === t.name);
+      const totalKm = allTeam.reduce((a,s)=>a+sessionDistanceKm(s),0);
+      const totalRisk = allTeam.reduce((a,s)=>a+toRiskNumber(s),0);
+      const riskPerKm = totalKm > 0 ? (totalRisk / totalKm) : null;
+      return `<tr>
+        <td><span class="team-dot" style="background:${t.color}"></span><b>${t.name}</b></td>
+        ${perSeasonScores.map(v => `<td class="mono">${v === null ? '—' : v.toFixed(1)}</td>`).join('')}
+        <td class="mono" style="color:${delta === null ? 'var(--muted)' : (delta > 0 ? C.red : (delta < 0 ? C.green : C.muted))}">${delta === null ? '—' : `${delta > 0 ? '+' : ''}${delta.toFixed(1)}`}</td>
+        <td class="mono">${riskPerKm === null ? '—' : riskPerKm.toFixed(4)}</td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:16px;">No year-on-year data</td></tr>';
+  }
+  const datasets = activeTeams.map(t => {
+    const data = yoySeasons.map(season => {
+      const rs = allScoredSessions.filter(s => s.team === t.name && String(getSessionSeasonNumber(s) || '') === String(season)).map(toRiskNumber);
+      if (!rs.length) return null;
+      return +(rs.reduce((a,b)=>a+b,0)/rs.length).toFixed(2);
+    });
+    if (!data.some(v => v !== null)) return null;
+    return {
+      label: t.name,
+      data,
+      borderColor: t.color || '#6b7a99',
+      backgroundColor: 'transparent',
+      borderWidth: 2,
+      pointRadius: 3,
+      tension: 0.2,
+      spanGaps: true,
+    };
+  }).filter(Boolean);
+  mkChart('chart-ins-yoy', {
+    type:'line',
+    data:{ labels: yoySeasons.map(s => `Season ${s}`), datasets },
+    options:{
+      ...chartCfg,
+      responsive:true,
+      maintainAspectRatio:false,
+      plugins:{...chartCfg.plugins, legend:{display:datasets.length <= 8, labels:{color:'#6b7a99',font:{size:10}}}},
+      scales:{
+        ...chartCfg.scales,
+        y:{...chartCfg.scales.y, min:0, max:100, title:{display:true,text:'Avg Risk',color:'#6b7a99'}}
+      }
+    }
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -8450,6 +8795,7 @@ function openNewEventModal() {
   document.getElementById('ev-season').value=eventCfg.season||3;
   document.getElementById('ev-num').value=(events.length+1);
   renderTrackOptionsSelect(trackOptions[0] || 'Yas Marina Circuit');
+  syncEventTrackDistanceInput();
   document.getElementById('ev-start').value='';
   document.getElementById('ev-days').value=2;
   document.getElementById('ev-status').value='upcoming';
@@ -8465,6 +8811,8 @@ function openEditEventModal(i) {
   document.getElementById('ev-season').value=ev.season||3;
   document.getElementById('ev-num').value=ev.num||1;
   renderTrackOptionsSelect(ev.track || trackOptions[0] || 'Yas Marina Circuit');
+  const td = document.getElementById('ev-track-distance');
+  if (td) td.value = Number(ev.trackDistanceKm || getTrackDistanceKm(ev.track)) || 0;
   document.getElementById('ev-start').value=ev.startDate||'';
   document.getElementById('ev-days').value=ev.days||2;
   document.getElementById('ev-status').value=ev.status||'upcoming';
@@ -8477,17 +8825,21 @@ function saveEvent() {
   if (!name) { alert('Event name required'); return; }
   const editId=document.getElementById('edit-event-id').value;
   const selTeams=Array.from(document.querySelectorAll('#ev-team-checks input:checked')).map(cb=>cb.value);
+  const selectedTrack = document.getElementById('ev-track').value;
+  const trackDistanceKm = Math.max(0, parseFloat(document.getElementById('ev-track-distance')?.value) || 0);
   const evData={
     id: editId||Date.now().toString(),
     name, season:parseInt(document.getElementById('ev-season').value)||3,
     num:parseInt(document.getElementById('ev-num').value)||1,
-    track:document.getElementById('ev-track').value,
+    track:selectedTrack,
+    trackDistanceKm,
     startDate:document.getElementById('ev-start').value,
     days:parseInt(document.getElementById('ev-days').value)||2,
     status:document.getElementById('ev-status').value,
     notes:document.getElementById('ev-notes').value,
     teams:selTeams,
   };
+  trackDistances = { ...(trackDistances || {}), [selectedTrack]: trackDistanceKm };
   if (editId) { const idx=events.findIndex(e=>e.id===editId); if(idx>=0) events[idx]=evData; }
   else events.push(evData);
   if (String(schedCfg.eventId || '') === String(evData.id || '')) {
@@ -9098,8 +9450,9 @@ init();
       <div class="field"><label>Season</label><input type="number" id="ev-season" value="3" min="1"></div>
       <div class="field"><label>Event Number</label><input type="number" id="ev-num" value="1" min="1"></div>
       <div class="field"><label>Track</label>
-        <select id="ev-track"></select>
+        <select id="ev-track" onchange="syncEventTrackDistanceInput()"></select>
       </div>
+      <div class="field"><label>Lap Distance (km)</label><input type="number" id="ev-track-distance" min="0" step="0.01" value="0" onchange="saveEventTrackDistanceInput()"></div>
       <div class="field"><label>Start Date</label><input type="date" id="ev-start"></div>
       <div class="field"><label>Number of Days</label><input type="number" id="ev-days" value="2" min="1" max="30"></div>
       <div class="field"><label>Status</label>

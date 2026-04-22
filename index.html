@@ -3274,7 +3274,6 @@ function calcRiskPartial(s, present = {}) {
     has('replans') && clamp01v(s.replans) > 0,
     has('startAttempts') && (Number(s.startAttempts) || 0) > 0,
     has('overtaking') && yesNo01(s.overtaking) > 0,
-    has('multicar') && yesNo01(s.multicar) > 0,
   ].some(Boolean);
   const insufficientData = noActivity && crashed !== true && !hasIncidentSignal;
   if (insufficientData) {
@@ -3416,11 +3415,16 @@ function calcRiskPartial(s, present = {}) {
   let crashFloor = 0;
   if (crashed === true) {
     if (has('damage') && Number.isFinite(Number(s.damage))) {
-      const damageRatio = Math.max(0, Number(s.damage) || 0) / Math.max(1, maxDmg);
-      if (damageRatio > 1) crashFloor = 85;
-      else if (damageRatio > 0.75) crashFloor = 78;
-      else if (damageRatio >= 0.25) crashFloor = 65;
-      else crashFloor = 58;
+      const damageValue = Math.max(0, Number(s.damage) || 0);
+      if (damageValue <= 0) {
+        crashFloor = 55;
+      } else {
+        const damageRatio = damageValue / Math.max(1, maxDmg);
+        if (damageRatio > 1) crashFloor = 85;
+        else if (damageRatio > 0.75) crashFloor = 78;
+        else if (damageRatio >= 0.25) crashFloor = 65;
+        else crashFloor = 58;
+      }
     } else {
       crashFloor = 55;
     }

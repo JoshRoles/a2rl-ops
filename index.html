@@ -1246,8 +1246,8 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
         <div class="panel-body" style="padding:0">
           <table class="data-table">
             <thead><tr>
-              <th>Team</th><th>Sessions</th><th>Avg Risk</th><th>Crash Count</th>
-              <th>E-Stops</th><th>Est. Damage ($)</th><th>Risk Tier</th><th>Premium Index</th>
+              <th>Team</th><th>Sessions</th><th>Adj Avg Risk</th><th>Crash Count</th>
+              <th>E-Stops</th><th>Est. Damage ($)</th><th>Cost/Lap ($)</th><th>Liability Status</th><th>Risk Tier</th><th>Premium Index</th>
             </tr></thead>
             <tbody id="ins-tbody"></tbody>
           </table>
@@ -1498,12 +1498,15 @@ const DEFAULT_TRACKS = ['Yas Marina Circuit','VDA Test Track'];
 const TEAM_SUMMARY_METRICS = [
   { key:'sessions', label:'Total Sessions' },
   { key:'cumRisk', label:'Cumulative Risk' },
-  { key:'avg', label:'Avg Risk' },
+  { key:'avg', label:'Adjusted Avg Risk' },
   { key:'best', label:'Best' },
   { key:'worst', label:'Worst' },
+  { key:'costPerLap', label:'Cost/Lap ($)' },
+  { key:'damageEff', label:'Damage Efficiency (0-10)' },
   { key:'estops', label:'E-Stops' },
   { key:'crashes', label:'Crashes' },
   { key:'trackHrs', label:'Total Track Hrs' },
+  { key:'liability', label:'Liability Status' },
   { key:'tier', label:'Tier' },
 ];
 const HISTORY_COLUMNS = [
@@ -1944,7 +1947,7 @@ function loadWorkspaceData(opts = {}) {
   eventCfg = readScopedJson('event_cfg', {season:3,eventNum:1,org:'A2RL',defaultDur:30}, 'a2rl_event_cfg');
   schedCfg = readScopedJson('sched_cfg', {eventId:null,eventName:'A2RL Season 3 — Event 1',track:'Yas Marina Circuit',open:'08:00',close:'18:00',days:2,buffer:15,eventStart:null}, 'a2rl_sched_cfg');
   trackOptions = readScopedJson('track_options', [...DEFAULT_TRACKS], 'a2rl_track_options');
-  teamSummaryMetrics = readScopedJson('team_summary_metrics', ['sessions','cumRisk','avg','best','worst','estops','crashes','trackHrs','tier'], 'a2rl_team_summary_metrics');
+  teamSummaryMetrics = readScopedJson('team_summary_metrics', ['sessions','cumRisk','avg','best','worst','costPerLap','damageEff','estops','crashes','trackHrs','liability','tier'], 'a2rl_team_summary_metrics');
   historyColumns = readScopedJson('history_columns', [...DEFAULT_HISTORY_COLUMNS], 'a2rl_history_columns');
   schedZoom = Math.max(0.6, Math.min(3, parseFloat(readScopedString('sched_zoom', '1', 'a2rl_sched_zoom')) || 1));
   captureDrafts = readScopedJson('capture_drafts', {}, 'a2rl_capture_drafts');
@@ -3400,7 +3403,8 @@ function calcRiskPartial(s, present = {}) {
   }
 
   // Post modifiers
-  const speedCredit = speedPresent ? (speed / 258) * 8 : 0;
+  // Speed credit applies only to non-crash sessions with meaningful additive signal.
+  const speedCredit = (crashed === true || !speedPresent || points <= 15) ? 0 : (speed / 258) * 8;
   let multiCarCleanBonus = 0;
   if (isMultiCar === true && crashed === false && estopsPresent && estops === 0) {
     multiCarCleanBonus = 3;
@@ -3408,9 +3412,32 @@ function calcRiskPartial(s, present = {}) {
   breakdown.speedCredit = -speedCredit;
   breakdown.multiCarCleanBonus = -multiCarCleanBonus;
 
-  let adjusted = points - speedCredit - multiCarCleanBonus;
-  if (crashed === true) adjusted = Math.max(55, adjusted);
-  breakdown.crashFloorAdjustment = crashed === true ? Math.max(0, 55 - (points - speedCredit - multiCarCleanBonus)) : 0;
+  const preFloorScore = points - speedCredit - multiCarCleanBonus;
+  let crashFloor = 0;
+  if (crashed === true) {
+    if (has('damage') && Number.isFinite(Number(s.damage))) {
+      const damageRatio = Math.max(0, Number(s.damage) || 0) / Math.max(1, maxDmg);
+      if (damageRatio > 1) crashFloor = 85;
+      else if (damageRatio > 0.75) crashFloor = 78;
+      else if (damageRatio >= 0.25) crashFloor = 65;
+      else crashFloor = 58;
+    } else {
+      crashFloor = 55;
+    }
+  }
+  let adjusted = preFloorScore;
+  if (crashed === true) adjusted = Math.max(crashFloor, adjusted);
+  const crashFloorAdjustment = crashed === true ? Math.max(0, crashFloor - preFloorScore) : 0;
+  breakdown.crashFloorAdjustment = crashFloorAdjustment;
+  const crashFloorEnforced = crashFloorAdjustment > 0;
+  if (crashFloorEnforced) flags.push('CRASH_FLOOR_ENFORCED');
+
+  // Baseline for "activity-only" sessions (laps/speed present, no incident data).
+  const onlyPerfData = (lapsPresent || speedPresent) && !hasIncidentSignal && crashed !== true;
+  if (onlyPerfData) {
+    adjusted = Math.max(adjusted, 5);
+    flags.push('PERFORMANCE_DATA_BASELINE_5');
+  }
 
   const finalScore = Math.round(Math.max(0, Math.min(100, adjusted)) * 10) / 10;
   const confidence = Math.max(0, Math.min(1, availableMax / 100));
@@ -3420,6 +3447,7 @@ function calcRiskPartial(s, present = {}) {
     confidence: Math.round(confidence * 1000) / 1000,
     partialData: confidence < 0.999,
     insufficientData: false,
+    crashFloorEnforced,
     flags,
   };
 }
@@ -3455,6 +3483,7 @@ function recalcSessionRiskRecord(s) {
     riskConfidence: Number(result.confidence || 1),
     partialData: !!result.partialData,
     riskInsufficientData: !!result.insufficientData,
+    riskCrashFloorEnforced: !!result.crashFloorEnforced,
     riskFlags: Array.isArray(result.flags) ? result.flags : [],
   };
 }
@@ -3475,6 +3504,7 @@ function migrateLegacyPartialRiskScores() {
       riskConfidence: result.confidence,
       partialData: !!result.partialData,
       riskInsufficientData: !!result.insufficientData,
+      riskCrashFloorEnforced: !!result.crashFloorEnforced,
       riskFlags: Array.isArray(result.flags) ? result.flags : [],
     };
   });
@@ -3517,6 +3547,25 @@ function riskTier(s) {
   if (s < thresholds.med) return {label:'MED', cls:'badge-med'};
   if (s < thresholds.high) return {label:'HIGH', cls:'badge-high'};
   return {label:'CRIT', cls:'badge-crit'};
+}
+function hasUsableRiskScore(s) {
+  if (!s || s.stub || s.riskInsufficientData) return false;
+  return s.riskScore !== null && s.riskScore !== undefined && Number.isFinite(Number(s.riskScore));
+}
+function toRiskNumber(s) {
+  return Number(s?.riskScore || 0);
+}
+function formatLiabilityBadges(isBreach, highCostLap) {
+  const chips = [];
+  if (isBreach) chips.push('<span class="badge badge-crit">LIABILITY BREACH</span>');
+  if (highCostLap) chips.push('<span class="badge badge-high">HIGH COST/LAP</span>');
+  return chips.length ? chips.join(' ') : '<span style="color:var(--muted)">OK</span>';
+}
+function calcDamageEfficiencyScore(costPerLap, fieldAvgCostPerLap) {
+  if (!(costPerLap > 0) || !(fieldAvgCostPerLap > 0)) return 0;
+  const ratio = costPerLap / fieldAvgCostPerLap;
+  if (ratio >= 1) return Math.min(10, 5 + ((ratio - 1) / 2) * 5); // 1x => 5, 3x+ => 10
+  return Math.max(0, ratio * 5); // below field avg scales below neutral
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -3842,12 +3891,13 @@ function calcAndSubmit(prefix='f') {
     s.track = schedCfg.track || null;
   }
 
-  const { score, breakdown, insufficientData, confidence, partialData, flags } = calcRisk(s);
+  const { score, breakdown, insufficientData, confidence, partialData, flags, crashFloorEnforced } = calcRisk(s);
   s.riskScore = score;
   s.riskBreakdown = breakdown;
   s.riskConfidence = Number(confidence || 0);
   s.partialData = !!partialData;
   s.riskInsufficientData = !!insufficientData;
+  s.riskCrashFloorEnforced = !!crashFloorEnforced;
   s.riskFlags = Array.isArray(flags) ? flags : [];
   s.stub = false;
   s.id = String(Date.now());
@@ -3892,9 +3942,15 @@ function calcAndSubmit(prefix='f') {
   if (Array.isArray(s.riskFlags) && s.riskFlags.length) {
     bkdDiv.innerHTML += `<div style="margin-top:4px;font-size:10px;color:var(--amber);">Flags: ${s.riskFlags.join(', ')}</div>`;
   }
+  if (s.riskCrashFloorEnforced) {
+    bkdDiv.innerHTML += `<div style="margin-top:4px;font-size:10px;color:var(--red);">Crash-floor enforced minimum applied for incident severity.</div>`;
+  }
   el.classList.add('visible');
 
   // Update live
+  renderHistory();
+  renderTeamView();
+  renderInsurance();
   renderLiveTable();
   renderPublishedSessionsTable();
   renderSessionOverviewTable();
@@ -4000,11 +4056,12 @@ function submitManualSession() {
     ttc:0, ttcMin:0, gpsDeviation:0, lateralAccel:0,
     submittedBy: (currentUser?.email || '').toLowerCase(),
   };
-  const { score, breakdown, insufficientData, confidence, partialData, flags } = calcRisk(s);
+  const { score, breakdown, insufficientData, confidence, partialData, flags, crashFloorEnforced } = calcRisk(s);
   s.riskScore = score; s.riskBreakdown = breakdown; s.id = String(Date.now());
   s.riskConfidence = Number(confidence || 0);
   s.partialData = !!partialData;
   s.riskInsufficientData = !!insufficientData;
+  s.riskCrashFloorEnforced = !!crashFloorEnforced;
   s.riskFlags = Array.isArray(flags) ? flags : [];
   sessions.push(s);
   liveRisks[s.team] = score;
@@ -4012,6 +4069,8 @@ function submitManualSession() {
   save();
   closeModal('modal-manual-session');
   renderHistory();
+  renderTeamView();
+  renderInsurance();
   renderLiveTable();
   renderFeed();
 }
@@ -4169,13 +4228,16 @@ function renderHistory() {
               ? ` <span class="badge badge-med" style="font-size:9px;">LOW ${confPct}%</span>`
               : ` <span class="badge badge-high" style="font-size:9px;">UNRELIABLE ${confPct}%</span>`))
       ) : '';
+      const floorBadge = !isStub && s.riskCrashFloorEnforced
+        ? ` <span class="badge badge-high" style="font-size:9px;">CRASH FLOOR ENFORCED</span>`
+        : '';
       const insufficientBadge = !isStub && s.riskInsufficientData
         ? ` <span class="badge badge-med" style="font-size:9px;">INSUFFICIENT DATA</span>`
         : '';
-      const scorePrefix = hasConf && confPct < 85 ? '~' : '';
+      const scorePrefix = hasConf && confPct < 85 && !s.riskCrashFloorEnforced ? '~' : '';
       const riskCell = s.riskInsufficientData
         ? `<span style="color:var(--muted);font-size:11px;">—</span>${insufficientBadge}`
-        : `<span style="color:${col};font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600">${scorePrefix}${Number(s.riskScore||0).toFixed(1)}</span> <span class="badge ${tier.cls}">${tier.label}</span>${confBadge}`;
+        : `<span style="color:${col};font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600">${scorePrefix}${Number(s.riskScore||0).toFixed(1)}</span> <span class="badge ${tier.cls}">${tier.label}</span>${confBadge}${floorBadge}`;
       row += `<td>${isStub ? '' : riskCell}</td>`;
     }
     if (cols.has('laps')) row += `<td class="mono">${isStub ? '' : (s.laps ?? '')}</td>`;
@@ -4219,6 +4281,8 @@ function deleteSession(id) {
   schedule.forEach(b => recomputeBlockCompletion(b));
   save();
   renderHistory();
+  renderTeamView();
+  renderInsurance();
   renderLiveTable();
 }
 
@@ -4274,12 +4338,16 @@ function renderTeamView() {
 
   const stats = {};
   allTeams.forEach(t => {
-    const ts = sessions.filter(s => s.team === t.name).sort((a,b)=>getSessionDateObj(a)-getSessionDateObj(b));
-    const scores = ts.map(s => s.riskScore || 0);
+    const ts = sessions.filter(s => s.team === t.name && !s.stub).sort((a,b)=>getSessionDateObj(a)-getSessionDateObj(b));
+    const scored = ts.filter(hasUsableRiskScore);
+    const scores = scored.map(toRiskNumber);
     const cumRisk = scores.reduce((a,b)=>a+b,0);
     const totalMins = ts.reduce((a,s)=>a+(parseInt(s.duration)||0),0);
+    const totalLaps = ts.reduce((a,s)=>a+Math.max(0, Number(s.laps)||0),0);
+    const totalDamage = ts.reduce((a,s)=>a+Math.max(0, Number(s.damage)||0),0);
     stats[t.name] = {
       sessions: ts.length,
+      scoredSessions: scored.length,
       cumRisk,
       avg: scores.length ? (cumRisk/scores.length) : 0,
       best: scores.length ? Math.min(...scores) : 0,
@@ -4287,11 +4355,30 @@ function renderTeamView() {
       estops: ts.reduce((a,s)=>a+(s.estops||0),0),
       crashes: ts.filter(s=>s.crashed==='Yes').length,
       trackHrs: (totalMins/60),
+      totalLaps,
+      totalDamage,
+      costPerLap: totalLaps > 0 ? (totalDamage / totalLaps) : 0,
       rows: ts,
     };
   });
 
-  const withData = allTeams.filter(t => stats[t.name].sessions > 0);
+  const fieldCostRows = allTeams
+    .map(t => stats[t.name])
+    .filter(st => st.sessions > 0 && st.totalDamage > 0 && st.totalLaps > 0);
+  const fieldAvgCostPerLap = fieldCostRows.length
+    ? (fieldCostRows.reduce((a, st) => a + st.costPerLap, 0) / fieldCostRows.length)
+    : 0;
+  allTeams.forEach(t => {
+    const st = stats[t.name];
+    st.damageEff = calcDamageEfficiencyScore(st.costPerLap, fieldAvgCostPerLap);
+    st.sessionAvg = st.avg;
+    st.adjustedAvg = (st.sessionAvg * 0.7) + ((st.damageEff * 10) * 0.3);
+    st.avg = st.adjustedAvg;
+    st.liabilityBreach = st.totalDamage > (thresholds.maxDamage || 100000);
+    st.highCostLap = fieldAvgCostPerLap > 0 && st.costPerLap > (fieldAvgCostPerLap * 2);
+  });
+
+  const withData = allTeams.filter(t => stats[t.name].scoredSessions > 0);
   const byAvg = [...withData].sort((a,b)=>stats[a.name].avg-stats[b.name].avg);
   if (byAvg.length) {
     document.getElementById('ta-lowest').textContent = byAvg[0].name;
@@ -4317,12 +4404,15 @@ function renderTeamView() {
     let hh = sortableHead('Team', 'team');
     if (cols.has('sessions')) hh += sortableHead('Total Sessions', 'sessions');
     if (cols.has('cumRisk')) hh += sortableHead('Cumulative Risk', 'cumRisk');
-    if (cols.has('avg')) hh += sortableHead('Avg Risk', 'avg');
+    if (cols.has('avg')) hh += sortableHead('Adjusted Avg Risk', 'avg');
     if (cols.has('best')) hh += sortableHead('Best', 'best');
     if (cols.has('worst')) hh += sortableHead('Worst', 'worst');
+    if (cols.has('costPerLap')) hh += sortableHead('Cost/Lap ($)', 'costPerLap');
+    if (cols.has('damageEff')) hh += sortableHead('Damage Eff. (0-10)', 'damageEff');
     if (cols.has('estops')) hh += sortableHead('E-Stops', 'estops');
     if (cols.has('crashes')) hh += sortableHead('Crashes', 'crashes');
     if (cols.has('trackHrs')) hh += sortableHead('Total Track Hrs', 'trackHrs');
+    if (cols.has('liability')) hh += sortableHead('Liability Status', 'liability');
     if (cols.has('tier')) hh += sortableHead('Tier', 'tier');
     head.innerHTML = hh;
   }
@@ -4339,6 +4429,9 @@ function renderTeamView() {
       const rank = { low:0, medium:1, high:2, critical:3 };
       aVal = rank[riskTier(aStats.avg).label.toLowerCase()] ?? -1;
       bVal = rank[riskTier(bStats.avg).label.toLowerCase()] ?? -1;
+    } else if (sortKey === 'liability') {
+      aVal = (aStats.liabilityBreach ? 2 : 0) + (aStats.highCostLap ? 1 : 0);
+      bVal = (bStats.liabilityBreach ? 2 : 0) + (bStats.highCostLap ? 1 : 0);
     } else {
       aVal = Number(aStats[sortKey] ?? 0);
       bVal = Number(bStats[sortKey] ?? 0);
@@ -4354,13 +4447,16 @@ function renderTeamView() {
     const cols = new Set(teamSummaryMetrics || []);
     let row = `<td><span class="team-dot" style="background:${t.color}"></span><b>${t.name}</b></td>`;
     if (cols.has('sessions')) row += `<td class="mono">${st.sessions}</td>`;
-    if (cols.has('cumRisk')) row += `<td class="mono" style="color:${riskColor(Math.min(100, st.cumRisk/Math.max(1,st.sessions)))}">${st.cumRisk.toFixed(1)}</td>`;
+    if (cols.has('cumRisk')) row += `<td class="mono" style="color:${riskColor(Math.min(100, st.cumRisk/Math.max(1,st.scoredSessions)))}">${st.cumRisk.toFixed(1)}</td>`;
     if (cols.has('avg')) row += `<td><span style="color:${riskColor(st.avg)};font-family:'Roboto Mono',monospace;font-weight:600">${st.avg.toFixed(1)}</span></td>`;
     if (cols.has('best')) row += `<td class="mono" style="color:var(--green)">${st.best.toFixed(1)}</td>`;
     if (cols.has('worst')) row += `<td class="mono" style="color:var(--red)">${st.worst.toFixed(1)}</td>`;
+    if (cols.has('costPerLap')) row += `<td class="mono">${st.totalLaps > 0 ? `$${st.costPerLap.toFixed(1)}` : '—'}</td>`;
+    if (cols.has('damageEff')) row += `<td><span style="color:${riskColor(st.damageEff * 10)};font-family:'Roboto Mono',monospace;font-weight:600">${st.damageEff.toFixed(1)}</span></td>`;
     if (cols.has('estops')) row += `<td class="mono">${st.estops}</td>`;
     if (cols.has('crashes')) row += `<td class="mono" style="color:${st.crashes>0?C.red:C.muted}">${st.crashes}</td>`;
     if (cols.has('trackHrs')) row += `<td class="mono">${st.trackHrs.toFixed(1)}h</td>`;
+    if (cols.has('liability')) row += `<td>${formatLiabilityBadges(st.liabilityBreach, st.highCostLap)}</td>`;
     if (cols.has('tier')) row += `<td><span class="badge ${tier.cls}">${tier.label}</span></td>`;
     return `<tr onclick="${click}" style="cursor:pointer;">${row}</tr>`;
   }).join('');
@@ -7249,18 +7345,37 @@ function renderInsurance() {
   const activeTeams = teams.filter(t => t.active);
   const teamStats = {};
   activeTeams.forEach(t => {
-    const ts = sessions.filter(s => s.team === t.name);
-    const scores = ts.map(s => s.riskScore||0);
+    const ts = sessions.filter(s => s.team === t.name && !s.stub);
+    const scored = ts.filter(hasUsableRiskScore);
+    const scores = scored.map(toRiskNumber);
+    const totalLaps = ts.reduce((a,s)=>a+Math.max(0, Number(s.laps)||0),0);
+    const totalDamage = ts.reduce((a,s)=>a+Math.max(0, Number(s.damage)||0),0);
     teamStats[t.name] = {
       sessions: ts.length,
       avg: scores.length ? scores.reduce((a,b)=>a+b,0)/scores.length : 0,
       crashes: ts.filter(s=>s.crashed==='Yes').length,
       estops: ts.reduce((a,s)=>a+(s.estops||0),0),
-      damage: ts.reduce((a,s)=>a+(s.damage||0),0),
+      damage: totalDamage,
+      laps: totalLaps,
+      costPerLap: totalLaps > 0 ? (totalDamage / totalLaps) : 0,
     };
   });
 
-  const allScores = sessions.map(s=>s.riskScore||0);
+  const fieldCostRows = activeTeams
+    .map(t => teamStats[t.name])
+    .filter(st => st.sessions > 0 && st.damage > 0 && st.laps > 0);
+  const fieldAvgCostPerLap = fieldCostRows.length
+    ? (fieldCostRows.reduce((a, st) => a + st.costPerLap, 0) / fieldCostRows.length)
+    : 0;
+  activeTeams.forEach(t => {
+    const st = teamStats[t.name];
+    st.damageEff = calcDamageEfficiencyScore(st.costPerLap, fieldAvgCostPerLap);
+    st.adjustedAvg = (st.avg * 0.7) + ((st.damageEff * 10) * 0.3);
+    st.liabilityBreach = st.damage > (thresholds.maxDamage || 100000);
+    st.highCostLap = fieldAvgCostPerLap > 0 && st.costPerLap > (fieldAvgCostPerLap * 2);
+  });
+
+  const allScores = sessions.filter(hasUsableRiskScore).map(toRiskNumber);
   const fleetAvg = allScores.length ? allScores.reduce((a,b)=>a+b,0)/allScores.length : 0;
   const totalTTC = sessions.reduce((a,s)=>a+(s.ttc||0),0);
   const totalCrashes = sessions.filter(s=>s.crashed==='Yes').length;
@@ -7288,19 +7403,23 @@ function renderInsurance() {
 
   document.getElementById('ins-tbody').innerHTML = activeTeams.map(t => {
     const st = teamStats[t.name];
-    const tier = riskTier(st.avg);
-    const premium = st.avg > 0 ? (0.8 + st.avg/100 * 1.4).toFixed(2) : '1.00';
+    const tier = riskTier(st.adjustedAvg);
+    const premium = st.adjustedAvg > 0
+      ? (0.8 + (st.adjustedAvg/100 * 1.1) + (st.damageEff/10 * 0.6)).toFixed(2)
+      : '1.00';
     return `<tr>
       <td><span class="team-dot" style="background:${t.color}"></span><b>${t.name}</b></td>
       <td class="mono">${st.sessions}</td>
-      <td class="mono" style="color:${riskColor(st.avg)}">${st.avg.toFixed(1)}</td>
+      <td class="mono" style="color:${riskColor(st.adjustedAvg)}">${st.adjustedAvg.toFixed(1)}</td>
       <td class="mono" style="color:${st.crashes>0?C.red:C.muted}">${st.crashes}</td>
       <td class="mono">${st.estops}</td>
       <td class="mono">$${st.damage.toLocaleString()}</td>
+      <td class="mono">${st.laps > 0 ? `$${st.costPerLap.toFixed(1)}` : '—'}</td>
+      <td>${formatLiabilityBadges(st.liabilityBreach, st.highCostLap)}</td>
       <td><span class="badge ${tier.cls}">${tier.label}</span></td>
       <td class="mono" style="color:${parseFloat(premium)>1?C.red:C.green}">${premium}×</td>
     </tr>`;
-  }).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:16px;">No session data</td></tr>';
+  }).join('') || '<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:16px;">No session data</td></tr>';
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -7714,18 +7833,21 @@ function saveEditSession() {
     notes: document.getElementById('es-notes').value,
     stub: false,
   };
-  const { score, breakdown, insufficientData, confidence, partialData, flags } = calcRisk(updated);
+  const { score, breakdown, insufficientData, confidence, partialData, flags, crashFloorEnforced } = calcRisk(updated);
   updated.riskScore = score;
   updated.riskBreakdown = breakdown;
   updated.riskConfidence = Number(confidence || 0);
   updated.partialData = !!partialData;
   updated.riskInsufficientData = !!insufficientData;
+  updated.riskCrashFloorEnforced = !!crashFloorEnforced;
   updated.riskFlags = Array.isArray(flags) ? flags : [];
   sessions[idx] = updated;
   liveRisks[updated.team] = score;
   save();
   closeModal('modal-edit-session');
   renderHistory();
+  renderTeamView();
+  renderInsurance();
   renderLiveTable();
 }
 
@@ -8182,6 +8304,7 @@ function confirmCsvImport() {
       s.riskConfidence = result.confidence;
       s.partialData = !!result.partialData;
       s.riskInsufficientData = !!result.insufficientData;
+      s.riskCrashFloorEnforced = !!result.crashFloorEnforced;
       s.riskFlags = Array.isArray(result.flags) ? result.flags : [];
       imported.push(s);
     });
@@ -8566,11 +8689,12 @@ function saveEditSession() {
     notes:document.getElementById('es-notes').value, stub:false,
     submittedBy: sessions[idx].submittedBy || (currentUser?.email || '').toLowerCase(),
   };
-  const {score,breakdown,insufficientData,confidence,partialData,flags}=calcRisk(u);
+  const {score,breakdown,insufficientData,confidence,partialData,flags,crashFloorEnforced}=calcRisk(u);
   u.riskScore=score; u.riskBreakdown=breakdown; u.riskInsufficientData=!!insufficientData;
-  u.riskConfidence=Number(confidence||0); u.partialData=!!partialData; u.riskFlags=Array.isArray(flags)?flags:[];
+  u.riskConfidence=Number(confidence||0); u.partialData=!!partialData; u.riskCrashFloorEnforced=!!crashFloorEnforced; u.riskFlags=Array.isArray(flags)?flags:[];
   sessions[idx]=u; liveRisks[u.team]=score;
   save(); closeModal('modal-edit-session'); renderHistory(); renderLiveTable();
+    renderTeamView(); renderInsurance();
 }
 
 // ── EDIT SLOT ─────────────────────────────────────────────────────────

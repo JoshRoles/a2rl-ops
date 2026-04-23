@@ -7915,6 +7915,7 @@ function renderInsurance() {
     let hh = '';
     hh += sortableHead('Team', 'team');
     hh += sortableHead('Total Sessions', 'sessions');
+    hh += sortableHead('Total Distance (km)', 'totalKm');
     hh += sortableHead('Crash Frequency', 'crashFreq');
     hh += sortableHead('Avg Loss Severity ($)', 'avgLoss');
     hh += sortableHead('Max Single Loss ($)', 'maxSingleLoss');
@@ -7929,7 +7930,7 @@ function renderInsurance() {
     head.innerHTML = hh;
   }
   const body = document.getElementById('ins-tbody');
-  const totalCols = 10 + (showCrashRate ? 1 : 0) + (showEstopRate ? 1 : 0) + (showInstabilityRate ? 1 : 0);
+  const totalCols = 11 + (showCrashRate ? 1 : 0) + (showEstopRate ? 1 : 0) + (showInstabilityRate ? 1 : 0);
   const sortedTeams = [...activeTeams].sort((a, b) => {
     const as = teamStats[a.name];
     const bs = teamStats[b.name];
@@ -7939,6 +7940,7 @@ function renderInsurance() {
     const getVal = (team, st) => {
       if (sortKey === 'team') return String(team.name || '').toLowerCase();
       if (sortKey === 'sessions') return Number(st.sessions || 0);
+      if (sortKey === 'totalKm') return Number(st.totalKm || 0);
       if (sortKey === 'crashFreq') return Number(st.crashFreq || 0);
       if (sortKey === 'avgLoss') return Number(st.avgLoss || 0);
       if (sortKey === 'maxSingleLoss') return Number(st.maxSingleLoss || 0);
@@ -7968,6 +7970,7 @@ function renderInsurance() {
         <td class="mono">—</td>
         <td class="mono">—</td>
         <td class="mono">—</td>
+        <td class="mono">—</td>
         <td style="color:var(--muted)">—</td>
         <td class="mono">—</td>
         ${showCrashRate ? '<td class="mono">—</td>' : ''}
@@ -7991,6 +7994,7 @@ function renderInsurance() {
     return `<tr>
       <td><span class="team-dot" style="background:${t.color}"></span><b>${t.name}</b>${teamFlags.length ? `<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;">${teamFlags.join(' ')}</div>` : ''}</td>
       <td class="mono">${st.sessions}</td>
+      <td class="mono">${st.totalKm > 0 ? st.totalKm.toFixed(1) : '—'}</td>
       <td class="mono">${pct(st.crashFreq)}</td>
       <td class="mono">${money(st.avgLoss)}</td>
       <td class="mono">${money(st.maxSingleLoss)}</td>

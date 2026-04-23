@@ -3994,9 +3994,9 @@ function renderLiveTable() {
       nearMissRate,
       annualPremiumIndex,
       latestAt: ts.length ? getSessionDateObj(ts[ts.length - 1]) : null,
-      tier: riskTier(scores.length ? scores[scores.length - 1] : 0),
+      tier: riskTier(scores.length ? (scores.reduce((a,b)=>a+b,0) / scores.length) : 0),
     };
-  }).sort((a,b)=>b.latestScore-a.latestScore);
+  }).sort((a,b)=>b.avgRisk-a.avgRisk);
 
   const head = document.getElementById('live-head-row');
   if (head) {
@@ -4004,7 +4004,8 @@ function renderLiveTable() {
   }
   let rank = 1;
   document.getElementById('team-tbody').innerHTML = teamStats.map((row) => {
-    const { team, latestScore: score } = row;
+    const { team } = row;
+    const score = Number(row.avgRisk || 0);
     const c = riskColor(score);
     return `<tr>
       <td style="color:var(--muted);font-size:11px;">${rank++}</td>
@@ -4038,10 +4039,10 @@ function renderLiveTable() {
   arcEl.setAttribute('stroke-dasharray', `${263*(avg/100)} 377`);
   arcEl.setAttribute('stroke', avg < thresholds.low ? '#00e87a' : avg < thresholds.med ? '#ffaa00' : '#ff3c3c');
 
-  const highest = teamStats.filter(r => r.scoredSessions > 0).sort((a,b)=>b.latestScore-a.latestScore)[0] || null;
-  if (highest && highest.latestScore > 0) {
-    document.getElementById('stat-highest').textContent = `${highest.team.name} · ${highest.latestScore.toFixed(1)}`;
-    const tier = riskTier(highest.latestScore);
+  const highest = teamStats.filter(r => r.scoredSessions > 0).sort((a,b)=>b.avgRisk-a.avgRisk)[0] || null;
+  if (highest && highest.avgRisk > 0) {
+    document.getElementById('stat-highest').textContent = `${highest.team.name} · ${highest.avgRisk.toFixed(1)}`;
+    const tier = riskTier(highest.avgRisk);
     document.getElementById('stat-highest').nextElementSibling.innerHTML = `<span class="badge ${tier.cls}">${tier.label}</span>`;
   } else {
     document.getElementById('stat-highest').textContent = '—';

@@ -975,7 +975,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
     <!-- ═══════════════════════════════════════════════ SESSION HISTORY ══ -->
     <div class="view" id="view-history">
       <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
-        <button class="btn sm primary" onclick="openManualSessionModal()">+ Create Manual Session</button>
+        <button class="btn sm primary" id="btn-history-create-manual" onclick="openManualSessionModal()">+ Create Manual Session</button>
         <select id="hist-filter-team" onchange="renderHistory()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);padding:6px 10px;border-radius:4px;font-size:12px;font-family:'Roboto',sans-serif;"></select>
         <select id="hist-filter-type" onchange="renderHistory()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);padding:6px 10px;border-radius:4px;font-size:12px;font-family:'Roboto',sans-serif;">
           <option value="">All Event Types</option>
@@ -987,12 +987,12 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
           <option>Single Car</option><option>Multi Car</option><option>Open Pit Lane</option>
         </select>
         <button class="btn sm" onclick="toggleHistoryMetricsPanel()">Columns ⚙</button>
-        <button class="btn sm" onclick="selectAllVisibleHistorySessions()">Select All</button>
-        <button class="btn sm" onclick="clearHistorySelection()">Clear Selection</button>
-        <button class="btn sm danger" onclick="deleteSelectedHistorySessions()">Delete Selected</button>
+        <button class="btn sm" id="btn-history-select-all" onclick="selectAllVisibleHistorySessions()">Select All</button>
+        <button class="btn sm" id="btn-history-clear-selection" onclick="clearHistorySelection()">Clear Selection</button>
+        <button class="btn sm danger" id="btn-history-delete-selected" onclick="deleteSelectedHistorySessions()">Delete Selected</button>
         <div style="margin-left:auto;display:flex;gap:8px;">
           <span id="hist-count" style="font-size:12px;color:var(--muted);align-self:center;"></span>
-          <button class="btn sm" onclick="importSessionsCSV()">⤒ Bulk Upload CSV</button>
+          <button class="btn sm" id="btn-history-import-csv" onclick="importSessionsCSV()">⤒ Bulk Upload CSV</button>
           <button class="btn sm" onclick="exportCSV()">⤓ CSV</button>
         </div>
       </div>
@@ -4450,6 +4450,20 @@ function getFilteredHistorySessions() {
   return filtered;
 }
 function renderHistory() {
+  const canMutateHistory = isAdmin() || isContributor();
+  const canDeleteHistory = isAdmin();
+  const showSelectionCol = canDeleteHistory;
+  const createBtn = document.getElementById('btn-history-create-manual');
+  const importBtn = document.getElementById('btn-history-import-csv');
+  const selectAllBtn = document.getElementById('btn-history-select-all');
+  const clearSelBtn = document.getElementById('btn-history-clear-selection');
+  const delSelBtn = document.getElementById('btn-history-delete-selected');
+  if (createBtn) createBtn.style.display = canMutateHistory ? 'inline-flex' : 'none';
+  if (importBtn) importBtn.style.display = canMutateHistory ? 'inline-flex' : 'none';
+  if (selectAllBtn) selectAllBtn.style.display = canDeleteHistory ? 'inline-flex' : 'none';
+  if (clearSelBtn) clearSelBtn.style.display = canDeleteHistory ? 'inline-flex' : 'none';
+  if (delSelBtn) delSelBtn.style.display = canDeleteHistory ? 'inline-flex' : 'none';
+
   const seasonTabs = document.getElementById('hist-season-tabs');
   if (seasonTabs) {
     const tabs = getFixedSeasonTabs();
@@ -4466,7 +4480,8 @@ function renderHistory() {
   const countEl = document.getElementById('hist-count');
   if (countEl) {
     const seasonText = historySeasonFilter === 'all' ? 'All Sessions' : `Season ${historySeasonFilter}`;
-    countEl.textContent = `${filtered.length} session${filtered.length!==1?'s':''} · ${seasonText} · Selected ${selectedVisibleCount}`;
+    const selText = canDeleteHistory ? ` · Selected ${selectedVisibleCount}` : '';
+    countEl.textContent = `${filtered.length} session${filtered.length!==1?'s':''} · ${seasonText}${selText}`;
   }
   const head = document.getElementById('history-head-row');
   if (head) {
@@ -4475,7 +4490,7 @@ function renderHistory() {
     const cols = new Set(historyColumns || []);
     const allVisibleChecked = filtered.length > 0 && selectedVisibleCount === filtered.length;
     const someVisibleChecked = selectedVisibleCount > 0 && selectedVisibleCount < filtered.length;
-    let hh = `<th><input type="checkbox" ${allVisibleChecked ? 'checked' : ''} onchange="toggleHistorySelectAllVisible(this.checked)" ${filtered.length ? '' : 'disabled'} ${someVisibleChecked ? 'data-indeterminate="1"' : ''}></th>`;
+    let hh = showSelectionCol ? `<th><input type="checkbox" ${allVisibleChecked ? 'checked' : ''} onchange="toggleHistorySelectAllVisible(this.checked)" ${filtered.length ? '' : 'disabled'} ${someVisibleChecked ? 'data-indeterminate="1"' : ''}></th>` : '';
     hh += sortableHead('Date/Time', 'datetime') + sortableHead('Team', 'team');
     if (cols.has('eventName')) hh += sortableHead('Event', 'eventName');
     if (cols.has('track')) hh += sortableHead('Track', 'track');
@@ -4502,7 +4517,7 @@ function renderHistory() {
     if (cols.has('notes')) hh += sortableHead('Notes', 'notes');
     hh += '<th></th>';
     head.innerHTML = hh;
-    const master = head.querySelector('input[data-indeterminate="1"]');
+    const master = showSelectionCol ? head.querySelector('input[data-indeterminate="1"]') : null;
     if (master) master.indeterminate = true;
   }
 
@@ -4520,7 +4535,7 @@ function renderHistory() {
     const meta = getSessionEventMeta(s);
     const pendingBadge = isStub ? ' <span class="badge badge-blue" style="font-size:9px;opacity:0.95;">PENDING CAPTURE</span>' : '';
     const selected = historySelectedIds.has(String(s.id));
-    let row = `<td><input type="checkbox" ${selected ? 'checked' : ''} onchange="toggleHistoryRowSelection('${String(s.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'")}', this.checked)"></td>`;
+    let row = showSelectionCol ? `<td><input type="checkbox" ${selected ? 'checked' : ''} onchange="toggleHistoryRowSelection('${String(s.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'")}', this.checked)"></td>` : '';
     row += `<td class="mono" style="font-size:10px;color:var(--muted)">${dtStr}${pendingBadge}</td>
       <td><span class="team-dot" style="background:${tc}"></span>${s.team}</td>`;
     if (cols.has('eventName')) row += `<td style="font-size:12px;">${meta.eventName}</td>`;
@@ -4570,14 +4585,17 @@ function renderHistory() {
     if (cols.has('overtaking')) row += `<td>${isStub ? '' : (s.overtaking || 'No')}</td>`;
     if (cols.has('manualOverride')) row += `<td class="mono">${isStub ? '' : (s.manualOverride ?? '')}</td>`;
     if (cols.has('notes')) row += `<td style="font-size:11px;color:var(--muted);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${isStub ? '' : (s.notes||'')}</td>`;
-    return `<tr>${row}
-      <td style="display:flex;gap:4px;"><button class="btn sm" onclick="editSession('${s.id}')" title="Edit">✎</button><button class="btn sm danger" onclick="deleteSession('${s.id}')" title="Delete">✕</button></td>
-    </tr>`;
+    const canEditRow = canContributorMutateSession(s);
+    const canDeleteRow = isAdmin();
+    const actionCell = (canEditRow || canDeleteRow)
+      ? `<td style="display:flex;gap:4px;">${canEditRow ? `<button class="btn sm" onclick="editSession('${s.id}')" title="Edit">✎</button>` : ''}${canDeleteRow ? `<button class="btn sm danger" onclick="deleteSession('${s.id}')" title="Delete">✕</button>` : ''}</td>`
+      : '<td></td>';
+    return `<tr>${row}${actionCell}</tr>`;
   }).join('') || (() => {
     const cols = new Set(historyColumns || []);
     const optionalCount = ['eventName','track','eventType','sessType','sessNum','duration','weather','startAttempts','stoppages','riskScore','laps','laptime','speed','estops','crashed','damage','replans','instability','sensor','multicar','overtaking','manualOverride','notes']
       .filter(k => cols.has(k)).length;
-    const totalCols = 1 + 2 + optionalCount + 1;
+    const totalCols = (showSelectionCol ? 1 : 0) + 2 + optionalCount + 1;
     return `<tr><td colspan="${totalCols}" style="text-align:center;color:var(--muted);padding:20px;">No sessions logged yet</td></tr>`;
   })();
 }

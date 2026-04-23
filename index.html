@@ -2230,6 +2230,8 @@ function refreshAuthUI() {
     }
   }
   refreshHomeAuthBar();
+  const activeView = currentWorkspace ? readScopedString('active_view', isQGWorkspace() ? 'qg' : 'live', 'a2rl_active_view') : '';
+  if (activeView === 'history') renderHistory();
 }
 function refreshHomeAuthBar() {
   const guest = document.getElementById('home-auth-guest');
@@ -9367,6 +9369,10 @@ showView = function(id) {
 function editSession(id) {
   const s=sessions.find(x=>String(x.id)===String(id));
   if(!s){return;}
+  if (isViewer()) {
+    alert('Viewer mode: this action is locked.');
+    return;
+  }
   if (!canContributorMutateSession(s)) {
     alert('Only admins or the original contributor can edit a non-completed session.');
     return;
@@ -9403,6 +9409,10 @@ function saveEditSession() {
   const id=document.getElementById('edit-sess-id').value;
   const idx=sessions.findIndex(x=>String(x.id)===id);
   if(idx<0) return;
+  if (isViewer()) {
+    alert('Viewer mode: this action is locked.');
+    return;
+  }
   if (!canContributorMutateSession(sessions[idx])) {
     alert('Only admins or the original contributor can update a non-completed session.');
     return;

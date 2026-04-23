@@ -8394,20 +8394,8 @@ function exportData() {
   a.download = 'a2rl_sessions_'+new Date().toISOString().split('T')[0]+'.json'; a.click();
 }
 function exportCSV() {
-  const preferredOrder = [
-    'id','timestamp','trackTimestamp','team','eventId','eventName','eventType','track','sessType','sessionType','sessNum','duration','weather',
-    'startAttempts','stoppages','riskScore','riskConfidence','partialData','riskInsufficientData','riskCrashFloorEnforced','riskFlags',
-    'laps','laptime','speed','estops','crashed','damage','replans','instability','sensor','multicar','overtaking','manualOverride',
-    'submittedBy','status','schedBlockId','stub','notes'
-  ];
-  const known = new Set(preferredOrder);
-  const dynamicKeys = new Set();
-  (Array.isArray(sessions) ? sessions : []).forEach(s => {
-    if (!s || typeof s !== 'object') return;
-    Object.keys(s).forEach(k => dynamicKeys.add(k));
-  });
-  const extraKeys = Array.from(dynamicKeys).filter(k => !known.has(k)).sort();
-  const allFields = preferredOrder.filter(k => dynamicKeys.has(k)).concat(extraKeys);
+  // Export as an input template only (manual/capture fields), excluding calculated outputs.
+  const allFields = CSV_IMPORT_FIELDS.map(f => f.key);
   const esc = (value) => {
     if (value === null || value === undefined) return '';
     if (typeof value === 'object') {
@@ -8417,7 +8405,19 @@ function exportCSV() {
     return `"${text.replace(/"/g, '""')}"`;
   };
   const header = allFields.join(',');
-  const rows = (Array.isArray(sessions) ? sessions : []).map(s => allFields.map(field => esc(s?.[field])).join(',')).join('\n');
+  const rows = (Array.isArray(sessions) ? sessions : []).map(s => {
+    const ts = String(s?.timestamp || s?.trackTimestamp || '').trim();
+    const dt = ts ? new Date(ts) : null;
+    const dateVal = dt && !isNaN(dt) ? dt.toISOString().slice(0, 10) : '';
+    const timeVal = dt && !isNaN(dt) ? dt.toISOString().slice(11, 16) : '';
+    return allFields.map(field => {
+      if (field === 'timestamp') return esc(ts);
+      if (field === 'date') return esc(dateVal);
+      if (field === 'time') return esc(timeVal);
+      if (field === 'sessType') return esc(s?.sessType || s?.sessionType || '');
+      return esc(s?.[field]);
+    }).join(',');
+  }).join('\n');
   const blob = new Blob([`${header}\n${rows}`],{type:'text/csv'});
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
   a.download = 'a2rl_sessions_'+new Date().toISOString().split('T')[0]+'.csv'; a.click();

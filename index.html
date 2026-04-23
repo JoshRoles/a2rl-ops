@@ -8771,30 +8771,73 @@ function normalizeSessionTypeLabel(value) {
   return 'Single Car';
 }
 function parseLegacyTimestamp(row, map) {
+  const buildIsoFromParts = (year, month, day, hour, minute, second) => {
+    if (!(year >= 1900 && month >= 1 && month <= 12 && day >= 1 && day <= 31)) return null;
+    const dt = new Date(year, month - 1, day, hour, minute, second, 0);
+    if (isNaN(dt)) return null;
+    // Guard against rollover (e.g. 31/02) silently shifting month/day.
+    if (dt.getFullYear() !== year || (dt.getMonth() + 1) !== month || dt.getDate() !== day) return null;
+    return dt.toISOString();
+  };
+  const parseDateTimeParts = (dateText, timeText = '') => {
+    const dtxt = String(dateText || '').trim();
+    if (!dtxt) return null;
+    const ttxt = String(timeText || '').trim();
+    const timeMatch = ttxt.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm)?$/i);
+    let hour = 0;
+    let minute = 0;
+    let second = 0;
+    if (timeMatch) {
+      hour = Math.max(0, Math.min(23, parseInt(timeMatch[1], 10) || 0));
+      minute = Math.max(0, Math.min(59, parseInt(timeMatch[2], 10) || 0));
+      second = Math.max(0, Math.min(59, parseInt(timeMatch[3] || '0', 10) || 0));
+      const mer = String(timeMatch[4] || '').toLowerCase();
+      if (mer === 'pm' && hour < 12) hour += 12;
+      if (mer === 'am' && hour === 12) hour = 0;
+    }
+    // Unambiguous ISO-like date: yyyy-mm-dd or yyyy/mm/dd
+    let m = dtxt.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})$/);
+    if (m) {
+      const year = parseInt(m[1], 10);
+      const month = parseInt(m[2], 10);
+      const day = parseInt(m[3], 10);
+      return buildIsoFromParts(year, month, day, hour, minute, second);
+    }
+    // Expected legacy format from platform uploads: dd/mm/yyyy (or dd-mm-yyyy / dd.mm.yyyy)
+    m = dtxt.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+    if (m) {
+      const day = parseInt(m[1], 10);
+      const month = parseInt(m[2], 10);
+      const year = parseInt(m[3], 10);
+      return buildIsoFromParts(year, month, day, hour, minute, second);
+    }
+    // Compact ddmmyyyy
+    m = dtxt.match(/^(\d{2})(\d{2})(\d{4})$/);
+    if (m) {
+      const day = parseInt(m[1], 10);
+      const month = parseInt(m[2], 10);
+      const year = parseInt(m[3], 10);
+      return buildIsoFromParts(year, month, day, hour, minute, second);
+    }
+    return null;
+  };
   const ts = map.timestamp ? (row[map.timestamp] || '') : '';
   if (ts) {
-    const d = new Date(ts);
-    if (!isNaN(d)) return d.toISOString();
+    const tsText = String(ts).trim();
+    const split = tsText.split(/[T\s]/);
+    const dtStrict = parseDateTimeParts(split[0], split[1] || '');
+    if (dtStrict) return dtStrict;
+    // Allow only explicit full ISO timestamps as direct fallback.
+    if (/^\d{4}-\d{2}-\d{2}T/.test(tsText)) {
+      const d = new Date(tsText);
+      if (!isNaN(d)) return d.toISOString();
+    }
   }
   const dateV = map.date ? (row[map.date] || '') : '';
   const timeV = map.time ? (row[map.time] || '') : '';
   if (dateV) {
-    const trimmedDate = String(dateV).trim();
-    const trimmedTime = String(timeV || '00:00').trim() || '00:00';
-    const slashMatch = trimmedDate.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-    let composed = null;
-    if (slashMatch) {
-      const month = parseInt(slashMatch[1], 10);
-      const day = parseInt(slashMatch[2], 10);
-      const year = parseInt(slashMatch[3], 10);
-      const timeMatch = trimmedTime.match(/^(\d{1,2}):(\d{2})$/);
-      const hour = timeMatch ? parseInt(timeMatch[1], 10) : 0;
-      const minute = timeMatch ? parseInt(timeMatch[2], 10) : 0;
-      composed = new Date(year, month - 1, day, hour, minute, 0, 0);
-    } else {
-      composed = new Date(`${trimmedDate}T${trimmedTime}`);
-    }
-    if (!isNaN(composed)) return composed.toISOString();
+    const parsed = parseDateTimeParts(dateV, timeV || '00:00');
+    if (parsed) return parsed;
   }
   return null;
 }

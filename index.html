@@ -522,14 +522,15 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
         <div class="stat-card" style="--accent-line:var(--green)">
           <div class="stat-label">Active Teams</div>
           <div class="stat-val" id="stat-active-teams">12</div>
-          <div class="stat-delta" style="color:var(--muted)">registered this event</div>
+          <div class="stat-delta" id="stat-active-teams-sub" style="color:var(--muted)">registered this event</div>
         </div>
         <div class="stat-card" style="--accent-line:var(--accent)">
-          <div class="stat-label">Sessions Today</div>
+          <div class="stat-label" id="stat-sessions-label">Sessions Today</div>
           <div class="stat-val" id="stat-sessions-today">0</div>
-          <div class="stat-delta" style="color:var(--muted)">logged today</div>
+          <div class="stat-delta" id="stat-sessions-sub" style="color:var(--muted)">logged today</div>
         </div>
       </div>
+      <div id="live-season-tabs" style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px 0;"></div>
 
       <div class="grid-65">
         <div class="panel">
@@ -542,15 +543,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
           </div>
           <div class="panel-body" style="padding:0">
             <table class="data-table">
-              <thead><tr>
-                <th style="width:28px">#</th>
-                <th>Team</th>
-                <th>Risk Score</th>
-                <th>TTC</th>
-                <th>E-Stops</th>
-                <th>Trend</th>
-                <th>Status</th>
-              </tr></thead>
+              <thead><tr id="live-head-row"></tr></thead>
               <tbody id="team-tbody"></tbody>
             </table>
           </div>
@@ -1801,6 +1794,7 @@ let teamSummaryMetrics = [];
 let historyColumns = [];
 let historySeasonFilter = 'all';
 let teamSeasonFilter = 'all';
+let liveSeasonFilter = 'all';
 let insuranceSeasonFilter = 'all';
 let insuranceMetricBaseKm = 100;
 let insuranceVisibleMetrics = { crashes:true, estops:true, instability:true };
@@ -1976,6 +1970,7 @@ function loadWorkspaceData(opts = {}) {
   trackDistances = readScopedJson('track_distances', {}, 'a2rl_track_distances');
   teamSummaryMetrics = readScopedJson('team_summary_metrics', ['sessions','cumRisk','avg','best','worst','costPerLap','distanceKm','damageEff','estops','crashes','trackHrs','liability','tier'], 'a2rl_team_summary_metrics');
   historyColumns = readScopedJson('history_columns', [...DEFAULT_HISTORY_COLUMNS], 'a2rl_history_columns');
+  liveSeasonFilter = String(readScopedJson('live_season_filter', 'all', '') || 'all');
   historySeasonFilter = String(readScopedJson('history_season_filter', 'all', '') || 'all');
   teamSeasonFilter = String(readScopedJson('team_season_filter', 'all', '') || 'all');
   insuranceSeasonFilter = String(readScopedJson('insurance_season_filter', 'all', '') || 'all');
@@ -2010,6 +2005,7 @@ function loadWorkspaceData(opts = {}) {
     'duration','weather','startAttempts','stoppages','laptime','damage','replans','instability','sensor','multicar','overtaking','manualOverride'
   ]));
   if (!historyColumns.length) historyColumns = HISTORY_COLUMNS.map(c => c.key);
+  if (!['all','2','3','4','5','6','7'].includes(String(liveSeasonFilter))) liveSeasonFilter = 'all';
   if (!['all','2','3','4','5','6','7'].includes(String(historySeasonFilter))) historySeasonFilter = 'all';
   if (!['all','2','3','4','5','6','7'].includes(String(teamSeasonFilter))) teamSeasonFilter = 'all';
   if (!['all','2','3','4','5','6','7'].includes(String(insuranceSeasonFilter))) insuranceSeasonFilter = 'all';
@@ -3100,6 +3096,7 @@ function buildWorkspaceStatePayload() {
     track_distances: trackDistances,
     team_summary_metrics: teamSummaryMetrics,
     history_columns: historyColumns,
+    live_season_filter: liveSeasonFilter,
     history_season_filter: historySeasonFilter,
     team_season_filter: teamSeasonFilter,
     insurance_season_filter: insuranceSeasonFilter,
@@ -3133,6 +3130,7 @@ function persistWorkspaceStateToLocal(state) {
   put('track_distances', state.track_distances || {});
   put('team_summary_metrics', state.team_summary_metrics || []);
   put('history_columns', state.history_columns || []);
+  put('live_season_filter', state.live_season_filter || 'all');
   put('history_season_filter', state.history_season_filter || 'all');
   put('team_season_filter', state.team_season_filter || 'all');
   put('insurance_season_filter', state.insurance_season_filter || 'all');
@@ -3290,6 +3288,7 @@ function save() {
   localStorage.setItem(wk('track_distances'), JSON.stringify(trackDistances || {}));
   localStorage.setItem(wk('team_summary_metrics'), JSON.stringify(teamSummaryMetrics));
   localStorage.setItem(wk('history_columns'), JSON.stringify(historyColumns));
+  localStorage.setItem(wk('live_season_filter'), JSON.stringify(liveSeasonFilter || 'all'));
   localStorage.setItem(wk('history_season_filter'), JSON.stringify(historySeasonFilter || 'all'));
   localStorage.setItem(wk('team_season_filter'), JSON.stringify(teamSeasonFilter || 'all'));
   localStorage.setItem(wk('insurance_season_filter'), JSON.stringify(insuranceSeasonFilter || 'all'));
@@ -3790,6 +3789,11 @@ function setTeamSeason(seasonKey) {
   save();
   renderTeamView();
 }
+function setLiveSeason(seasonKey) {
+  liveSeasonFilter = String(seasonKey || 'all');
+  save();
+  renderLiveTable();
+}
 function setInsuranceSeason(seasonKey) {
   insuranceSeasonFilter = String(seasonKey || 'all');
   save();
@@ -3889,39 +3893,119 @@ function showView(id) {
 // LIVE DASHBOARD
 // ═══════════════════════════════════════════════════════════════════════
 function renderLiveTable() {
+  const seasonTabs = document.getElementById('live-season-tabs');
+  if (seasonTabs) {
+    seasonTabs.innerHTML = getFixedSeasonTabs().map(tab => {
+      const label = tab.key === 'all' ? 'All Seasons' : tab.label;
+      return `<button class="btn sm${String(liveSeasonFilter) === String(tab.key) ? ' primary' : ''}" onclick="setLiveSeason('${tab.key}')">${label}</button>`;
+    }).join('');
+  }
+  const seasonScoped = sessions.filter(s => isSessionInSeasonFilter(s, liveSeasonFilter));
+  const scopeLabel = liveSeasonFilter === 'all' ? 'All Seasons' : `Season ${liveSeasonFilter}`;
   const activeTeams = teams.filter(t => t.active);
-  const sorted = activeTeams.map(t => ({
-    team: t,
-    score: liveRisks[t.name] || 0,
-    ttc: 0, estops: 0
-  })).sort((a,b) => b.score - a.score);
-  const hasRealRisk = sessions.some(s => (s.riskScore || 0) > 0 && !s.stub);
+  const eventRows = seasonScoped.filter(s => !s.stub);
 
+  const recencyWeightedAverage = (rows) => {
+    if (!rows.length) return 0;
+    let wSum = 0, vSum = 0;
+    rows.forEach((r, i) => {
+      const w = i + 1;
+      wSum += w;
+      vSum += (toRiskNumber(r) * w);
+    });
+    return wSum ? (vSum / wSum) : 0;
+  };
+  const factorClaimFrequency = (rate) => {
+    if (rate <= 0) return 0.75;
+    if (rate < 0.05) return 0.90;
+    if (rate < 0.10) return 1.00;
+    if (rate < 0.15) return 1.25;
+    if (rate < 0.25) return 1.50;
+    return 1.85;
+  };
+  const factorLossSeverity = (avgLoss) => {
+    if (avgLoss <= 0) return 0.80;
+    if (avgLoss < 10000) return 0.95;
+    if (avgLoss < 30000) return 1.10;
+    if (avgLoss < 60000) return 1.30;
+    if (avgLoss < 100000) return 1.55;
+    return 1.80;
+  };
+  const factorExposure = (costPerKm) => {
+    if (costPerKm <= 0) return 0.85;
+    if (costPerKm < 50) return 0.95;
+    if (costPerKm < 150) return 1.00;
+    if (costPerKm < 300) return 1.15;
+    if (costPerKm < 500) return 1.35;
+    return 1.60;
+  };
+  const factorTrend = (delta, sessionsCount) => {
+    if (sessionsCount < 10) return 1.00;
+    if (delta <= -10) return 0.88;
+    if (delta <= -5) return 0.94;
+    if (delta < 5) return 1.00;
+    if (delta <= 10) return 1.12;
+    return 1.25;
+  };
+  const factorNearMiss = (rate) => {
+    if (rate <= 0) return 0.95;
+    if (rate < 0.10) return 1.00;
+    if (rate < 0.20) return 1.10;
+    return 1.22;
+  };
+
+  const teamStats = activeTeams.map(t => {
+    const ts = eventRows.filter(s => s.team === t.name).sort((a,b)=>getSessionDateObj(a)-getSessionDateObj(b));
+    const scored = ts.filter(hasUsableRiskScore);
+    const scores = scored.map(toRiskNumber);
+    const latestScore = scores.length ? scores[scores.length - 1] : 0;
+    const totalDamage = ts.reduce((a,s)=>a+Math.max(0, Number(s.damage)||0),0);
+    const totalKm = ts.reduce((a,s)=>a+getSessionDistanceKm(s),0);
+    const crashes = ts.filter(s => String(s.crashed || '').trim().toLowerCase() === 'yes').length;
+    const avgLoss = crashes > 0 ? (totalDamage / crashes) : 0;
+    const costPerKm = totalKm > 0 ? (totalDamage / totalKm) : 0;
+    const nearMissRate = ts.length > 0 ? (ts.filter(s => (Number(s.estops) || 0) > 0).length / ts.length) : 0;
+    const early10 = ts.slice(0, 10);
+    const recent10 = ts.slice(-10);
+    const trendDelta = recencyWeightedAverage(recent10) - recencyWeightedAverage(early10);
+    const annualPremiumIndex = ts.length > 0
+      ? Number((1.00
+        * factorClaimFrequency(ts.length ? (crashes / ts.length) : 0)
+        * factorLossSeverity(avgLoss)
+        * factorExposure(costPerKm)
+        * factorTrend(trendDelta, ts.length)
+        * factorNearMiss(nearMissRate)
+      ).toFixed(2))
+      : null;
+    return {
+      team: t,
+      sessions: ts.length,
+      scoredSessions: scored.length,
+      latestScore,
+      avgRisk: scores.length ? (scores.reduce((a,b)=>a+b,0) / scores.length) : 0,
+      crashes,
+      crashFreq: ts.length ? (crashes / ts.length) : 0,
+      estopsAvg: ts.length ? (ts.reduce((a,s)=>a+(Number(s.estops) || 0),0) / ts.length) : 0,
+      ttcAvg: ts.length ? (ts.reduce((a,s)=>a+(Number(s.ttc) || 0),0) / ts.length) : 0,
+      totalKm,
+      totalDamage,
+      avgLoss,
+      costPerKm,
+      nearMissRate,
+      annualPremiumIndex,
+      latestAt: ts.length ? getSessionDateObj(ts[ts.length - 1]) : null,
+      tier: riskTier(scores.length ? scores[scores.length - 1] : 0),
+    };
+  }).sort((a,b)=>b.latestScore-a.latestScore);
+
+  const head = document.getElementById('live-head-row');
+  if (head) {
+    head.innerHTML = '<th style="width:28px">#</th><th>Team</th><th>Risk Score</th><th>Total Sessions</th><th>Total Distance (km)</th><th>Crash Frequency</th><th>Avg Loss Severity ($)</th><th>Avg Crash Cost/Km ($)</th><th>E-Stops (avg)</th><th>TTC (avg)</th><th>Annual Premium Index</th><th>Status</th>';
+  }
   let rank = 1;
-  document.getElementById('team-tbody').innerHTML = sorted.map((row) => {
-    const { team, score } = row;
+  document.getElementById('team-tbody').innerHTML = teamStats.map((row) => {
+    const { team, latestScore: score } = row;
     const c = riskColor(score);
-    const tier = riskTier(score);
-    // Trend is computed from last two real sessions for this team
-    const real = sessions
-      .filter(s => s.team === team.name && (s.riskScore || 0) > 0 && !s.stub)
-      .sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
-    let trend = '—', trendCol = 'var(--muted)', trendVal = '';
-    if (real.length >= 2) {
-      const a = real[real.length-2].riskScore || 0;
-      const b = real[real.length-1].riskScore || 0;
-      const d = +(b - a).toFixed(1);
-      if (d > 0) { trend = '▲'; trendCol = 'var(--red)'; trendVal = ' ' + d.toFixed(1); }
-      else if (d < 0) { trend = '▼'; trendCol = 'var(--green)'; trendVal = ' ' + Math.abs(d).toFixed(1); }
-      else { trend = '—'; trendCol = 'var(--muted)'; trendVal = ' 0.0'; }
-    }
-    const recent = real.slice(-3);
-    const estopsAvg = recent.length ? (recent.reduce((a,s)=>a+(s.estops||0),0) / recent.length) : 0;
-    const ttcAvg = recent.length ? (recent.reduce((a,s)=>a+(s.ttc||0),0) / recent.length) : 0;
-    const estopsDisplay = recent.length ? estopsAvg.toFixed(1) : '—';
-    const ttcDisplay = recent.length && ttcAvg > 0 ? ttcAvg.toFixed(1) : '—';
-    const latest = real.length ? getSessionDateObj(real[real.length-1]) : null;
-    const freshness = latest ? `${latest.toLocaleDateString(undefined,{day:'2-digit',month:'short'})} ${latest.toTimeString().slice(0,5)}` : 'no data';
     return `<tr>
       <td style="color:var(--muted);font-size:11px;">${rank++}</td>
       <td><span class="team-dot" style="background:${team.color}"></span><span class="team-name" style="font-weight:600">${team.name}</span></td>
@@ -3931,38 +4015,59 @@ function renderLiveTable() {
           <span class="risk-num" style="color:${c}">${score.toFixed(1)}</span>
         </div>
       </td>
-      <td class="mono" style="color:var(--muted)">${ttcDisplay}</td>
-      <td class="mono" style="color:var(--muted)">${estopsDisplay}</td>
-      <td style="font-size:11px;">
-        <div style="color:${trendCol};font-size:12px;">${trend}${trendVal}</div>
-        <div style="color:var(--muted);font-size:10px;">last: ${freshness}</div>
-      </td>
-      <td><span class="badge ${tier.cls}">${tier.label}</span></td>
+      <td class="mono">${row.sessions}</td>
+      <td class="mono">${row.totalKm > 0 ? row.totalKm.toFixed(1) : '—'}</td>
+      <td class="mono">${(row.crashFreq * 100).toFixed(1)}%</td>
+      <td class="mono">$${Number(row.avgLoss || 0).toLocaleString(undefined,{maximumFractionDigits:0})}</td>
+      <td class="mono">${row.totalKm > 0 ? `$${row.costPerKm.toFixed(1)}` : '—'}</td>
+      <td class="mono">${row.sessions ? row.estopsAvg.toFixed(2) : '—'}</td>
+      <td class="mono">${row.sessions ? row.ttcAvg.toFixed(2) : '—'}</td>
+      <td class="mono" style="color:${(row.annualPremiumIndex || 1) >= 1 ? C.red : C.green}">${row.annualPremiumIndex === null ? '—' : `${Number(row.annualPremiumIndex).toFixed(2)}x`}</td>
+      <td><span class="badge ${row.tier.cls}">${row.tier.label}</span></td>
     </tr>`;
   }).join('');
 
   // Update stat cards
-  const avg = hasRealRisk ? (sorted.reduce((a,b) => a+b.score, 0) / (sorted.length||1)) : 0;
+  const hasRealRisk = teamStats.some(r => r.scoredSessions > 0);
+  const avg = hasRealRisk
+    ? (teamStats.filter(r => r.scoredSessions > 0).reduce((a,b) => a + b.avgRisk, 0) / Math.max(1, teamStats.filter(r => r.scoredSessions > 0).length))
+    : 0;
   document.getElementById('stat-avg').innerHTML = avg.toFixed(1)+'<span>/100</span>';
   document.getElementById('gauge-val').textContent = Math.round(avg);
   const arcEl = document.getElementById('gauge-arc');
   arcEl.setAttribute('stroke-dasharray', `${263*(avg/100)} 377`);
   arcEl.setAttribute('stroke', avg < thresholds.low ? '#00e87a' : avg < thresholds.med ? '#ffaa00' : '#ff3c3c');
 
-  const highest = hasRealRisk ? sorted[0] : null;
-  if (highest && highest.score > 0) {
-    document.getElementById('stat-highest').textContent = `${highest.team.name} · ${highest.score.toFixed(1)}`;
-    const tier = riskTier(highest.score);
+  const highest = teamStats.filter(r => r.scoredSessions > 0).sort((a,b)=>b.latestScore-a.latestScore)[0] || null;
+  if (highest && highest.latestScore > 0) {
+    document.getElementById('stat-highest').textContent = `${highest.team.name} · ${highest.latestScore.toFixed(1)}`;
+    const tier = riskTier(highest.latestScore);
     document.getElementById('stat-highest').nextElementSibling.innerHTML = `<span class="badge ${tier.cls}">${tier.label}</span>`;
   } else {
     document.getElementById('stat-highest').textContent = '—';
     document.getElementById('stat-highest').nextElementSibling.innerHTML = `<span style="color:var(--muted)">no sessions yet</span>`;
   }
-  document.getElementById('stat-active-teams').textContent = activeTeams.length;
+  const activeTeamsInScope = new Set(eventRows.map(s => s.team));
+  document.getElementById('stat-active-teams').textContent = activeTeamsInScope.size;
+  const activeTeamsSub = document.getElementById('stat-active-teams-sub');
+  if (activeTeamsSub) activeTeamsSub.textContent = `${scopeLabel} scope`;
 
-  const today = new Date().toDateString();
-  const todaySessions = sessions.filter(s => new Date(s.trackTimestamp || s.timestamp).toDateString() === today);
-  document.getElementById('stat-sessions-today').textContent = todaySessions.length;
+  const sessionsLabel = document.getElementById('stat-sessions-label');
+  const sessionsSub = document.getElementById('stat-sessions-sub');
+  if (liveSeasonFilter === 'all') {
+    const today = new Date().toDateString();
+    const todaySessions = seasonScoped.filter(s => new Date(s.trackTimestamp || s.timestamp).toDateString() === today);
+    if (sessionsLabel) sessionsLabel.textContent = 'Sessions Today';
+    document.getElementById('stat-sessions-today').textContent = todaySessions.length;
+    if (sessionsSub) sessionsSub.textContent = 'logged today';
+  } else {
+    if (sessionsLabel) sessionsLabel.textContent = 'Sessions In Scope';
+    document.getElementById('stat-sessions-today').textContent = eventRows.length;
+    if (sessionsSub) sessionsSub.textContent = scopeLabel;
+  }
+
+  renderFeed(seasonScoped);
+  initLiveCharts(seasonScoped);
 }
 
 function updateTopbarSessionInfo() {
@@ -3974,10 +4079,11 @@ function updateTopbarSessionInfo() {
   el.textContent = `EVENT ${evNum} · SESSIONS ${realSess}`;
 }
 
-function renderFeed() {
+function renderFeed(sourceSessions = null) {
   const feed = document.getElementById('event-feed');
   if (!feed) return;
-  const sorted = [...sessions].sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp));
+  const base = Array.isArray(sourceSessions) ? sourceSessions : sessions;
+  const sorted = [...base].sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp));
   if (!sorted.length) {
     feed.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:20px;">No sessions logged yet</div>';
     const ce = document.getElementById('feed-count'); if(ce) ce.textContent='';
@@ -8118,9 +8224,10 @@ function mkChart(id, cfg) {
   return ctx._chart;
 }
 
-function initLiveCharts() {
+function initLiveCharts(sourceSessions = null) {
   // Live dashboard charts should be empty until real sessions exist
-  const real = sessions.filter(s => (s.riskScore || 0) > 0 && !s.stub)
+  const base = Array.isArray(sourceSessions) ? sourceSessions : sessions;
+  const real = base.filter(s => (s.riskScore || 0) > 0 && !s.stub)
     .sort((a,b)=>new Date(a.timestamp)-new Date(b.timestamp));
   const active = teams.filter(t=>t.active);
 

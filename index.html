@@ -987,6 +987,9 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
           <option>Single Car</option><option>Multi Car</option><option>Open Pit Lane</option>
         </select>
         <button class="btn sm" onclick="toggleHistoryMetricsPanel()">Columns ⚙</button>
+        <button class="btn sm" onclick="selectAllVisibleHistorySessions()">Select All</button>
+        <button class="btn sm" onclick="clearHistorySelection()">Clear Selection</button>
+        <button class="btn sm danger" onclick="deleteSelectedHistorySessions()">Delete Selected</button>
         <div style="margin-left:auto;display:flex;gap:8px;">
           <span id="hist-count" style="font-size:12px;color:var(--muted);align-self:center;"></span>
           <button class="btn sm" onclick="importSessionsCSV()">⤒ Bulk Upload CSV</button>
@@ -1830,6 +1833,7 @@ let teamAnalysisSelected = '';
 let csvImportState = { fileName:'', headers:[], rows:[], mapping:{} };
 let teamSummarySort = { key:'avg', dir:'desc' };
 let historySort = { key:'datetime', dir:'desc' };
+let historySelectedIds = new Set();
 let users = JSON.parse(localStorage.getItem(GLOBAL_KEYS.users) || '[]');
 let currentUser = JSON.parse(localStorage.getItem(GLOBAL_KEYS.currentUser) || 'null');
 
@@ -4373,26 +4377,53 @@ function toggleHistoryMetricsPanel() {
   panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
   if (panel.style.display !== 'none') renderHistoryMetricControls();
 }
-function renderHistory() {
+function toggleHistoryRowSelection(id, checked) {
+  const key = String(id || '');
+  if (!key) return;
+  if (checked) historySelectedIds.add(key);
+  else historySelectedIds.delete(key);
+  renderHistory();
+}
+function selectAllVisibleHistorySessions() {
+  const rows = getFilteredHistorySessions();
+  rows.forEach(s => historySelectedIds.add(String(s.id)));
+  renderHistory();
+}
+function clearHistorySelection() {
+  historySelectedIds = new Set();
+  renderHistory();
+}
+function toggleHistorySelectAllVisible(checked) {
+  const rows = getFilteredHistorySessions();
+  if (checked) rows.forEach(s => historySelectedIds.add(String(s.id)));
+  else rows.forEach(s => historySelectedIds.delete(String(s.id)));
+  renderHistory();
+}
+function deleteSelectedHistorySessions() {
+  if (!isAdmin()) {
+    alert('Only admins can delete historical session records.');
+    return;
+  }
+  const selected = new Set(Array.from(historySelectedIds).map(x => String(x)));
+  const targets = sessions.filter(s => selected.has(String(s.id)));
+  if (!targets.length) {
+    alert('No selected sessions to delete.');
+    return;
+  }
+  if (!confirm(`Delete ${targets.length} selected session${targets.length !== 1 ? 's' : ''}?`)) return;
+  sessions = sessions.filter(s => !selected.has(String(s.id)));
+  historySelectedIds = new Set();
+  schedule.forEach(b => recomputeBlockCompletion(b));
+  save();
+  renderHistory();
+  renderTeamView();
+  renderInsurance();
+  renderLiveTable();
+}
+function getFilteredHistorySessions() {
   const filterTeam = document.getElementById('hist-filter-team')?.value || '';
   const filterType = document.getElementById('hist-filter-type')?.value || '';
   const filterSess = document.getElementById('hist-filter-sess')?.value || '';
-  const seasonTabs = document.getElementById('hist-season-tabs');
-  if (seasonTabs) {
-    const tabs = getFixedSeasonTabs();
-    seasonTabs.innerHTML = tabs.map(tab => {
-      const label = tab.key === 'all' ? 'All Sessions' : tab.label;
-      return `<button class="btn sm${String(historySeasonFilter) === String(tab.key) ? ' primary' : ''}" onclick="setHistorySeason('${tab.key}')">${label}</button>`;
-    }).join('');
-  }
-
-  let filtered = [...sessions].filter(s => {
-    if (filterTeam && s.team !== filterTeam) return false;
-    if (filterType && s.eventType !== filterType) return false;
-    if (filterSess && s.sessType !== filterSess) return false;
-    if (!isSessionInSeasonFilter(s, historySeasonFilter)) return false;
-    return true;
-  });
   const sortKey = historySort?.key || 'datetime';
   const sortDir = historySort?.dir === 'asc' ? 1 : -1;
   const compare = (a,b) => (a < b ? -1 : (a > b ? 1 : 0));
@@ -4408,23 +4439,44 @@ function renderHistory() {
     if (key === 'crashed') return String(s.crashed || '').toLowerCase();
     return Number(s[key] || 0);
   };
-  filtered.sort((a,b) => {
-    const av = valueForSort(a, sortKey);
-    const bv = valueForSort(b, sortKey);
-    return compare(av, bv) * sortDir;
+  const filtered = [...sessions].filter(s => {
+    if (filterTeam && s.team !== filterTeam) return false;
+    if (filterType && s.eventType !== filterType) return false;
+    if (filterSess && s.sessType !== filterSess) return false;
+    if (!isSessionInSeasonFilter(s, historySeasonFilter)) return false;
+    return true;
   });
+  filtered.sort((a,b) => compare(valueForSort(a, sortKey), valueForSort(b, sortKey)) * sortDir);
+  return filtered;
+}
+function renderHistory() {
+  const seasonTabs = document.getElementById('hist-season-tabs');
+  if (seasonTabs) {
+    const tabs = getFixedSeasonTabs();
+    seasonTabs.innerHTML = tabs.map(tab => {
+      const label = tab.key === 'all' ? 'All Sessions' : tab.label;
+      return `<button class="btn sm${String(historySeasonFilter) === String(tab.key) ? ' primary' : ''}" onclick="setHistorySeason('${tab.key}')">${label}</button>`;
+    }).join('');
+  }
+  let filtered = getFilteredHistorySessions();
+  const sortKey = historySort?.key || 'datetime';
+  const sortDir = historySort?.dir === 'asc' ? 1 : -1;
+  const selectedVisibleCount = filtered.filter(s => historySelectedIds.has(String(s.id))).length;
 
   const countEl = document.getElementById('hist-count');
   if (countEl) {
     const seasonText = historySeasonFilter === 'all' ? 'All Sessions' : `Season ${historySeasonFilter}`;
-    countEl.textContent = `${filtered.length} session${filtered.length!==1?'s':''} · ${seasonText}`;
+    countEl.textContent = `${filtered.length} session${filtered.length!==1?'s':''} · ${seasonText} · Selected ${selectedVisibleCount}`;
   }
   const head = document.getElementById('history-head-row');
   if (head) {
     const sortArrow = key => (sortKey === key ? (sortDir === 1 ? ' ▲' : ' ▼') : '');
     const sortableHead = (label, key) => `<th onclick="setHistorySort('${key}')" style="cursor:pointer;user-select:none;" title="Sort by ${label}">${label}${sortArrow(key)}</th>`;
     const cols = new Set(historyColumns || []);
-    let hh = sortableHead('Date/Time', 'datetime') + sortableHead('Team', 'team');
+    const allVisibleChecked = filtered.length > 0 && selectedVisibleCount === filtered.length;
+    const someVisibleChecked = selectedVisibleCount > 0 && selectedVisibleCount < filtered.length;
+    let hh = `<th><input type="checkbox" ${allVisibleChecked ? 'checked' : ''} onchange="toggleHistorySelectAllVisible(this.checked)" ${filtered.length ? '' : 'disabled'} ${someVisibleChecked ? 'data-indeterminate="1"' : ''}></th>`;
+    hh += sortableHead('Date/Time', 'datetime') + sortableHead('Team', 'team');
     if (cols.has('eventName')) hh += sortableHead('Event', 'eventName');
     if (cols.has('track')) hh += sortableHead('Track', 'track');
     if (cols.has('eventType')) hh += sortableHead('Event Type', 'eventType');
@@ -4450,6 +4502,8 @@ function renderHistory() {
     if (cols.has('notes')) hh += sortableHead('Notes', 'notes');
     hh += '<th></th>';
     head.innerHTML = hh;
+    const master = head.querySelector('input[data-indeterminate="1"]');
+    if (master) master.indeterminate = true;
   }
 
   const tbody = document.getElementById('history-tbody');
@@ -4465,7 +4519,9 @@ function renderHistory() {
     const cols = new Set(historyColumns || []);
     const meta = getSessionEventMeta(s);
     const pendingBadge = isStub ? ' <span class="badge badge-blue" style="font-size:9px;opacity:0.95;">PENDING CAPTURE</span>' : '';
-    let row = `<td class="mono" style="font-size:10px;color:var(--muted)">${dtStr}${pendingBadge}</td>
+    const selected = historySelectedIds.has(String(s.id));
+    let row = `<td><input type="checkbox" ${selected ? 'checked' : ''} onchange="toggleHistoryRowSelection('${String(s.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'")}', this.checked)"></td>`;
+    row += `<td class="mono" style="font-size:10px;color:var(--muted)">${dtStr}${pendingBadge}</td>
       <td><span class="team-dot" style="background:${tc}"></span>${s.team}</td>`;
     if (cols.has('eventName')) row += `<td style="font-size:12px;">${meta.eventName}</td>`;
     if (cols.has('track')) row += `<td style="font-size:12px;">${meta.track}</td>`;
@@ -4517,7 +4573,13 @@ function renderHistory() {
     return `<tr>${row}
       <td style="display:flex;gap:4px;"><button class="btn sm" onclick="editSession('${s.id}')" title="Edit">✎</button><button class="btn sm danger" onclick="deleteSession('${s.id}')" title="Delete">✕</button></td>
     </tr>`;
-  }).join('') || '<tr><td colspan="14" style="text-align:center;color:var(--muted);padding:20px;">No sessions logged yet</td></tr>';
+  }).join('') || (() => {
+    const cols = new Set(historyColumns || []);
+    const optionalCount = ['eventName','track','eventType','sessType','sessNum','duration','weather','startAttempts','stoppages','riskScore','laps','laptime','speed','estops','crashed','damage','replans','instability','sensor','multicar','overtaking','manualOverride','notes']
+      .filter(k => cols.has(k)).length;
+    const totalCols = 1 + 2 + optionalCount + 1;
+    return `<tr><td colspan="${totalCols}" style="text-align:center;color:var(--muted);padding:20px;">No sessions logged yet</td></tr>`;
+  })();
 }
 function setHistorySort(key) {
   if (!key) return;
@@ -4539,6 +4601,7 @@ function deleteSession(id) {
     return;
   }
   sessions = sessions.filter(s => String(s.id) !== String(id));
+  historySelectedIds.delete(String(id));
   schedule.forEach(b => recomputeBlockCompletion(b));
   save();
   renderHistory();

@@ -993,6 +993,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
           <button class="btn sm" onclick="exportCSV()">⤓ CSV</button>
         </div>
       </div>
+      <div id="hist-season-tabs" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;"></div>
       <div id="history-metrics-panel" style="display:none;margin-bottom:10px;padding:10px;border:1px solid var(--border);border-radius:6px;background:rgba(255,255,255,0.02);">
         <div id="history-metric-selects" style="display:flex;gap:10px;flex-wrap:wrap;"></div>
       </div>
@@ -1008,6 +1009,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 
     <!-- ═══════════════════════════════════════════════ TEAM ANALYSIS ══ -->
     <div class="view" id="view-teams">
+      <div id="team-season-tabs" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;"></div>
       <div class="stat-row">
         <div class="stat-card" style="--accent-line:var(--green)">
           <div class="stat-label">Lowest Risk</div>
@@ -1238,20 +1240,17 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
     <div class="view" id="view-insurance">
       <div id="ins-alert" class="alert-warn">⚑ Insurance Report · Season 3 · Generated dynamically from session logs</div>
       <div id="ins-season-tabs" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;"></div>
+      <div id="ins-metric-settings" style="display:none;margin:0 0 10px 0;padding:10px;border:1px solid var(--border);border-radius:6px;background:rgba(255,255,255,0.02);"></div>
       <div class="report-grid" id="ins-stats-grid"></div>
       <div class="panel">
         <div class="panel-head">
           <div class="panel-title">Per-Team Insurance Profile</div>
+          <button class="btn sm" onclick="toggleInsuranceMetricSettings()">Metrics ⚙</button>
           <button class="btn" onclick="exportInsurance()">⤓ Export Report</button>
         </div>
         <div class="panel-body" style="padding:0">
           <table class="data-table">
-            <thead><tr>
-              <th>Team</th><th>Total Sessions</th><th>Crash Frequency</th><th>Avg Loss Severity ($)</th>
-              <th>Max Single Loss ($)</th><th>Cost/Km ($)</th><th>Trend</th><th>Near Miss Rate</th>
-              <th title="Relative index only. Multiply by insurer base rate to calculate actual premium. Not a quoted price.">Annual Premium Index <span style="color:var(--muted);font-size:10px;">ⓘ</span></th>
-              <th>Liability Status</th>
-            </tr></thead>
+            <thead><tr id="ins-head-row"></tr></thead>
             <tbody id="ins-tbody"></tbody>
           </table>
         </div>
@@ -1517,6 +1516,7 @@ const TEAM_SUMMARY_METRICS = [
   { key:'best', label:'Best' },
   { key:'worst', label:'Worst' },
   { key:'costPerLap', label:'Cost/Lap ($)' },
+  { key:'distanceKm', label:'Distance Covered (km)' },
   { key:'damageEff', label:'Damage Efficiency (0-10)' },
   { key:'estops', label:'E-Stops' },
   { key:'crashes', label:'Crashes' },
@@ -1796,7 +1796,11 @@ let trackOptions = [];
 let trackDistances = {};
 let teamSummaryMetrics = [];
 let historyColumns = [];
+let historySeasonFilter = 'all';
+let teamSeasonFilter = 'all';
 let insuranceSeasonFilter = 'all';
+let insuranceMetricBaseKm = 100;
+let insuranceVisibleMetrics = { crashes:true, estops:true, instability:true };
 
 
 // CSS color constants (avoids single-quote issues in template literals)
@@ -1965,8 +1969,13 @@ function loadWorkspaceData(opts = {}) {
   schedCfg = readScopedJson('sched_cfg', {eventId:null,eventName:'A2RL Season 3 — Event 1',track:'Yas Marina Circuit',open:'08:00',close:'18:00',days:2,buffer:15,eventStart:null}, 'a2rl_sched_cfg');
   trackOptions = readScopedJson('track_options', [...DEFAULT_TRACKS], 'a2rl_track_options');
   trackDistances = readScopedJson('track_distances', {}, 'a2rl_track_distances');
-  teamSummaryMetrics = readScopedJson('team_summary_metrics', ['sessions','cumRisk','avg','best','worst','costPerLap','damageEff','estops','crashes','trackHrs','liability','tier'], 'a2rl_team_summary_metrics');
+  teamSummaryMetrics = readScopedJson('team_summary_metrics', ['sessions','cumRisk','avg','best','worst','costPerLap','distanceKm','damageEff','estops','crashes','trackHrs','liability','tier'], 'a2rl_team_summary_metrics');
   historyColumns = readScopedJson('history_columns', [...DEFAULT_HISTORY_COLUMNS], 'a2rl_history_columns');
+  historySeasonFilter = String(readScopedJson('history_season_filter', 'all', '') || 'all');
+  teamSeasonFilter = String(readScopedJson('team_season_filter', 'all', '') || 'all');
+  insuranceSeasonFilter = String(readScopedJson('insurance_season_filter', 'all', '') || 'all');
+  insuranceMetricBaseKm = Math.max(1, Number(readScopedJson('insurance_metric_base_km', 100, '')) || 100);
+  insuranceVisibleMetrics = readScopedJson('insurance_visible_metrics', { crashes:true, estops:true, instability:true }, '');
   schedZoom = Math.max(0.6, Math.min(3, parseFloat(readScopedString('sched_zoom', '1', 'a2rl_sched_zoom')) || 1));
   captureDrafts = readScopedJson('capture_drafts', {}, 'a2rl_capture_drafts');
   teamSummarySort = readScopedJson('team_summary_sort', {key:'avg',dir:'desc'}, 'a2rl_team_summary_sort');
@@ -1985,13 +1994,25 @@ function loadWorkspaceData(opts = {}) {
     if (!key) return;
     if (trackDistances[key] === undefined || trackDistances[key] === null || trackDistances[key] === '') trackDistances[key] = 0;
   });
-  teamSummaryMetrics = TEAM_SUMMARY_METRICS.map(m => m.key).filter(k => (teamSummaryMetrics || []).includes(k));
+  teamSummaryMetrics = Array.from(new Set([
+    ...TEAM_SUMMARY_METRICS.map(m => m.key).filter(k => (teamSummaryMetrics || []).includes(k)),
+    'distanceKm'
+  ]));
   if (!teamSummaryMetrics.length) teamSummaryMetrics = TEAM_SUMMARY_METRICS.map(m => m.key);
   historyColumns = Array.from(new Set([
     ...HISTORY_COLUMNS.map(c => c.key).filter(k => (historyColumns || []).includes(k)),
     'duration','weather','startAttempts','stoppages','laptime','damage','replans','instability','sensor','multicar','overtaking','manualOverride'
   ]));
   if (!historyColumns.length) historyColumns = HISTORY_COLUMNS.map(c => c.key);
+  if (!['all','2','3','4','5','6','7'].includes(String(historySeasonFilter))) historySeasonFilter = 'all';
+  if (!['all','2','3','4','5','6','7'].includes(String(teamSeasonFilter))) teamSeasonFilter = 'all';
+  if (!['all','2','3','4','5','6','7'].includes(String(insuranceSeasonFilter))) insuranceSeasonFilter = 'all';
+  if (!insuranceVisibleMetrics || typeof insuranceVisibleMetrics !== 'object') insuranceVisibleMetrics = { crashes:true, estops:true, instability:true };
+  insuranceVisibleMetrics = {
+    crashes: insuranceVisibleMetrics.crashes !== false,
+    estops: insuranceVisibleMetrics.estops !== false,
+    instability: insuranceVisibleMetrics.instability !== false,
+  };
   if (migrateLegacyPartialRiskScores()) {
     rebuildLiveRisks();
     save();
@@ -3066,6 +3087,11 @@ function buildWorkspaceStatePayload() {
     track_distances: trackDistances,
     team_summary_metrics: teamSummaryMetrics,
     history_columns: historyColumns,
+    history_season_filter: historySeasonFilter,
+    team_season_filter: teamSeasonFilter,
+    insurance_season_filter: insuranceSeasonFilter,
+    insurance_metric_base_km: insuranceMetricBaseKm,
+    insurance_visible_metrics: insuranceVisibleMetrics,
     team_summary_sort: teamSummarySort,
     history_sort: historySort,
     schedule_change_log: scheduleChangeLog || {},
@@ -3093,6 +3119,11 @@ function persistWorkspaceStateToLocal(state) {
   put('track_distances', state.track_distances || {});
   put('team_summary_metrics', state.team_summary_metrics || []);
   put('history_columns', state.history_columns || []);
+  put('history_season_filter', state.history_season_filter || 'all');
+  put('team_season_filter', state.team_season_filter || 'all');
+  put('insurance_season_filter', state.insurance_season_filter || 'all');
+  put('insurance_metric_base_km', state.insurance_metric_base_km || 100);
+  put('insurance_visible_metrics', state.insurance_visible_metrics || { crashes:true, estops:true, instability:true });
   put('team_summary_sort', state.team_summary_sort || {});
   put('history_sort', state.history_sort || { key:'datetime', dir:'desc' });
   put('schedule_change_log', state.schedule_change_log || {});
@@ -3244,6 +3275,11 @@ function save() {
   localStorage.setItem(wk('track_distances'), JSON.stringify(trackDistances || {}));
   localStorage.setItem(wk('team_summary_metrics'), JSON.stringify(teamSummaryMetrics));
   localStorage.setItem(wk('history_columns'), JSON.stringify(historyColumns));
+  localStorage.setItem(wk('history_season_filter'), JSON.stringify(historySeasonFilter || 'all'));
+  localStorage.setItem(wk('team_season_filter'), JSON.stringify(teamSeasonFilter || 'all'));
+  localStorage.setItem(wk('insurance_season_filter'), JSON.stringify(insuranceSeasonFilter || 'all'));
+  localStorage.setItem(wk('insurance_metric_base_km'), JSON.stringify(Math.max(1, Number(insuranceMetricBaseKm) || 100)));
+  localStorage.setItem(wk('insurance_visible_metrics'), JSON.stringify(insuranceVisibleMetrics || { crashes:true, estops:true, instability:true }));
   localStorage.setItem(wk('team_summary_sort'), JSON.stringify(teamSummarySort));
   localStorage.setItem(wk('history_sort'), JSON.stringify(historySort));
   localStorage.setItem(wk('schedule_change_log'), JSON.stringify(scheduleChangeLog || {}));
@@ -3658,8 +3694,56 @@ function getTrackDistanceKm(trackName) {
   const raw = Number((trackDistances || {})[key] || 0);
   return Number.isFinite(raw) ? Math.max(0, raw) : 0;
 }
+const SEASON_YEAR_START = 2025;
+const SEASON_YEAR_END = 2030;
+function getSeasonYearFromSession(s) {
+  const dt = new Date(s?.trackTimestamp || s?.timestamp);
+  if (!isNaN(dt)) return dt.getFullYear();
+  const n = Number(s?.season);
+  if (Number.isFinite(n) && n > 0) return (n + 2023);
+  if (Array.isArray(events) && s?.eventId) {
+    const ev = events.find(e => String(e.id || '') === String(s.eventId || ''));
+    const sev = Number(ev?.season);
+    if (Number.isFinite(sev) && sev > 0) return (sev + 2023);
+  }
+  const name = String(s?.eventName || '').trim();
+  const m = name.match(/season\s*(\d+)/i);
+  if (m) return ((parseInt(m[1], 10) || 0) + 2023);
+  return null;
+}
+function getFixedSeasonTabs() {
+  const out = [{ key:'all', label:'All Seasons' }];
+  for (let year = SEASON_YEAR_START; year <= SEASON_YEAR_END; year++) {
+    const seasonNum = year - 2023;
+    out.push({ key:String(seasonNum), label:`Season ${seasonNum} (${year})`, season:seasonNum, year });
+  }
+  return out;
+}
+function isSessionInSeasonFilter(s, seasonFilter) {
+  if (!s) return false;
+  if (String(seasonFilter || 'all') === 'all') return true;
+  const targetSeason = Number(seasonFilter);
+  if (!Number.isFinite(targetSeason)) return true;
+  const year = getSeasonYearFromSession(s);
+  if (Number.isFinite(year)) return year === (targetSeason + 2023);
+  const fallbackSeason = getSessionSeasonNumber(s);
+  return Number(fallbackSeason) === targetSeason;
+}
+function getSessionDistanceKm(s) {
+  const laps = Math.max(0, Number(s?.laps) || 0);
+  if (!laps) return 0;
+  let trackName = String(s?.track || '').trim();
+  if (!trackName && s?.eventId && Array.isArray(events)) {
+    const ev = events.find(e => String(e.id || '') === String(s.eventId || ''));
+    trackName = String(ev?.track || '').trim();
+  }
+  const kmPerLap = getTrackDistanceKm(trackName);
+  return kmPerLap > 0 ? (laps * kmPerLap) : 0;
+}
 function getSessionSeasonNumber(s) {
   if (!s) return null;
+  const year = getSeasonYearFromSession(s);
+  if (Number.isFinite(year) && year >= 2024) return (year - 2023);
   const direct = Number(s.season);
   if (Number.isFinite(direct) && direct > 0) return direct;
   if (Array.isArray(events) && s.eventId) {
@@ -3678,20 +3762,38 @@ function getSessionSeasonNumber(s) {
   return null;
 }
 function getInsuranceSeasonsFromData() {
-  const set = new Set();
-  (events || []).forEach(ev => {
-    const n = Number(ev?.season);
-    if (Number.isFinite(n) && n > 0) set.add(n);
-  });
-  (sessions || []).forEach(s => {
-    const n = getSessionSeasonNumber(s);
-    if (Number.isFinite(n) && n > 0) set.add(n);
-  });
-  if (!set.size) set.add(Number(eventCfg?.season || 3));
-  return Array.from(set).filter(n => Number.isFinite(n) && n > 0).sort((a,b) => a - b);
+  return getFixedSeasonTabs().filter(x => x.key !== 'all').map(x => Number(x.season));
+}
+function setHistorySeason(seasonKey) {
+  historySeasonFilter = String(seasonKey || 'all');
+  save();
+  renderHistory();
+}
+function setTeamSeason(seasonKey) {
+  teamSeasonFilter = String(seasonKey || 'all');
+  save();
+  renderTeamView();
 }
 function setInsuranceSeason(seasonKey) {
   insuranceSeasonFilter = String(seasonKey || 'all');
+  save();
+  renderInsurance();
+}
+function toggleInsuranceMetricSettings() {
+  const panel = document.getElementById('ins-metric-settings');
+  if (!panel) return;
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  if (panel.style.display !== 'none') renderInsurance();
+}
+function setInsuranceMetricBaseKm(v) {
+  insuranceMetricBaseKm = Math.max(1, Number(v) || 100);
+  save();
+  renderInsurance();
+}
+function setInsuranceVisibleMetric(key, enabled) {
+  if (!insuranceVisibleMetrics || typeof insuranceVisibleMetrics !== 'object') insuranceVisibleMetrics = { crashes:true, estops:true, instability:true };
+  insuranceVisibleMetrics[key] = !!enabled;
+  save();
   renderInsurance();
 }
 
@@ -4255,11 +4357,20 @@ function renderHistory() {
   const filterTeam = document.getElementById('hist-filter-team')?.value || '';
   const filterType = document.getElementById('hist-filter-type')?.value || '';
   const filterSess = document.getElementById('hist-filter-sess')?.value || '';
+  const seasonTabs = document.getElementById('hist-season-tabs');
+  if (seasonTabs) {
+    const tabs = getFixedSeasonTabs();
+    seasonTabs.innerHTML = tabs.map(tab => {
+      const label = tab.key === 'all' ? 'All Sessions' : tab.label;
+      return `<button class="btn sm${String(historySeasonFilter) === String(tab.key) ? ' primary' : ''}" onclick="setHistorySeason('${tab.key}')">${label}</button>`;
+    }).join('');
+  }
 
   let filtered = [...sessions].filter(s => {
     if (filterTeam && s.team !== filterTeam) return false;
     if (filterType && s.eventType !== filterType) return false;
     if (filterSess && s.sessType !== filterSess) return false;
+    if (!isSessionInSeasonFilter(s, historySeasonFilter)) return false;
     return true;
   });
   const sortKey = historySort?.key || 'datetime';
@@ -4284,7 +4395,10 @@ function renderHistory() {
   });
 
   const countEl = document.getElementById('hist-count');
-  if (countEl) countEl.textContent = `${filtered.length} session${filtered.length!==1?'s':''}`;
+  if (countEl) {
+    const seasonText = historySeasonFilter === 'all' ? 'All Sessions' : `Season ${historySeasonFilter}`;
+    countEl.textContent = `${filtered.length} session${filtered.length!==1?'s':''} · ${seasonText}`;
+  }
   const head = document.getElementById('history-head-row');
   if (head) {
     const sortArrow = key => (sortKey === key ? (sortDir === 1 ? ' ▲' : ' ▼') : '');
@@ -4456,6 +4570,12 @@ function setTeamSummarySort(key) {
   renderTeamView();
 }
 function renderTeamView() {
+  const seasonTabs = document.getElementById('team-season-tabs');
+  if (seasonTabs) {
+    seasonTabs.innerHTML = getFixedSeasonTabs().map(tab =>
+      `<button class="btn sm${String(teamSeasonFilter) === String(tab.key) ? ' primary' : ''}" onclick="setTeamSeason('${tab.key}')">${tab.label}</button>`
+    ).join('');
+  }
   const teamMap = {};
   teams.forEach(t => { teamMap[t.name] = t; });
   sessions.forEach(s => {
@@ -4465,13 +4585,17 @@ function renderTeamView() {
 
   const stats = {};
   allTeams.forEach(t => {
-    const ts = sessions.filter(s => s.team === t.name && !s.stub).sort((a,b)=>getSessionDateObj(a)-getSessionDateObj(b));
+    const ts = sessions
+      .filter(s => s.team === t.name && !s.stub)
+      .filter(s => isSessionInSeasonFilter(s, teamSeasonFilter))
+      .sort((a,b)=>getSessionDateObj(a)-getSessionDateObj(b));
     const scored = ts.filter(hasUsableRiskScore);
     const scores = scored.map(toRiskNumber);
     const cumRisk = scores.reduce((a,b)=>a+b,0);
     const totalMins = ts.reduce((a,s)=>a+(parseInt(s.duration)||0),0);
     const totalLaps = ts.reduce((a,s)=>a+Math.max(0, Number(s.laps)||0),0);
     const totalDamage = ts.reduce((a,s)=>a+Math.max(0, Number(s.damage)||0),0);
+    const totalKm = ts.reduce((a,s)=>a+getSessionDistanceKm(s),0);
     stats[t.name] = {
       sessions: ts.length,
       scoredSessions: scored.length,
@@ -4483,6 +4607,7 @@ function renderTeamView() {
       crashes: ts.filter(s=>s.crashed==='Yes').length,
       trackHrs: (totalMins/60),
       totalLaps,
+      totalKm,
       totalDamage,
       costPerLap: totalLaps > 0 ? (totalDamage / totalLaps) : 0,
       rows: ts,
@@ -4535,6 +4660,7 @@ function renderTeamView() {
     if (cols.has('best')) hh += sortableHead('Best', 'best');
     if (cols.has('worst')) hh += sortableHead('Worst', 'worst');
     if (cols.has('costPerLap')) hh += sortableHead('Cost/Lap ($)', 'costPerLap');
+    if (cols.has('distanceKm')) hh += sortableHead('Distance Covered (km)', 'distanceKm');
     if (cols.has('damageEff')) hh += sortableHead('Damage Eff. (0-10)', 'damageEff');
     if (cols.has('estops')) hh += sortableHead('E-Stops', 'estops');
     if (cols.has('crashes')) hh += sortableHead('Crashes', 'crashes');
@@ -4579,6 +4705,7 @@ function renderTeamView() {
     if (cols.has('best')) row += `<td class="mono" style="color:var(--green)">${st.best.toFixed(1)}</td>`;
     if (cols.has('worst')) row += `<td class="mono" style="color:var(--red)">${st.worst.toFixed(1)}</td>`;
     if (cols.has('costPerLap')) row += `<td class="mono">${st.totalLaps > 0 ? `$${st.costPerLap.toFixed(1)}` : '—'}</td>`;
+    if (cols.has('distanceKm')) row += `<td class="mono">${st.totalKm > 0 ? st.totalKm.toFixed(1) : '—'}</td>`;
     if (cols.has('damageEff')) row += `<td><span style="color:${riskColor(st.damageEff * 10)};font-family:'Roboto Mono',monospace;font-weight:600">${st.damageEff.toFixed(1)}</span></td>`;
     if (cols.has('estops')) row += `<td class="mono">${st.estops}</td>`;
     if (cols.has('crashes')) row += `<td class="mono" style="color:${st.crashes>0?C.red:C.muted}">${st.crashes}</td>`;
@@ -4614,6 +4741,7 @@ function renderTeamDrilldown(teamName) {
   const toD = toV ? new Date(toV + 'T23:59:59') : null;
   const rows = sessions
     .filter(s => s.team === teamName)
+    .filter(s => isSessionInSeasonFilter(s, teamSeasonFilter))
     .filter(s => !sessTypeV || (s.sessType||'') === sessTypeV)
     .filter(s => !eventTypeV || (s.eventType||'') === eventTypeV)
     .filter(s => {
@@ -7556,35 +7684,43 @@ function renderInsurance() {
     if (delta >= 5) return { label: 'Worsening', arrow: '↑', color: 'var(--red)' };
     return { label: 'Stable', arrow: '→', color: 'var(--muted)' };
   };
-  const sessionDistanceKm = (s) => {
-    const laps = Math.max(0, Number(s?.laps) || 0);
-    if (!laps) return 0;
-    let trackName = String(s?.track || '').trim();
-    if (!trackName && s?.eventId && Array.isArray(events)) {
-      const ev = events.find(e => String(e.id || '') === String(s.eventId || ''));
-      trackName = String(ev?.track || '').trim();
-    }
-    const kmPerLap = getTrackDistanceKm(trackName);
-    return kmPerLap > 0 ? (laps * kmPerLap) : 0;
-  };
-
-  const seasons = getInsuranceSeasonsFromData();
-  if (insuranceSeasonFilter !== 'all' && !seasons.some(s => String(s) === String(insuranceSeasonFilter))) {
-    insuranceSeasonFilter = seasons.length ? String(seasons[0]) : 'all';
-  }
+  const seasons = getFixedSeasonTabs().filter(x => x.key !== 'all');
+  if (!['all', ...seasons.map(s => String(s.season))].includes(String(insuranceSeasonFilter))) insuranceSeasonFilter = 'all';
   const seasonTabs = document.getElementById('ins-season-tabs');
   if (seasonTabs) {
     seasonTabs.innerHTML = [
       `<button class="btn sm${insuranceSeasonFilter === 'all' ? ' primary' : ''}" onclick="setInsuranceSeason('all')">All Seasons</button>`,
-      ...seasons.map(season => `<button class="btn sm${String(insuranceSeasonFilter) === String(season) ? ' primary' : ''}" onclick="setInsuranceSeason('${season}')">Season ${season}</button>`)
+      ...seasons.map(season => `<button class="btn sm${String(insuranceSeasonFilter) === String(season.season) ? ' primary' : ''}" onclick="setInsuranceSeason('${season.season}')">${season.label}</button>`)
     ].join('');
+  }
+  const metricPanel = document.getElementById('ins-metric-settings');
+  if (metricPanel && metricPanel.style.display !== 'none') {
+    const rateBase = Math.max(1, Number(insuranceMetricBaseKm) || 100);
+    metricPanel.innerHTML = `
+      <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+        <div class="field" style="margin:0;min-width:190px;">
+          <label>Rate Base Distance (km)</label>
+          <input type="number" min="1" step="1" value="${rateBase}" onchange="setInsuranceMetricBaseKm(this.value)">
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;">
+          <input type="checkbox" ${insuranceVisibleMetrics?.crashes !== false ? 'checked' : ''} onchange="setInsuranceVisibleMetric('crashes',this.checked)">
+          Crashes / ${rateBase}km
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;">
+          <input type="checkbox" ${insuranceVisibleMetrics?.estops !== false ? 'checked' : ''} onchange="setInsuranceVisibleMetric('estops',this.checked)">
+          E-Stops / ${rateBase}km
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;">
+          <input type="checkbox" ${insuranceVisibleMetrics?.instability !== false ? 'checked' : ''} onchange="setInsuranceVisibleMetric('instability',this.checked)">
+          Instability Events / ${rateBase}km
+        </label>
+      </div>`;
   }
 
   const activeTeams = teams.filter(t => t.active);
   const allScoredSessions = sessions.filter(s => !s.stub && !s.riskInsufficientData);
   const filteredSessions = allScoredSessions.filter(s => {
-    if (insuranceSeasonFilter === 'all') return true;
-    return String(getSessionSeasonNumber(s) || '') === String(insuranceSeasonFilter);
+    return isSessionInSeasonFilter(s, insuranceSeasonFilter);
   });
 
   const teamStats = {};
@@ -7595,9 +7731,11 @@ function renderInsurance() {
     const scores = ts.map(toRiskNumber);
     const totalLaps = ts.reduce((a,s)=>a+Math.max(0, Number(s.laps)||0),0);
     const totalDamage = ts.reduce((a,s)=>a+Math.max(0, Number(s.damage)||0),0);
-    const totalKm = ts.reduce((a,s)=>a+sessionDistanceKm(s),0);
+    const totalKm = ts.reduce((a,s)=>a+getSessionDistanceKm(s),0);
     const crashRows = ts.filter(s => String(s.crashed || '').trim().toLowerCase() === 'yes');
     const crashes = crashRows.length;
+    const totalEstops = ts.reduce((a,s)=>a+Math.max(0, Number(s.estops)||0),0);
+    const instabilityEvents = ts.filter(s => Math.max(0, Number(s.instability) || 0) > 0).length;
     const crashFreq = ts.length > 0 ? (crashes / ts.length) : 0;
     const avgLoss = crashes > 0 ? (totalDamage / crashes) : 0;
     const maxSingleLoss = ts.length ? Math.max(...ts.map(s => Math.max(0, Number(s.damage)||0))) : 0;
@@ -7626,6 +7764,8 @@ function renderInsurance() {
       sessions: ts.length,
       avgRisk: scores.length ? scores.reduce((a,b)=>a+b,0)/scores.length : 0,
       crashes,
+      totalEstops,
+      instabilityEvents,
       crashFreq,
       avgLoss,
       maxSingleLoss,
@@ -7636,6 +7776,9 @@ function renderInsurance() {
       totalKm,
       costPerKm,
       riskPerKm,
+      crashesPerBaseKm: totalKm > 0 ? (crashes / totalKm) * Math.max(1, Number(insuranceMetricBaseKm) || 100) : null,
+      estopsPerBaseKm: totalKm > 0 ? (totalEstops / totalKm) * Math.max(1, Number(insuranceMetricBaseKm) || 100) : null,
+      instabilityPerBaseKm: totalKm > 0 ? (instabilityEvents / totalKm) * Math.max(1, Number(insuranceMetricBaseKm) || 100) : null,
       trendDelta,
       trend: trendView(trendDelta, ts.length),
       annualPremiumIndex,
@@ -7650,13 +7793,17 @@ function renderInsurance() {
   const totalTTC = filteredSessions.reduce((a,s)=>a+(s.ttc||0),0);
   const totalCrashes = filteredSessions.filter(s=>String(s.crashed||'').toLowerCase()==='yes').length;
   const totalDamage = filteredSessions.reduce((a,s)=>a+(s.damage||0),0);
+  const totalDistanceKm = filteredSessions.reduce((a,s)=>a+getSessionDistanceKm(s),0);
   const filterLabel = insuranceSeasonFilter === 'all' ? 'all seasons' : `Season ${insuranceSeasonFilter}`;
+  const alert = document.getElementById('ins-alert');
+  if (alert) alert.textContent = `⚑ Insurance Report · ${insuranceSeasonFilter === 'all' ? 'All Seasons (2025-2030)' : `Season ${insuranceSeasonFilter}`} · Generated dynamically from session logs`;
 
   const grid = document.getElementById('ins-stats-grid');
   if (grid) grid.innerHTML = `
     <div class="report-card"><div class="report-card-label">Fleet Avg Risk</div><div class="report-card-val" style="color:${riskColor(fleetAvg)}">${fleetAvg.toFixed(1)}</div><div class="report-card-sub">${filterLabel} · ${filteredSessions.length} scored sessions</div></div>
     <div class="report-card"><div class="report-card-label">Total Sessions</div><div class="report-card-val" style="color:var(--accent)">${filteredSessions.length}</div><div class="report-card-sub">insufficient-data rows excluded</div></div>
     <div class="report-card"><div class="report-card-label">Crash Events</div><div class="report-card-val" style="color:var(--red)">${totalCrashes}</div><div class="report-card-sub">Est. $${totalDamage.toLocaleString()} damage</div></div>
+    <div class="report-card"><div class="report-card-label">Distance Covered</div><div class="report-card-val" style="color:var(--green)">${totalDistanceKm.toFixed(1)} km</div><div class="report-card-sub">${filterLabel}</div></div>
     <div class="report-card"><div class="report-card-label">TTC Events</div><div class="report-card-val" style="color:var(--amber)">${totalTTC}</div><div class="report-card-sub">near-miss (ROS pending)</div></div>
     <div class="report-card"><div class="report-card-label">High Risk Sessions</div><div class="report-card-val" style="color:var(--red)">${filteredSessions.filter(s=>(s.riskScore||0)>=thresholds.high).length}</div><div class="report-card-sub">score ≥ ${thresholds.high}</div></div>
     <div class="report-card"><div class="report-card-label">Risk Tier Split</div>
@@ -7672,7 +7819,21 @@ function renderInsurance() {
       </div>
     </div>`;
 
+  const baseKm = Math.max(1, Number(insuranceMetricBaseKm) || 100);
+  const showCrashRate = insuranceVisibleMetrics?.crashes !== false;
+  const showEstopRate = insuranceVisibleMetrics?.estops !== false;
+  const showInstabilityRate = insuranceVisibleMetrics?.instability !== false;
+  const head = document.getElementById('ins-head-row');
+  if (head) {
+    let hh = '<th>Team</th><th>Total Sessions</th><th>Crash Frequency</th><th>Avg Loss Severity ($)</th><th>Max Single Loss ($)</th><th>Average Crash Cost/Km ($)</th><th>Trend</th><th>Near Miss Rate</th>';
+    if (showCrashRate) hh += `<th>Crashes / ${baseKm}km</th>`;
+    if (showEstopRate) hh += `<th>E-Stops / ${baseKm}km</th>`;
+    if (showInstabilityRate) hh += `<th>Instability Events / ${baseKm}km</th>`;
+    hh += '<th title="Relative index only. Multiply by insurer base rate to calculate actual premium. Not a quoted price.">Annual Premium Index <span style="color:var(--muted);font-size:10px;">ⓘ</span></th><th>Liability Status</th>';
+    head.innerHTML = hh;
+  }
   const body = document.getElementById('ins-tbody');
+  const totalCols = 10 + (showCrashRate ? 1 : 0) + (showEstopRate ? 1 : 0) + (showInstabilityRate ? 1 : 0);
   if (body) body.innerHTML = activeTeams.map(t => {
     const st = teamStats[t.name];
     if (!st || st.sessions === 0) {
@@ -7685,6 +7846,9 @@ function renderInsurance() {
         <td class="mono">—</td>
         <td style="color:var(--muted)">—</td>
         <td class="mono">—</td>
+        ${showCrashRate ? '<td class="mono">—</td>' : ''}
+        ${showEstopRate ? '<td class="mono">—</td>' : ''}
+        ${showInstabilityRate ? '<td class="mono">—</td>' : ''}
         <td class="mono">—</td>
         <td>${formatLiabilityBadges(false, false)}</td>
       </tr>`;
@@ -7709,6 +7873,9 @@ function renderInsurance() {
       <td class="mono">${st.totalKm > 0 ? money(st.costPerKm) : '—'}</td>
       <td><span style="color:${trend.color};font-weight:700;">${trend.arrow}</span> <span style="color:${trend.color};">${trend.label}</span></td>
       <td class="mono">${pct(st.nearMissRate)}</td>
+      ${showCrashRate ? `<td class="mono">${st.crashesPerBaseKm === null ? '—' : st.crashesPerBaseKm.toFixed(2)}</td>` : ''}
+      ${showEstopRate ? `<td class="mono">${st.estopsPerBaseKm === null ? '—' : st.estopsPerBaseKm.toFixed(2)}</td>` : ''}
+      ${showInstabilityRate ? `<td class="mono">${st.instabilityPerBaseKm === null ? '—' : st.instabilityPerBaseKm.toFixed(2)}</td>` : ''}
       <td class="mono" style="color:${(st.annualPremiumIndex || 1) >= 1 ? C.red : C.green}">${premium}</td>
       <td>
         <div style="display:flex;align-items:center;gap:8px;min-width:220px;">
@@ -7719,7 +7886,7 @@ function renderInsurance() {
         </div>
       </td>
     </tr>`;
-  }).join('') || '<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:16px;">No session data</td></tr>';
+  }).join('') || `<tr><td colspan="${totalCols}" style="text-align:center;color:var(--muted);padding:16px;">No session data</td></tr>`;
 
   // Year-on-year comparison (always across all seasons)
   const yoyHead = document.getElementById('ins-yoy-head-row');
@@ -7731,7 +7898,7 @@ function renderInsurance() {
   if (yoyBody) {
     yoyBody.innerHTML = activeTeams.map(t => {
       const perSeasonScores = yoySeasons.map(season => {
-        const rs = allScoredSessions.filter(s => s.team === t.name && String(getSessionSeasonNumber(s) || '') === String(season)).map(toRiskNumber);
+        const rs = allScoredSessions.filter(s => s.team === t.name && isSessionInSeasonFilter(s, String(season))).map(toRiskNumber);
         if (!rs.length) return null;
         return rs.reduce((a,b)=>a+b,0)/rs.length;
       });
@@ -7739,7 +7906,7 @@ function renderInsurance() {
       const last = [...perSeasonScores].reverse().find(v => v !== null && v !== undefined);
       const delta = (first !== undefined && first !== null && last !== undefined && last !== null) ? (last - first) : null;
       const allTeam = allScoredSessions.filter(s => s.team === t.name);
-      const totalKm = allTeam.reduce((a,s)=>a+sessionDistanceKm(s),0);
+      const totalKm = allTeam.reduce((a,s)=>a+getSessionDistanceKm(s),0);
       const totalRisk = allTeam.reduce((a,s)=>a+toRiskNumber(s),0);
       const riskPerKm = totalKm > 0 ? (totalRisk / totalKm) : null;
       return `<tr>
@@ -7752,7 +7919,7 @@ function renderInsurance() {
   }
   const datasets = activeTeams.map(t => {
     const data = yoySeasons.map(season => {
-      const rs = allScoredSessions.filter(s => s.team === t.name && String(getSessionSeasonNumber(s) || '') === String(season)).map(toRiskNumber);
+      const rs = allScoredSessions.filter(s => s.team === t.name && isSessionInSeasonFilter(s, String(season))).map(toRiskNumber);
       if (!rs.length) return null;
       return +(rs.reduce((a,b)=>a+b,0)/rs.length).toFixed(2);
     });
@@ -7882,7 +8049,7 @@ function initLiveCharts() {
 
 function renderTeamCharts(stats, activeTeams) {
   setTimeout(() => {
-    const real = sessions.filter(s => (s.riskScore || 0) > 0 && !s.stub);
+    const real = sessions.filter(s => (s.riskScore || 0) > 0 && !s.stub && isSessionInSeasonFilter(s, teamSeasonFilter));
     const types = getWorkspaceEventTypes();
     const byType = types.map(t => {
       const ts = real.filter(s => (s.eventType||'') === t);

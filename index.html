@@ -8394,11 +8394,31 @@ function exportData() {
   a.download = 'a2rl_sessions_'+new Date().toISOString().split('T')[0]+'.json'; a.click();
 }
 function exportCSV() {
-  const header = 'timestamp,team,eventType,sessType,sessNum,riskScore,laps,speed,estops,crashed,damage,notes\n';
-  const rows = sessions.map(s => [s.timestamp,s.team,s.eventType,s.sessType,s.sessNum,
-    s.riskScore,s.laps,s.speed,s.estops,s.crashed,s.damage,
-    '"'+(s.notes||'').replace(/"/g,'""')+'"'].join(',')).join('\n');
-  const blob = new Blob([header+rows],{type:'text/csv'});
+  const preferredOrder = [
+    'id','timestamp','trackTimestamp','team','eventId','eventName','eventType','track','sessType','sessionType','sessNum','duration','weather',
+    'startAttempts','stoppages','riskScore','riskConfidence','partialData','riskInsufficientData','riskCrashFloorEnforced','riskFlags',
+    'laps','laptime','speed','estops','crashed','damage','replans','instability','sensor','multicar','overtaking','manualOverride',
+    'submittedBy','status','schedBlockId','stub','notes'
+  ];
+  const known = new Set(preferredOrder);
+  const dynamicKeys = new Set();
+  (Array.isArray(sessions) ? sessions : []).forEach(s => {
+    if (!s || typeof s !== 'object') return;
+    Object.keys(s).forEach(k => dynamicKeys.add(k));
+  });
+  const extraKeys = Array.from(dynamicKeys).filter(k => !known.has(k)).sort();
+  const allFields = preferredOrder.filter(k => dynamicKeys.has(k)).concat(extraKeys);
+  const esc = (value) => {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'object') {
+      try { value = JSON.stringify(value); } catch { value = String(value); }
+    }
+    const text = String(value);
+    return `"${text.replace(/"/g, '""')}"`;
+  };
+  const header = allFields.join(',');
+  const rows = (Array.isArray(sessions) ? sessions : []).map(s => allFields.map(field => esc(s?.[field])).join(',')).join('\n');
+  const blob = new Blob([`${header}\n${rows}`],{type:'text/csv'});
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
   a.download = 'a2rl_sessions_'+new Date().toISOString().split('T')[0]+'.csv'; a.click();
 }

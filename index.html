@@ -1801,6 +1801,7 @@ let teamSeasonFilter = 'all';
 let insuranceSeasonFilter = 'all';
 let insuranceMetricBaseKm = 100;
 let insuranceVisibleMetrics = { crashes:true, estops:true, instability:true };
+let insuranceSort = { key:'annualPremiumIndex', dir:'desc' };
 
 
 // CSS color constants (avoids single-quote issues in template literals)
@@ -1976,6 +1977,7 @@ function loadWorkspaceData(opts = {}) {
   insuranceSeasonFilter = String(readScopedJson('insurance_season_filter', 'all', '') || 'all');
   insuranceMetricBaseKm = Math.max(1, Number(readScopedJson('insurance_metric_base_km', 100, '')) || 100);
   insuranceVisibleMetrics = readScopedJson('insurance_visible_metrics', { crashes:true, estops:true, instability:true }, '');
+  insuranceSort = readScopedJson('insurance_sort', { key:'annualPremiumIndex', dir:'desc' }, '');
   schedZoom = Math.max(0.6, Math.min(3, parseFloat(readScopedString('sched_zoom', '1', 'a2rl_sched_zoom')) || 1));
   captureDrafts = readScopedJson('capture_drafts', {}, 'a2rl_capture_drafts');
   teamSummarySort = readScopedJson('team_summary_sort', {key:'avg',dir:'desc'}, 'a2rl_team_summary_sort');
@@ -2012,6 +2014,11 @@ function loadWorkspaceData(opts = {}) {
     crashes: insuranceVisibleMetrics.crashes !== false,
     estops: insuranceVisibleMetrics.estops !== false,
     instability: insuranceVisibleMetrics.instability !== false,
+  };
+  if (!insuranceSort || typeof insuranceSort !== 'object') insuranceSort = { key:'annualPremiumIndex', dir:'desc' };
+  insuranceSort = {
+    key: String(insuranceSort.key || 'annualPremiumIndex'),
+    dir: insuranceSort.dir === 'asc' ? 'asc' : 'desc',
   };
   if (migrateLegacyPartialRiskScores()) {
     rebuildLiveRisks();
@@ -3092,6 +3099,7 @@ function buildWorkspaceStatePayload() {
     insurance_season_filter: insuranceSeasonFilter,
     insurance_metric_base_km: insuranceMetricBaseKm,
     insurance_visible_metrics: insuranceVisibleMetrics,
+    insurance_sort: insuranceSort,
     team_summary_sort: teamSummarySort,
     history_sort: historySort,
     schedule_change_log: scheduleChangeLog || {},
@@ -3124,6 +3132,7 @@ function persistWorkspaceStateToLocal(state) {
   put('insurance_season_filter', state.insurance_season_filter || 'all');
   put('insurance_metric_base_km', state.insurance_metric_base_km || 100);
   put('insurance_visible_metrics', state.insurance_visible_metrics || { crashes:true, estops:true, instability:true });
+  put('insurance_sort', state.insurance_sort || { key:'annualPremiumIndex', dir:'desc' });
   put('team_summary_sort', state.team_summary_sort || {});
   put('history_sort', state.history_sort || { key:'datetime', dir:'desc' });
   put('schedule_change_log', state.schedule_change_log || {});
@@ -3280,6 +3289,7 @@ function save() {
   localStorage.setItem(wk('insurance_season_filter'), JSON.stringify(insuranceSeasonFilter || 'all'));
   localStorage.setItem(wk('insurance_metric_base_km'), JSON.stringify(Math.max(1, Number(insuranceMetricBaseKm) || 100)));
   localStorage.setItem(wk('insurance_visible_metrics'), JSON.stringify(insuranceVisibleMetrics || { crashes:true, estops:true, instability:true }));
+  localStorage.setItem(wk('insurance_sort'), JSON.stringify(insuranceSort || { key:'annualPremiumIndex', dir:'desc' }));
   localStorage.setItem(wk('team_summary_sort'), JSON.stringify(teamSummarySort));
   localStorage.setItem(wk('history_sort'), JSON.stringify(historySort));
   localStorage.setItem(wk('schedule_change_log'), JSON.stringify(scheduleChangeLog || {}));
@@ -3793,6 +3803,16 @@ function setInsuranceMetricBaseKm(v) {
 function setInsuranceVisibleMetric(key, enabled) {
   if (!insuranceVisibleMetrics || typeof insuranceVisibleMetrics !== 'object') insuranceVisibleMetrics = { crashes:true, estops:true, instability:true };
   insuranceVisibleMetrics[key] = !!enabled;
+  save();
+  renderInsurance();
+}
+function setInsuranceSort(key) {
+  if (!key) return;
+  if ((insuranceSort?.key || '') === key) {
+    insuranceSort.dir = insuranceSort.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    insuranceSort = { key, dir: key === 'team' ? 'asc' : 'desc' };
+  }
   save();
   renderInsurance();
 }
@@ -7824,17 +7844,58 @@ function renderInsurance() {
   const showEstopRate = insuranceVisibleMetrics?.estops !== false;
   const showInstabilityRate = insuranceVisibleMetrics?.instability !== false;
   const head = document.getElementById('ins-head-row');
+  const sortKey = insuranceSort?.key || 'annualPremiumIndex';
+  const sortDir = insuranceSort?.dir === 'asc' ? 1 : -1;
   if (head) {
-    let hh = '<th>Team</th><th>Total Sessions</th><th>Crash Frequency</th><th>Avg Loss Severity ($)</th><th>Max Single Loss ($)</th><th>Average Crash Cost/Km ($)</th><th>Trend</th><th>Near Miss Rate</th>';
-    if (showCrashRate) hh += `<th>Crashes / ${baseKm}km</th>`;
-    if (showEstopRate) hh += `<th>E-Stops / ${baseKm}km</th>`;
-    if (showInstabilityRate) hh += `<th>Instability Events / ${baseKm}km</th>`;
-    hh += '<th title="Relative index only. Multiply by insurer base rate to calculate actual premium. Not a quoted price.">Annual Premium Index <span style="color:var(--muted);font-size:10px;">ⓘ</span></th><th>Liability Status</th>';
+    const sortArrow = key => (sortKey === key ? (sortDir === 1 ? ' ▲' : ' ▼') : '');
+    const sortableHead = (label, key, title='') => `<th onclick="setInsuranceSort('${key}')" style="cursor:pointer;user-select:none;"${title ? ` title="${title}"` : ''}>${label}${sortArrow(key)}</th>`;
+    let hh = '';
+    hh += sortableHead('Team', 'team');
+    hh += sortableHead('Total Sessions', 'sessions');
+    hh += sortableHead('Crash Frequency', 'crashFreq');
+    hh += sortableHead('Avg Loss Severity ($)', 'avgLoss');
+    hh += sortableHead('Max Single Loss ($)', 'maxSingleLoss');
+    hh += sortableHead('Average Crash Cost/Km ($)', 'costPerKm');
+    hh += sortableHead('Trend', 'trend');
+    hh += sortableHead('Near Miss Rate', 'nearMissRate');
+    if (showCrashRate) hh += sortableHead(`Crashes / ${baseKm}km`, 'crashesPerBaseKm');
+    if (showEstopRate) hh += sortableHead(`E-Stops / ${baseKm}km`, 'estopsPerBaseKm');
+    if (showInstabilityRate) hh += sortableHead(`Instability Events / ${baseKm}km`, 'instabilityPerBaseKm');
+    hh += sortableHead('Annual Premium Index <span style="color:var(--muted);font-size:10px;">ⓘ</span>', 'annualPremiumIndex', 'Relative index only. Multiply by insurer base rate to calculate actual premium. Not a quoted price.');
+    hh += sortableHead('Liability Status', 'liability');
     head.innerHTML = hh;
   }
   const body = document.getElementById('ins-tbody');
   const totalCols = 10 + (showCrashRate ? 1 : 0) + (showEstopRate ? 1 : 0) + (showInstabilityRate ? 1 : 0);
-  if (body) body.innerHTML = activeTeams.map(t => {
+  const sortedTeams = [...activeTeams].sort((a, b) => {
+    const as = teamStats[a.name];
+    const bs = teamStats[b.name];
+    const aMissing = !as || as.sessions === 0;
+    const bMissing = !bs || bs.sessions === 0;
+    if (aMissing !== bMissing) return aMissing ? 1 : -1;
+    const getVal = (team, st) => {
+      if (sortKey === 'team') return String(team.name || '').toLowerCase();
+      if (sortKey === 'sessions') return Number(st.sessions || 0);
+      if (sortKey === 'crashFreq') return Number(st.crashFreq || 0);
+      if (sortKey === 'avgLoss') return Number(st.avgLoss || 0);
+      if (sortKey === 'maxSingleLoss') return Number(st.maxSingleLoss || 0);
+      if (sortKey === 'costPerKm') return Number(st.costPerKm || 0);
+      if (sortKey === 'trend') return Number(st.trendDelta || 0);
+      if (sortKey === 'nearMissRate') return Number(st.nearMissRate || 0);
+      if (sortKey === 'crashesPerBaseKm') return Number(st.crashesPerBaseKm ?? -1);
+      if (sortKey === 'estopsPerBaseKm') return Number(st.estopsPerBaseKm ?? -1);
+      if (sortKey === 'instabilityPerBaseKm') return Number(st.instabilityPerBaseKm ?? -1);
+      if (sortKey === 'annualPremiumIndex') return Number(st.annualPremiumIndex || 0);
+      if (sortKey === 'liability') return Number(st.damage || 0);
+      return Number(st.annualPremiumIndex || 0);
+    };
+    const av = getVal(a, as);
+    const bv = getVal(b, bs);
+    if (av < bv) return -1 * sortDir;
+    if (av > bv) return 1 * sortDir;
+    return String(a.name || '').localeCompare(String(b.name || ''));
+  });
+  if (body) body.innerHTML = sortedTeams.map(t => {
     const st = teamStats[t.name];
     if (!st || st.sessions === 0) {
       return `<tr>

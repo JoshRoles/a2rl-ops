@@ -3959,11 +3959,13 @@ function renderLiveTable() {
     const scored = ts.filter(hasUsableRiskScore);
     const scores = scored.map(toRiskNumber);
     const latestScore = scores.length ? scores[scores.length - 1] : 0;
+    const totalLaps = ts.reduce((a,s)=>a+Math.max(0, Number(s.laps)||0),0);
     const totalDamage = ts.reduce((a,s)=>a+Math.max(0, Number(s.damage)||0),0);
     const totalKm = ts.reduce((a,s)=>a+getSessionDistanceKm(s),0);
     const crashes = ts.filter(s => String(s.crashed || '').trim().toLowerCase() === 'yes').length;
     const avgLoss = crashes > 0 ? (totalDamage / crashes) : 0;
     const costPerKm = totalKm > 0 ? (totalDamage / totalKm) : 0;
+    const costPerLap = totalLaps > 0 ? (totalDamage / totalLaps) : 0;
     const nearMissRate = ts.length > 0 ? (ts.filter(s => (Number(s.estops) || 0) > 0).length / ts.length) : 0;
     const early10 = ts.slice(0, 10);
     const recent10 = ts.slice(-10);
@@ -3983,20 +3985,33 @@ function renderLiveTable() {
       scoredSessions: scored.length,
       latestScore,
       avgRisk: scores.length ? (scores.reduce((a,b)=>a+b,0) / scores.length) : 0,
+      adjustedAvgRisk: scores.length ? (scores.reduce((a,b)=>a+b,0) / scores.length) : 0,
       crashes,
       crashFreq: ts.length ? (crashes / ts.length) : 0,
       estopsAvg: ts.length ? (ts.reduce((a,s)=>a+(Number(s.estops) || 0),0) / ts.length) : 0,
       ttcAvg: ts.length ? (ts.reduce((a,s)=>a+(Number(s.ttc) || 0),0) / ts.length) : 0,
+      totalLaps,
       totalKm,
       totalDamage,
       avgLoss,
       costPerKm,
+      costPerLap,
       nearMissRate,
       annualPremiumIndex,
       latestAt: ts.length ? getSessionDateObj(ts[ts.length - 1]) : null,
       tier: riskTier(scores.length ? (scores.reduce((a,b)=>a+b,0) / scores.length) : 0),
     };
-  }).sort((a,b)=>b.avgRisk-a.avgRisk);
+  });
+  const fieldCostRows = teamStats.filter(st => st.sessions > 0 && st.totalDamage > 0 && st.totalLaps > 0);
+  const fieldAvgCostPerLap = fieldCostRows.length
+    ? (fieldCostRows.reduce((a, st) => a + st.costPerLap, 0) / fieldCostRows.length)
+    : 0;
+  teamStats.forEach(st => {
+    st.damageEff = calcDamageEfficiencyScore(st.costPerLap, fieldAvgCostPerLap);
+    st.adjustedAvgRisk = (st.avgRisk * 0.7) + ((st.damageEff * 10) * 0.3);
+    st.tier = riskTier(st.adjustedAvgRisk);
+  });
+  teamStats.sort((a,b)=>b.adjustedAvgRisk-a.adjustedAvgRisk);
 
   const head = document.getElementById('live-head-row');
   if (head) {
@@ -4005,7 +4020,7 @@ function renderLiveTable() {
   let rank = 1;
   document.getElementById('team-tbody').innerHTML = teamStats.map((row) => {
     const { team } = row;
-    const score = Number(row.avgRisk || 0);
+    const score = Number(row.adjustedAvgRisk || 0);
     const c = riskColor(score);
     return `<tr>
       <td style="color:var(--muted);font-size:11px;">${rank++}</td>
@@ -4031,7 +4046,7 @@ function renderLiveTable() {
   // Update stat cards
   const hasRealRisk = teamStats.some(r => r.scoredSessions > 0);
   const avg = hasRealRisk
-    ? (teamStats.filter(r => r.scoredSessions > 0).reduce((a,b) => a + b.avgRisk, 0) / Math.max(1, teamStats.filter(r => r.scoredSessions > 0).length))
+    ? (teamStats.filter(r => r.scoredSessions > 0).reduce((a,b) => a + b.adjustedAvgRisk, 0) / Math.max(1, teamStats.filter(r => r.scoredSessions > 0).length))
     : 0;
   document.getElementById('stat-avg').innerHTML = avg.toFixed(1)+'<span>/100</span>';
   document.getElementById('gauge-val').textContent = Math.round(avg);
@@ -4039,10 +4054,10 @@ function renderLiveTable() {
   arcEl.setAttribute('stroke-dasharray', `${263*(avg/100)} 377`);
   arcEl.setAttribute('stroke', avg < thresholds.low ? '#00e87a' : avg < thresholds.med ? '#ffaa00' : '#ff3c3c');
 
-  const highest = teamStats.filter(r => r.scoredSessions > 0).sort((a,b)=>b.avgRisk-a.avgRisk)[0] || null;
-  if (highest && highest.avgRisk > 0) {
-    document.getElementById('stat-highest').textContent = `${highest.team.name} · ${highest.avgRisk.toFixed(1)}`;
-    const tier = riskTier(highest.avgRisk);
+  const highest = teamStats.filter(r => r.scoredSessions > 0).sort((a,b)=>b.adjustedAvgRisk-a.adjustedAvgRisk)[0] || null;
+  if (highest && highest.adjustedAvgRisk > 0) {
+    document.getElementById('stat-highest').textContent = `${highest.team.name} · ${highest.adjustedAvgRisk.toFixed(1)}`;
+    const tier = riskTier(highest.adjustedAvgRisk);
     document.getElementById('stat-highest').nextElementSibling.innerHTML = `<span class="badge ${tier.cls}">${tier.label}</span>`;
   } else {
     document.getElementById('stat-highest').textContent = '—';

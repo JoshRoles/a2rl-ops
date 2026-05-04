@@ -626,6 +626,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
             <button class="btn primary" onclick="startScheduleWizard()">+ Build New Schedule</button>
             <button class="btn" onclick="exportScheduleToSessions()" id="btn-push-sessions">⤑ Push to Sessions</button>
             <button class="btn" onclick="saveScheduleDraft()" id="btn-save-schedule-draft">💾 Save Draft</button>
+            <button class="btn" onclick="toggleScheduleDraftMode()" id="btn-sched-draft-mode">🟡 Draft Mode: ON</button>
             <button class="btn danger sm" onclick="clearSchedule()">Clear</button>
           </div>
         </div>
@@ -2713,9 +2714,61 @@ function getScheduleLogBucket(dayIdx = currentSchedDay, create = false) {
       lastPublishedSnapshot: [],
       lastPublishedAt: '',
       lastSavedAt: '',
+      nextVersionManual: null,
+      draftMode: true,
     };
   }
   return scheduleChangeLog[key] || null;
+}
+function isScheduleDraftMode(dayIdx = currentSchedDay) {
+  const bucket = getScheduleLogBucket(dayIdx, false);
+  // Default to ON so planning/editing does not accidentally issue versions.
+  if (!bucket) return true;
+  return bucket.draftMode !== false;
+}
+function renderScheduleDraftModeButton() {
+  const btn = document.getElementById('btn-sched-draft-mode');
+  if (!btn) return;
+  const on = isScheduleDraftMode(currentSchedDay);
+  btn.textContent = on ? '🟡 Draft Mode: ON' : '🟢 Draft Mode: OFF';
+  btn.style.borderColor = on ? 'rgba(245,158,11,0.45)' : 'rgba(34,197,94,0.45)';
+  btn.style.background = on ? 'rgba(245,158,11,0.12)' : 'rgba(34,197,94,0.12)';
+  btn.style.color = on ? '#fbbf24' : '#86efac';
+}
+function setScheduleDraftMode(enabled, dayIdx = currentSchedDay, opts = {}) {
+  const bucket = getScheduleLogBucket(dayIdx, true);
+  bucket.draftMode = !!enabled;
+  bucket.lastSavedAt = new Date().toISOString();
+  save();
+  renderScheduleDayTabs();
+  renderScheduleStatusChip();
+  renderScheduleDraftModeButton();
+  if (opts.refreshVersions) openAllScheduleVersions();
+  if (!opts.silent) {
+    alert(bucket.draftMode
+      ? `Draft Mode is ON for Day ${dayIdx + 1}. Version issuing/printing is blocked.`
+      : `Draft Mode is OFF for Day ${dayIdx + 1}. You can now issue versions and print.`);
+  }
+}
+function toggleScheduleDraftMode(dayIdx = currentSchedDay, opts = {}) {
+  setScheduleDraftMode(!isScheduleDraftMode(dayIdx), dayIdx, opts);
+}
+function ensureScheduleIssuingEnabled(dayIdx = currentSchedDay, source = 'issue versions') {
+  if (!isScheduleDraftMode(dayIdx)) return true;
+  alert(`Draft Mode is ON for Day ${dayIdx + 1}. Turn Draft Mode OFF before you ${source}.`);
+  return false;
+}
+function getMaxScheduleVersion(bucket) {
+  const versions = Array.isArray(bucket?.versions) ? bucket.versions : [];
+  const nums = versions
+    .map(v => Number(v?.version || 0))
+    .filter(n => Number.isFinite(n) && n > 0);
+  return nums.length ? Math.max(...nums) : 0;
+}
+function getNextScheduleVersionNumber(bucket) {
+  const manual = Math.floor(Number(bucket?.nextVersionManual || 0));
+  if (Number.isFinite(manual) && manual > 0) return manual;
+  return getMaxScheduleVersion(bucket) + 1;
 }
 function scheduleSnapshotsEqual(a, b) {
   return JSON.stringify(a || []) === JSON.stringify(b || []);
@@ -2724,18 +2777,19 @@ function getScheduleStatusForDay(dayIdx = currentSchedDay) {
   const bucket = getScheduleLogBucket(dayIdx, false);
   const currSnapshot = cloneDaySchedule(dayIdx);
   const hasRows = currSnapshot.some(b => b.type !== 'break' && b.type !== 'reserve' && (b.teams || []).length);
+  const draftModeOn = isScheduleDraftMode(dayIdx);
   const publishedVersion = Number(bucket?.lastPublishedVersion || 0);
   if (publishedVersion > 0) {
     const publishedSnapshot = Array.isArray(bucket?.lastPublishedSnapshot) ? bucket.lastPublishedSnapshot : [];
     const clean = scheduleSnapshotsEqual(currSnapshot, publishedSnapshot);
     return {
-      label: clean ? `V${publishedVersion} Pushed` : `V${publishedVersion} Draft`,
-      tone: clean ? 'ok' : 'draft',
+      label: `${draftModeOn ? 'Draft Mode · ' : ''}${clean ? `V${publishedVersion} Pushed` : `V${publishedVersion} Draft`}`,
+      tone: draftModeOn ? 'draft' : (clean ? 'ok' : 'draft'),
       savedAt: String(bucket?.lastSavedAt || ''),
     };
   }
   return {
-    label: hasRows ? 'Draft' : 'No Draft',
+    label: draftModeOn ? 'Draft Mode' : (hasRows ? 'Draft' : 'No Draft'),
     tone: hasRows ? 'draft' : 'muted',
     savedAt: String(bucket?.lastSavedAt || ''),
   };
@@ -2772,7 +2826,7 @@ function issuePublishedScheduleVersion(dayIdx = currentSchedDay, reason = 'Pushe
     return null;
   }
   const versions = Array.isArray(bucket.versions) ? bucket.versions : [];
-  const nextVersion = versions.length ? (Math.max(...versions.map(v => Number(v.version || 0))) + 1) : 1;
+  const nextVersion = getNextScheduleVersionNumber(bucket);
   const changeLines = prevPublishedVersion > 0
     ? diffDaySchedules(prevPublishedSnapshot, currSnapshot)
     : ['Initial schedule issue.'];
@@ -2795,6 +2849,7 @@ function issuePublishedScheduleVersion(dayIdx = currentSchedDay, reason = 'Pushe
   bucket.lastPublishedSnapshot = JSON.parse(JSON.stringify(currSnapshot));
   bucket.lastPublishedAt = entry.generatedAt;
   bucket.lastSavedAt = entry.generatedAt;
+  bucket.nextVersionManual = null;
   return entry;
 }
 function saveScheduleDraft() {
@@ -2848,6 +2903,8 @@ function ensureScheduleVersion(reason, opts = {}) {
       eventName: schedCfg?.eventName || '—',
       day: dayIdx,
       versions: [],
+      nextVersionManual: null,
+      draftMode: true,
     };
   }
   const bucket = scheduleChangeLog[key];
@@ -2859,7 +2916,7 @@ function ensureScheduleVersion(reason, opts = {}) {
     ? diffDaySchedules(prevSnapshot, currSnapshot)
     : ['Initial schedule issue.'];
   const entry = {
-    version: bucket.versions.length + 1,
+    version: getNextScheduleVersionNumber(bucket),
     day: dayIdx,
     eventName: schedCfg?.eventName || bucket.eventName || '—',
     generatedAt: new Date().toISOString(),
@@ -2872,8 +2929,50 @@ function ensureScheduleVersion(reason, opts = {}) {
   bucket.eventName = schedCfg?.eventName || bucket.eventName || '—';
   bucket.day = dayIdx;
   bucket.versions.push(entry);
+  bucket.nextVersionManual = null;
   lastChangeNotesBase = JSON.parse(JSON.stringify(prevSnapshot));
   return entry;
+}
+function setScheduleNextVersion(dayIdx = currentSchedDay) {
+  const input = document.getElementById('schedule-next-version-input');
+  const raw = parseInt(input?.value, 10);
+  if (!Number.isFinite(raw) || raw < 1) {
+    alert('Enter a valid next version number (1 or higher).');
+    return;
+  }
+  const bucket = getScheduleLogBucket(dayIdx, true);
+  const maxExisting = getMaxScheduleVersion(bucket);
+  if (raw <= maxExisting) {
+    alert(`Version ${raw} already exists. Clear version history first, or choose version ${maxExisting + 1} or higher.`);
+    return;
+  }
+  bucket.nextVersionManual = raw;
+  bucket.lastSavedAt = new Date().toISOString();
+  save();
+  renderScheduleStatusChip();
+  openAllScheduleVersions();
+  alert(`Next issued version is set to V${raw} for Day ${dayIdx + 1}.`);
+}
+function clearScheduleVersionHistory(dayIdx = currentSchedDay) {
+  const bucket = getScheduleLogBucket(dayIdx, false);
+  if (!bucket) {
+    alert('No version history exists for this day yet.');
+    return;
+  }
+  const ok = confirm(`Clear all schedule versions for Day ${dayIdx + 1}? This cannot be undone.`);
+  if (!ok) return;
+  bucket.versions = [];
+  bucket.lastPublishedVersion = 0;
+  bucket.lastPublishedSnapshot = [];
+  bucket.lastPublishedAt = '';
+  bucket.nextVersionManual = 1;
+  bucket.draftMode = true;
+  bucket.lastSavedAt = new Date().toISOString();
+  pendingScheduleChangeReason = '';
+  save();
+  renderScheduleStatusChip();
+  openAllScheduleVersions();
+  alert(`Version history cleared for Day ${dayIdx + 1}. Next issued version is V1.`);
 }
 function getLatestScheduleVersion(dayIdx = currentSchedDay) {
   const bucket = scheduleChangeLog?.[getScheduleChangeLogKey(dayIdx)];
@@ -2933,6 +3032,7 @@ async function getPdfHeaderAssetDataUrl(assetPath, opts = {}) {
 
 async function downloadScheduleChangeNotes() {
   const dayIdx = currentSchedDay;
+  if (!ensureScheduleIssuingEnabled(dayIdx, 'issue/print change notes')) return;
   let version = getLatestScheduleVersion(dayIdx);
   const issueReason = pendingScheduleChangeReason || (version ? 'Schedule updated' : 'Initial issued schedule');
   const issued = ensureScheduleVersion(issueReason, { dayIdx, force: !version, initial: !version });
@@ -3046,9 +3146,21 @@ function openAllScheduleVersions() {
   const bucket = scheduleChangeLog?.[key];
   const body = document.getElementById('schedule-versions-body');
   const meta = document.getElementById('schedule-versions-meta');
-  if (!body || !meta) return;
+  const controls = document.getElementById('schedule-versions-controls');
+  if (!body || !meta || !controls) return;
   const eventName = schedCfg?.eventName || bucket?.eventName || '—';
   meta.textContent = `Event: ${eventName} | Day ${dayIdx + 1}`;
+  const nextManual = Math.floor(Number(bucket?.nextVersionManual || 0));
+  const draftOn = isScheduleDraftMode(dayIdx);
+  const nextSuggested = nextManual > 0 ? nextManual : (getMaxScheduleVersion(bucket) + 1);
+  controls.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px;">
+    <button class="btn sm" style="border-color:${draftOn ? 'rgba(245,158,11,0.45)' : 'rgba(34,197,94,0.45)'};background:${draftOn ? 'rgba(245,158,11,0.12)' : 'rgba(34,197,94,0.12)'};color:${draftOn ? '#fbbf24' : '#86efac'};" onclick="toggleScheduleDraftMode(${dayIdx}, { refreshVersions: true })">${draftOn ? '🟡 Draft Mode: ON' : '🟢 Draft Mode: OFF'}</button>
+    <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Next Version</span>
+    <input type="number" id="schedule-next-version-input" min="1" value="${nextSuggested}" style="width:110px;background:var(--bg3);border:1px solid var(--border2);color:var(--text);padding:6px 8px;border-radius:4px;font-size:12px;">
+    <button class="btn sm" onclick="setScheduleNextVersion(${dayIdx})">Set</button>
+    <button class="btn sm danger" onclick="clearScheduleVersionHistory(${dayIdx})">Clear Versions</button>
+    <span style="font-size:11px;color:var(--muted);">Draft Mode ON blocks issuing/printing. Turn it OFF when ready.</span>
+  </div>`;
   if (!bucket || !Array.isArray(bucket.versions) || !bucket.versions.length) {
     body.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 2px;">No issued versions for this day yet. Issue from "Change Notes" to create Version 1.</div>';
     openModal('modal-schedule-versions');
@@ -6177,6 +6289,7 @@ function renderScheduleView() {
       chip.style.borderColor = 'var(--border2)';
       chip.style.background = 'rgba(255,255,255,0.03)';
     }
+    renderScheduleDraftModeButton();
     return;
   }
   if (ev) {
@@ -6193,6 +6306,7 @@ function renderScheduleView() {
   if (lbl) lbl.textContent = 'Day '+(currentSchedDay+1);
   renderScheduleDayTabs();
   renderScheduleStatusChip();
+  renderScheduleDraftModeButton();
 
   const toM = t=>{const[h,m]=t.split(':').map(Number);return h*60+m;};
   const fM  = m=>String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
@@ -6610,6 +6724,12 @@ function exportScheduleToSessions() {
   };
   const blocks = schedule.filter(b=>matchSelectedOrLegacy(b) && b.type!=='break' && b.type!=='reserve' && b.teams && b.teams.length>0);
   if (!blocks.length) { alert('No session blocks to push. Build a schedule first.'); return; }
+  const pushedDays = [...new Set(blocks.map(b => (b.day || 0)))];
+  const blockedDay = pushedDays.find(dayIdx => isScheduleDraftMode(dayIdx));
+  if (blockedDay != null) {
+    alert(`Draft Mode is ON for Day ${Number(blockedDay) + 1}. Turn Draft Mode OFF before pushing schedule sessions.`);
+    return;
+  }
   const prevById = Object.fromEntries(getRuntimeSchedule().map(b => [String(b.id), b]));
   const liveId = String(liveSession?.schedBlockId || scheduleLive?.current?.id || '');
   runtimeSchedule = JSON.parse(JSON.stringify(schedule || [])).map(b => {
@@ -6638,7 +6758,6 @@ function exportScheduleToSessions() {
     }
     return withFlags;
   });
-  const pushedDays = [...new Set(blocks.map(b => (b.day || 0)))];
   pushedDays.forEach(dayIdx => issuePublishedScheduleVersion(dayIdx, 'Pushed to Sessions'));
   // Materialize visible "pending capture" sessions immediately, including
   // future-dated plans, so Session History reflects what was just published.
@@ -10141,6 +10260,7 @@ init();
     <button class="modal-close" onclick="closeModal('modal-schedule-versions')">✕</button>
     <div class="modal-title">Schedule Versions Log</div>
     <div id="schedule-versions-meta" style="font-size:12px;color:var(--muted);margin-bottom:12px;"></div>
+    <div id="schedule-versions-controls"></div>
     <div id="schedule-versions-body"></div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modal-schedule-versions')">Close</button>

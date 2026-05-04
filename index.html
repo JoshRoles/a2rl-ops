@@ -631,6 +631,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
           </div>
         </div>
         <div id="sched-status-chip" style="margin:-6px 0 12px 0;font-size:11px;color:var(--muted);display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid var(--border2);border-radius:999px;background:rgba(255,255,255,0.03);">Status: —</div>
+        <div id="sched-day-window-editor" style="margin:0 0 12px 0;"></div>
 
         <div id="sched-stats-row" style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:16px;"></div>
 
@@ -6269,6 +6270,110 @@ function syncSchedConfig() {
     daySelect.value = currentSchedDay;
   }
 }
+function renderSchedDayWindowEditor() {
+  const wrap = document.getElementById('sched-day-window-editor');
+  if (!wrap) return;
+  const ev = getScheduleEventById();
+  if (!schedCfg?.eventId || !ev) {
+    wrap.innerHTML = '';
+    return;
+  }
+  const d = getSchedDayCfg(currentSchedDay);
+  wrap.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,0.02);">
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-right:4px;">Day Timing</div>
+    <div class="field" style="min-width:120px;"><label style="font-size:10px;">Day Start</label><input type="time" id="sched-day-start-input" value="${d.dayStart || '08:00'}"></div>
+    <div class="field" style="min-width:120px;"><label style="font-size:10px;">Day End</label><input type="time" id="sched-day-end-input" value="${d.dayEnd || '20:00'}"></div>
+    <div class="field" style="min-width:130px;"><label style="font-size:10px;">Track Open</label><input type="time" id="sched-track-open-input" value="${d.trackOpen || '09:00'}"></div>
+    <div class="field" style="min-width:130px;"><label style="font-size:10px;">Track Close</label><input type="time" id="sched-track-close-input" value="${d.trackClose || '18:00'}"></div>
+    <button class="btn sm" onclick="applySchedDayWindowEdits()">Apply Day Timing</button>
+    <div style="font-size:11px;color:var(--muted);line-height:1.4;max-width:560px;">Updates this day only. Team allocation is preserved; schedule rows are only adjusted if the day window is shortened.</div>
+  </div>`;
+}
+function applySchedDayWindowEdits() {
+  const ev = getScheduleEventById();
+  if (!schedCfg?.eventId || !ev) {
+    alert('Select an event first.');
+    return;
+  }
+  const curr = getSchedDayCfg(currentSchedDay);
+  const dayStart = document.getElementById('sched-day-start-input')?.value || curr.dayStart || '08:00';
+  const dayEnd = document.getElementById('sched-day-end-input')?.value || curr.dayEnd || '20:00';
+  const trackOpenRaw = document.getElementById('sched-track-open-input')?.value || curr.trackOpen || '09:00';
+  const trackCloseRaw = document.getElementById('sched-track-close-input')?.value || curr.trackClose || '18:00';
+
+  const dayStartM = _toM(dayStart);
+  const dayEndM = _toM(dayEnd);
+  if (!(dayEndM > dayStartM)) {
+    alert('Day End must be later than Day Start.');
+    return;
+  }
+  let trackOpenM = _toM(trackOpenRaw);
+  let trackCloseM = _toM(trackCloseRaw);
+  trackOpenM = Math.max(dayStartM, Math.min(trackOpenM, dayEndM));
+  trackCloseM = Math.max(dayStartM, Math.min(trackCloseM, dayEndM));
+  if (!(trackCloseM > trackOpenM)) {
+    alert('Track Close must be later than Track Open.');
+    return;
+  }
+
+  const nextCfg = {
+    dayStart: _fM(dayStartM),
+    dayEnd: _fM(dayEndM),
+    trackOpen: _fM(trackOpenM),
+    trackClose: _fM(trackCloseM),
+  };
+  const noChange = curr.dayStart === nextCfg.dayStart &&
+    curr.dayEnd === nextCfg.dayEnd &&
+    curr.trackOpen === nextCfg.trackOpen &&
+    curr.trackClose === nextCfg.trackClose;
+  if (noChange) {
+    alert('No timing changes detected for this day.');
+    return;
+  }
+
+  const prevStart = Math.max(_toM(curr.dayStart), _toM(curr.trackOpen));
+  const prevEnd = Math.min(_toM(curr.dayEnd), _toM(curr.trackClose));
+  const nextStart = Math.max(dayStartM, trackOpenM);
+  const nextEnd = Math.min(dayEndM, trackCloseM);
+  const dayShortened = nextStart > prevStart || nextEnd < prevEnd;
+
+  pushScheduleHistory();
+  _ensureSchedDayCfg();
+  schedCfg.dayCfgs[currentSchedDay] = nextCfg;
+
+  let removedCount = 0;
+  let trimmedCount = 0;
+  if (dayShortened) {
+    schedule = (schedule || []).filter(b => {
+      if (!matchSelectedScheduleEvent(b) || (b.day || 0) !== currentSchedDay) return true;
+      const startM = _toM(b.time);
+      const endM = startM + (parseInt(b.duration, 10) || 0);
+      if (endM <= nextStart || startM >= nextEnd) {
+        removedCount++;
+        return false;
+      }
+      const clampedStart = Math.max(startM, nextStart);
+      const clampedEnd = Math.min(endM, nextEnd);
+      if (clampedStart !== startM || clampedEnd !== endM) {
+        b.time = _fM(clampedStart);
+        b.duration = Math.max(1, clampedEnd - clampedStart);
+        trimmedCount++;
+      }
+      return true;
+    });
+  }
+
+  markScheduleMutation(dayShortened ? 'Schedule day timing updated (window shortened)' : 'Schedule day timing updated');
+  save();
+  renderScheduleView();
+  renderSchedTeamSummary();
+  renderSchedStatsRow();
+  if (dayShortened) {
+    alert(`Day timing updated. ${trimmedCount} block(s) trimmed and ${removedCount} block(s) removed to fit the shorter day window. Team allocation totals were not changed.`);
+  } else {
+    alert('Day timing updated. Existing team allocation totals were preserved.');
+  }
+}
 
 function renderScheduleDayTabs() {
   const wrap = document.getElementById('sched-day-tabs');
@@ -6306,6 +6411,7 @@ function renderScheduleView() {
       chip.style.borderColor = 'var(--border2)';
       chip.style.background = 'rgba(255,255,255,0.03)';
     }
+    renderSchedDayWindowEditor();
     renderScheduleDraftModeButton();
     return;
   }
@@ -6323,6 +6429,7 @@ function renderScheduleView() {
   if (lbl) lbl.textContent = 'Day '+(currentSchedDay+1);
   renderScheduleDayTabs();
   renderScheduleStatusChip();
+  renderSchedDayWindowEditor();
   renderScheduleDraftModeButton();
 
   const toM = t=>{const[h,m]=t.split(':').map(Number);return h*60+m;};

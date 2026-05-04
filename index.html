@@ -5386,7 +5386,7 @@ function renderWizStep2(body) {
       </div>
       <div class="panel-body">
         <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
-          Create groups of 2–5 cars that share one track slot. Each group has its own multi-car session length, and grouped teams can still run single sessions using the mix split.
+          Create groups of 2+ cars that share one track slot. Each group has its own multi-car session length, and grouped teams can still run single sessions using the mix split.
         </div>
         <div id="wiz-multi-groups" style="display:flex;flex-direction:column;gap:8px;"></div>
         <div style="margin-top:10px;font-size:11px;color:var(--muted);padding:8px 10px;background:rgba(255,255,255,0.025);border-radius:4px;">
@@ -8560,7 +8560,6 @@ function wizAddToGroup(gi) {
   const sel = document.getElementById('wiz-add-sel-' + gi);
   if (!sel || !sel.value) return;
   if (!(wiz.multiGroups||[])[gi]) return;
-  if ((wiz.multiGroups[gi].teams||[]).length >= 5) { alert('Max 5 cars per group'); return; }
   wiz.multiGroups[gi].teams.push(sel.value);
   renderWizMultiGroups();
 }

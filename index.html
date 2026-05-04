@@ -3107,6 +3107,7 @@ async function downloadScheduleChangeNotes() {
   const dayEndLabel = Number.isFinite(w?.dayEndM) ? _fM(w.dayEndM) : '—';
   const trackOpenLabel = Number.isFinite(w?.trackOpenM) ? _fM(w.trackOpenM) : '—';
   const trackCloseLabel = Number.isFinite(w?.trackCloseM) ? _fM(w.trackCloseM) : '—';
+  const scheduleContextLine = `Season ${eventCfg?.season || '—'} | ${version.eventName || schedCfg.eventName || '—'} | Day ${dayIdx + 1}`;
   const scheduleTitleLine = `Date: ${dayDateLabel} | Start: ${dayStartLabel} | Finish: ${dayEndLabel} | Track Open: ${trackOpenLabel} | Track Close: ${trackCloseLabel}`;
   const win = window.open('', '_blank');
   if (!win) {
@@ -3123,7 +3124,7 @@ async function downloadScheduleChangeNotes() {
       .pdf-header-logo-a2rl{height:88px;width:auto;object-fit:contain;display:block}
       .pdf-header-logo-aspire{height:34px;width:auto;object-fit:contain;display:block}
       .pdf-header-main{font-size:18px;font-weight:800;letter-spacing:0.6px;line-height:1.2;color:#111;white-space:nowrap;text-align:center}
-      .doc-title{margin:2px 0 10px;font-size:13px;font-weight:700;line-height:1.45;color:#111}
+      .doc-title{margin:2px 0 10px;font-size:17px;font-weight:800;line-height:1.5;color:#111;text-align:center}
       .meta{font-size:12px;color:#333;line-height:1.6}
       ul{margin:8px 0 0 18px;font-size:12px}
       table{width:100%;border-collapse:collapse;margin-top:10px;font-size:12px}
@@ -3137,7 +3138,7 @@ async function downloadScheduleChangeNotes() {
         <div class="pdf-header-main">ABU DHABI AUTONOMOUS RACING LEAGUE</div>
         ${aspireLogoDataUrl ? `<img class="pdf-header-logo-aspire" src="${aspireLogoDataUrl}" alt="ASPIRE logo">` : ''}
       </div>
-      <div class="doc-title">${esc(scheduleTitleLine)}</div>
+      <div class="doc-title">${esc(scheduleContextLine)}<br>${esc(scheduleTitleLine)}</div>
       <h2 style="margin-top:2px;">Schedule Change Notes</h2>
       <div class="meta">
         Event: ${esc(version.eventName || schedCfg.eventName || '—')} | Version ${version.version} | Generated: ${esc(generated)}<br>

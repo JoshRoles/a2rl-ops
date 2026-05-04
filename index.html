@@ -3076,7 +3076,10 @@ async function downloadScheduleChangeNotes() {
   const timetableRows = rows.map((b, idx) => {
     const start = b.time || '00:00';
     const end = _fM(_toM(start) + (parseInt(b.duration, 10) || 0));
-    const team = (b.teams || []).join(' + ') || b.label || '—';
+    const teamNames = (b.teams || []).join(' + ');
+    const team = teamNames || b.label || '—';
+    const labelRaw = String(b.label || '').trim();
+    const labelNotes = labelRaw && labelRaw !== teamNames ? labelRaw : '';
     const sessionType = b.type === 'single'
       ? 'Single Car'
       : (b.type === 'multi'
@@ -3089,6 +3092,7 @@ async function downloadScheduleChangeNotes() {
       <td>${esc(start)}</td>
       <td>${esc(end)}</td>
       <td>${esc(team)}</td>
+      <td>${esc(labelNotes || '—')}</td>
       <td>${sessionType}</td>
       <td>${parseInt(b.duration, 10) || 0}m</td>
     </tr>`;
@@ -3149,8 +3153,8 @@ async function downloadScheduleChangeNotes() {
       <ul>${changes || '<li>No row-level differences detected.</li>'}</ul>
       <h2>Current Timetable</h2>
       <table>
-        <thead><tr><th>Run No</th><th>Start time</th><th>End time</th><th>Team</th><th>Session Type</th><th>Duration</th></tr></thead>
-        <tbody>${timetableRows || '<tr><td colspan="6">No schedule rows for this day.</td></tr>'}</tbody>
+        <thead><tr><th>Run No</th><th>Start time</th><th>End time</th><th>Team</th><th>Label / Notes</th><th>Session Type</th><th>Duration</th></tr></thead>
+        <tbody>${timetableRows || '<tr><td colspan="7">No schedule rows for this day.</td></tr>'}</tbody>
       </table>
       <div class="footer">Season ${esc(eventCfg?.season || '—')} | ${esc(version.eventName || schedCfg.eventName || '—')} | Day ${dayIdx + 1}</div>
     </body></html>`);
@@ -6506,7 +6510,10 @@ function renderScheduleView() {
       : (isEndBufferBlock ? '#f59e0b' : (ft ? ft.color : '#00d4ff'));
     const blockClass = ti.cls + (isLunchBlock ? ' sched-lunch' : '') + (isEndBufferBlock ? ' sched-end-buffer' : '');
     const dots=(block.teams||[]).map(tn=>{const t=teams.find(x=>x.name===tn);return t?'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+t.color+';flex-shrink:0;"></span>':'';}).join('');
-    const names=(block.teams||[]).join(' + ')||block.label||'';
+    const teamNames=(block.teams||[]).join(' + ');
+    const names=teamNames||block.label||'';
+    const labelRaw = String(block.label || '').trim();
+    const labelNotes = labelRaw && labelRaw !== teamNames ? labelRaw : '';
 
     const el=document.createElement('div');
     el.id='blk-'+block.id;
@@ -6552,6 +6559,7 @@ function renderScheduleView() {
       +dots
       +'<span style="font-weight:700;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+names+' · '+(block.duration||0)+'m</span>'
       +'</div>'
+      +(labelNotes ? '<div title="'+labelNotes.replace(/"/g,'&quot;')+'" style="font-size:9px;color:rgba(255,255,255,0.72);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+labelNotes+'</div>' : '')
       +(blockH>42?'<div style="font-size:9px;color:rgba(255,255,255,0.4);margin-top:1px;">'+ti.label+'</div>':'');
     el.appendChild(body);
 

@@ -645,6 +645,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
               <button class="btn sm" onclick="undoSchedule()">↶ Undo</button>
               <button class="btn sm" onclick="redoSchedule()">↷ Redo</button>
               <button class="btn sm" onclick="downloadScheduleChangeNotes()">📝 Change Notes</button>
+              <button class="btn sm" onclick="downloadCombinedEventChangeNotes()">🗂 Event Notes (All)</button>
               <button class="btn sm" onclick="openAllScheduleVersions()">📚 All Versions</button>
               <button class="btn sm" onclick="openAddSlotModal()">+ Add Slot</button>
             </div>
@@ -3030,6 +3031,38 @@ async function getPdfHeaderAssetDataUrl(assetPath, opts = {}) {
     return '';
   }
 }
+function getAbsoluteAssetUrl(assetPath) {
+  try {
+    return new URL(assetPath, window.location.href).href;
+  } catch {
+    return assetPath;
+  }
+}
+async function waitForPopupImagesAndPrint(win, imageIds = []) {
+  try {
+    const doc = win?.document;
+    if (!doc) return;
+    const imgs = imageIds
+      .map(id => doc.getElementById(id))
+      .filter(Boolean);
+    if (!imgs.length) {
+      win.focus();
+      win.print();
+      return;
+    }
+    await Promise.race([
+      Promise.all(imgs.map(img => new Promise(resolve => {
+        if (img.complete) { resolve(); return; }
+        const done = () => resolve();
+        img.addEventListener('load', done, { once: true });
+        img.addEventListener('error', done, { once: true });
+      }))),
+      new Promise(resolve => setTimeout(resolve, 2000)),
+    ]);
+  } catch {}
+  win.focus();
+  win.print();
+}
 
 async function downloadScheduleChangeNotes() {
   const dayIdx = currentSchedDay;
@@ -3121,8 +3154,8 @@ async function downloadScheduleChangeNotes() {
   }
   const aspireLogoDataUrl = await getPdfHeaderAssetDataUrl('assets/aspire-logo.png');
   const a2rlLogoDataUrl = await getPdfHeaderAssetDataUrl('assets/a2rl-logo-template.png', { removeNearBlack: true });
-  const aspireLogoSrc = aspireLogoDataUrl || 'assets/aspire-logo.png';
-  const a2rlLogoSrc = a2rlLogoDataUrl || 'assets/a2rl-logo-template.png';
+  const aspireLogoSrc = aspireLogoDataUrl || getAbsoluteAssetUrl('assets/aspire-logo.png');
+  const a2rlLogoSrc = a2rlLogoDataUrl || getAbsoluteAssetUrl('assets/a2rl-logo-template.png');
   win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Schedule Change Notes</title>
     <style>
       body{font-family:Roboto,Arial,sans-serif;padding:18px;color:#111}
@@ -3142,9 +3175,9 @@ async function downloadScheduleChangeNotes() {
       .footer{margin-top:14px;font-size:11px;color:#444}
     </style></head><body>
       <div class="pdf-header">
-        <div class="pdf-header-logo-wrap"><img class="pdf-header-logo-a2rl" src="${a2rlLogoSrc}" alt="A2RL logo"></div>
+        <div class="pdf-header-logo-wrap"><img id="pdf-logo-a2rl" class="pdf-header-logo-a2rl" src="${a2rlLogoSrc}" alt="A2RL logo"></div>
         <div class="pdf-header-main">ABU DHABI AUTONOMOUS RACING LEAGUE</div>
-        <div class="pdf-header-logo-wrap"><img class="pdf-header-logo-aspire" src="${aspireLogoSrc}" alt="ASPIRE logo"></div>
+        <div class="pdf-header-logo-wrap"><img id="pdf-logo-aspire" class="pdf-header-logo-aspire" src="${aspireLogoSrc}" alt="ASPIRE logo"></div>
       </div>
       <div class="doc-title">${esc(scheduleContextLine)}<br>${esc(scheduleTitleLine)}</div>
       <h2 style="margin-top:2px;">Schedule Change Notes</h2>
@@ -3162,8 +3195,134 @@ async function downloadScheduleChangeNotes() {
       <div class="footer">Season ${esc(eventCfg?.season || '—')} | ${esc(version.eventName || schedCfg.eventName || '—')} | Day ${dayIdx + 1}</div>
     </body></html>`);
   win.document.close();
-  win.focus();
-  win.print();
+  await waitForPopupImagesAndPrint(win, ['pdf-logo-a2rl', 'pdf-logo-aspire']);
+}
+async function downloadCombinedEventChangeNotes() {
+  const ev = getScheduleEventById();
+  if (!ev) {
+    alert('Select an event first.');
+    return;
+  }
+  const days = Math.max(1, parseInt(ev.days, 10) || 1);
+  const allVersions = [];
+  for (let dayIdx = 0; dayIdx < days; dayIdx++) {
+    const bucket = getScheduleLogBucketForEventDay(ev, dayIdx);
+    if (!bucket || !Array.isArray(bucket.versions) || !bucket.versions.length) continue;
+    const sorted = [...bucket.versions].sort((a, b) => (Number(a.version || 0) - Number(b.version || 0)));
+    sorted.forEach(v => allVersions.push({ dayIdx, version: v }));
+  }
+  if (!allVersions.length) {
+    alert('No issued change notes found for this event yet.');
+    return;
+  }
+
+  const esc = (v) => String(v == null ? '' : v)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+  const toRowsHtml = (snapshot = []) => (snapshot || []).map((b, idx) => {
+    const start = b.time || '00:00';
+    const end = _fM(_toM(start) + (parseInt(b.duration, 10) || 0));
+    const teamNames = (b.teams || []).join(' + ');
+    const team = teamNames || b.label || '—';
+    const labelRaw = String(b.label || '').trim();
+    const labelNotes = labelRaw && labelRaw !== teamNames ? labelRaw : '';
+    const sessionType = b.type === 'single'
+      ? 'Single Car'
+      : (b.type === 'multi'
+        ? 'Multi Car'
+        : (b.type === 'open'
+          ? 'Open Pit'
+          : (b.type === 'break' ? 'Break' : 'Reserve / Buffer')));
+    return `<tr>
+      <td>${idx + 1}</td>
+      <td>${esc(start)}</td>
+      <td>${esc(end)}</td>
+      <td>${esc(team)}</td>
+      <td>${esc(labelNotes || '—')}</td>
+      <td>${sessionType}</td>
+      <td>${parseInt(b.duration, 10) || 0}m</td>
+    </tr>`;
+  }).join('');
+
+  const aspireLogoDataUrl = await getPdfHeaderAssetDataUrl('assets/aspire-logo.png');
+  const a2rlLogoDataUrl = await getPdfHeaderAssetDataUrl('assets/a2rl-logo-template.png', { removeNearBlack: true });
+  const aspireLogoSrc = aspireLogoDataUrl || getAbsoluteAssetUrl('assets/aspire-logo.png');
+  const a2rlLogoSrc = a2rlLogoDataUrl || getAbsoluteAssetUrl('assets/a2rl-logo-template.png');
+  const sectionsHtml = allVersions.map(({ dayIdx, version }, i) => {
+    const w = getSchedWindowsM(dayIdx);
+    const dayDateObj = schedCfg?.eventStart ? (() => {
+      const d = new Date(`${schedCfg.eventStart}T00:00:00`);
+      d.setDate(d.getDate() + dayIdx);
+      return d;
+    })() : null;
+    const dayDateLabel = dayDateObj && !isNaN(dayDateObj)
+      ? dayDateObj.toLocaleDateString(undefined, { weekday:'short', day:'2-digit', month:'short', year:'numeric' })
+      : '—';
+    const dayStartLabel = Number.isFinite(w?.dayStartM) ? _fM(w.dayStartM) : '—';
+    const dayEndLabel = Number.isFinite(w?.dayEndM) ? _fM(w.dayEndM) : '—';
+    const trackOpenLabel = Number.isFinite(w?.trackOpenM) ? _fM(w.trackOpenM) : '—';
+    const trackCloseLabel = Number.isFinite(w?.trackCloseM) ? _fM(w.trackCloseM) : '—';
+    const generated = new Date(version.generatedAt || Date.now()).toLocaleString();
+    const changes = (version.changes || []).map(c => `<li>${esc(c)}</li>`).join('');
+    const rowsHtml = toRowsHtml(Array.isArray(version.snapshot) ? version.snapshot : []);
+    return `<section class="pack-section${i < allVersions.length - 1 ? ' page-break' : ''}">
+      <div class="pdf-header">
+        <div class="pdf-header-logo-wrap"><img id="pdf-pack-logo-a2rl-${i}" class="pdf-header-logo-a2rl" src="${a2rlLogoSrc}" alt="A2RL logo"></div>
+        <div class="pdf-header-main">ABU DHABI AUTONOMOUS RACING LEAGUE</div>
+        <div class="pdf-header-logo-wrap"><img id="pdf-pack-logo-aspire-${i}" class="pdf-header-logo-aspire" src="${aspireLogoSrc}" alt="ASPIRE logo"></div>
+      </div>
+      <div class="doc-title">${esc(`Season ${eventCfg?.season || '—'} | ${version.eventName || schedCfg.eventName || '—'} | Day ${dayIdx + 1}`)}<br>${esc(`Date: ${dayDateLabel} | Start: ${dayStartLabel} | Finish: ${dayEndLabel} | Track Open: ${trackOpenLabel} | Track Close: ${trackCloseLabel}`)}</div>
+      <h2 style="margin-top:2px;">Schedule Change Notes — Version ${version.version}</h2>
+      <div class="meta">
+        Event: ${esc(version.eventName || schedCfg.eventName || '—')} | Day ${dayIdx + 1} | Version ${version.version} | Generated: ${esc(generated)}<br>
+        Issued by: ${esc(version.generatedBy || 'System')} | A2RL Sporting
+      </div>
+      <h2>Input change to schedule</h2>
+      <ul>${changes || '<li>No row-level differences detected.</li>'}</ul>
+      <h2>Current Timetable</h2>
+      <table>
+        <thead><tr><th>Run No</th><th>Start time</th><th>End time</th><th>Team</th><th>Label / Notes</th><th>Session Type</th><th>Duration</th></tr></thead>
+        <tbody>${rowsHtml || '<tr><td colspan="7">No schedule rows for this version.</td></tr>'}</tbody>
+      </table>
+      <div class="footer">Season ${esc(eventCfg?.season || '—')} | ${esc(version.eventName || schedCfg.eventName || '—')} | Day ${dayIdx + 1} | Version ${version.version}</div>
+    </section>`;
+  }).join('');
+
+  const win = window.open('', '_blank');
+  if (!win) {
+    alert('Popup blocked. Please allow popups and try again.');
+    return;
+  }
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Schedule Change Notes (Combined)</title>
+    <style>
+      body{font-family:Roboto,Arial,sans-serif;padding:18px;color:#111}
+      h1{margin:0 0 8px;font-size:20px} h2{margin:20px 0 8px;font-size:15px}
+      .pdf-header{display:grid;grid-template-columns:190px 1fr 190px;align-items:center;gap:10px;padding:12px 14px;margin-bottom:12px;border:1px solid #d1d5db;background:#fff;border-radius:8px}
+      .pdf-header-logo-wrap{display:flex;align-items:center;justify-content:center}
+      .pdf-header-logo-a2rl{height:88px;width:auto;object-fit:contain;display:block}
+      .pdf-header-logo-aspire{height:34px;width:auto;object-fit:contain;display:block}
+      .pdf-header-main{font-size:18px;font-weight:800;letter-spacing:0.6px;line-height:1.2;color:#111;white-space:nowrap;text-align:center}
+      .doc-title{margin:2px 0 10px;font-size:17px;font-weight:800;line-height:1.5;color:#111;text-align:center}
+      .meta{font-size:12px;color:#333;line-height:1.6}
+      ul{margin:8px 0 0 18px;font-size:12px}
+      table{width:100%;border-collapse:collapse;margin-top:10px;font-size:12px}
+      th,td{border:1px solid #444;padding:6px 8px;text-align:left}
+      th{background:#f2f2f2}
+      .footer{margin-top:14px;font-size:11px;color:#444}
+      .page-break{page-break-after:always;break-after:page;}
+    </style></head><body>
+      ${sectionsHtml}
+    </body></html>`);
+  win.document.close();
+  const imageIds = [];
+  for (let i = 0; i < allVersions.length; i++) {
+    imageIds.push(`pdf-pack-logo-a2rl-${i}`);
+    imageIds.push(`pdf-pack-logo-aspire-${i}`);
+  }
+  await waitForPopupImagesAndPrint(win, imageIds);
 }
 function openAllScheduleVersions() {
   const dayIdx = currentSchedDay;

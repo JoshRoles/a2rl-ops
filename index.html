@@ -3121,11 +3121,14 @@ async function downloadScheduleChangeNotes() {
   }
   const aspireLogoDataUrl = await getPdfHeaderAssetDataUrl('assets/aspire-logo.png');
   const a2rlLogoDataUrl = await getPdfHeaderAssetDataUrl('assets/a2rl-logo-template.png', { removeNearBlack: true });
+  const aspireLogoSrc = aspireLogoDataUrl || 'assets/aspire-logo.png';
+  const a2rlLogoSrc = a2rlLogoDataUrl || 'assets/a2rl-logo-template.png';
   win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Schedule Change Notes</title>
     <style>
       body{font-family:Roboto,Arial,sans-serif;padding:18px;color:#111}
       h1{margin:0 0 8px;font-size:20px} h2{margin:20px 0 8px;font-size:15px}
-      .pdf-header{display:flex;align-items:center;justify-content:center;gap:18px;padding:12px 14px;margin-bottom:12px;border:1px solid #d1d5db;background:#fff;border-radius:8px}
+      .pdf-header{display:grid;grid-template-columns:190px 1fr 190px;align-items:center;gap:10px;padding:12px 14px;margin-bottom:12px;border:1px solid #d1d5db;background:#fff;border-radius:8px}
+      .pdf-header-logo-wrap{display:flex;align-items:center;justify-content:center}
       .pdf-header-logo-a2rl{height:88px;width:auto;object-fit:contain;display:block}
       .pdf-header-logo-aspire{height:34px;width:auto;object-fit:contain;display:block}
       .pdf-header-main{font-size:18px;font-weight:800;letter-spacing:0.6px;line-height:1.2;color:#111;white-space:nowrap;text-align:center}
@@ -3139,9 +3142,9 @@ async function downloadScheduleChangeNotes() {
       .footer{margin-top:14px;font-size:11px;color:#444}
     </style></head><body>
       <div class="pdf-header">
-        ${a2rlLogoDataUrl ? `<img class="pdf-header-logo-a2rl" src="${a2rlLogoDataUrl}" alt="A2RL logo">` : ''}
+        <div class="pdf-header-logo-wrap"><img class="pdf-header-logo-a2rl" src="${a2rlLogoSrc}" alt="A2RL logo"></div>
         <div class="pdf-header-main">ABU DHABI AUTONOMOUS RACING LEAGUE</div>
-        ${aspireLogoDataUrl ? `<img class="pdf-header-logo-aspire" src="${aspireLogoDataUrl}" alt="ASPIRE logo">` : ''}
+        <div class="pdf-header-logo-wrap"><img class="pdf-header-logo-aspire" src="${aspireLogoSrc}" alt="ASPIRE logo"></div>
       </div>
       <div class="doc-title">${esc(scheduleContextLine)}<br>${esc(scheduleTitleLine)}</div>
       <h2 style="margin-top:2px;">Schedule Change Notes</h2>
